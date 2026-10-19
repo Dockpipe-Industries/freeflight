@@ -3,6 +3,10 @@ description: Assemble and verify a complete native FreeFlight bundle using expli
 vault: none
 docker_preflight: false
 steps:
+  - id: pe-import-contract
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/package.native/assets/test_pe_imports.py
   - id: mcpb-contract
     kind: host
     cwd: repo

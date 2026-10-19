@@ -1,4 +1,5 @@
 #include "freeflight/process.hpp"
+#include "freeflight/path.hpp"
 
 #include <chrono>
 #include <cstdlib>
@@ -32,6 +33,51 @@ void require(bool condition, const std::string &message) {
     if (!condition)
         throw std::runtime_error(message);
 }
+json environment_value(const char *name) {
+#ifdef _WIN32
+    const std::wstring key(name, name + std::char_traits<char>::length(name));
+    std::wstring value(32768, L'\0');
+    SetLastError(ERROR_SUCCESS);
+    const auto size =
+        GetEnvironmentVariableW(key.c_str(), value.data(), static_cast<DWORD>(value.size()));
+    if (!size && GetLastError() == ERROR_ENVVAR_NOT_FOUND)
+        return nullptr;
+    require(size < value.size(), "test environment exceeds buffer");
+    if (!size)
+        return "";
+    const int bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value.data(),
+                                          static_cast<int>(size), nullptr, 0, nullptr, nullptr);
+    require(bytes > 0, "test environment UTF-8 encoding failed");
+    std::string encoded(bytes, '\0');
+    WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value.data(), static_cast<int>(size),
+                        encoded.data(), bytes, nullptr, nullptr);
+    return encoded;
+#else
+    const auto *value = std::getenv(name);
+    return value ? json(value) : json(nullptr);
+#endif
+}
+#ifdef _WIN32
+class ScopedUnicodeEnvironment {
+    std::wstring name_, original_;
+    bool present_;
+
+  public:
+    ScopedUnicodeEnvironment(const wchar_t *name, const wchar_t *value)
+        : name_(name), original_(32768, L'\0') {
+        SetLastError(ERROR_SUCCESS);
+        const auto size =
+            GetEnvironmentVariableW(name, original_.data(), static_cast<DWORD>(original_.size()));
+        present_ = size != 0 || GetLastError() != ERROR_ENVVAR_NOT_FOUND;
+        require(size < original_.size(), "original environment exceeds buffer");
+        original_.resize(size);
+        require(SetEnvironmentVariableW(name, value), "cannot set Unicode environment fixture");
+    }
+    ~ScopedUnicodeEnvironment() {
+        SetEnvironmentVariableW(name_.c_str(), present_ ? original_.c_str() : nullptr);
+    }
+};
+#endif
 template <typename Fn> void fails(Fn fn, const std::string &expected) {
     try {
         fn();
@@ -57,7 +103,7 @@ int worker(int argc, char **argv) {
     while (std::getline(std::cin, line)) {
         const auto message = json::parse(line);
         if (mode == "crash") {
-            std::ofstream marker(argv[3], std::ios::app);
+            std::ofstream marker(freeflight::pathFromUtf8(argv[3]), std::ios::app);
             marker << "one invocation\n";
             marker.close();
             return 7;
@@ -83,8 +129,9 @@ int worker(int argc, char **argv) {
             std::cout << std::string(8 * 1024 * 1024 + 1, 'x') << std::flush;
             continue;
         }
-        json response = {
-            {"id", message["id"]}, {"echo", message}, {"cwd", fs::current_path().string()}};
+        json response = {{"id", message["id"]},
+                         {"echo", message},
+                         {"cwd", freeflight::pathToUtf8(fs::current_path())}};
         response["args"] = json::array();
         response["secretInherited"] = std::getenv("FREEFLIGHT_TEST_SECRET") != nullptr;
         response["injectionInherited"] = std::getenv("NODE_OPTIONS") != nullptr;
@@ -94,8 +141,7 @@ int worker(int argc, char **argv) {
         for (const auto *name :
              {"PATH", "APPDATA", "DOTNET_CLI_TELEMETRY_OPTOUT", "DOTNET_EnableDiagnostics",
               "DOTNET_GENERATE_ASPNET_CERTIFICATE", "DOTNET_SKIP_FIRST_TIME_EXPERIENCE"}) {
-            const auto *value = std::getenv(name);
-            response[name] = value ? json(value) : json(nullptr);
+            response[name] = environment_value(name);
         }
         for (int i = 3; i < argc; ++i)
             response["args"].push_back(argv[i]);
@@ -133,17 +179,17 @@ int run_tests(int argc, char **argv) {
     if (argc >= 3 && std::string(argv[1]) == "--worker")
         return worker(argc, argv);
     try {
-        const auto executable = fs::canonical(argv[0]).string();
+        const auto executable =
+            freeflight::pathToUtf8(fs::canonical(freeflight::pathFromUtf8(argv[0])));
         const auto cwd = fs::current_path();
+        const std::string unicode_path = "Jos\xc3\xa9-\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e";
+        require(freeflight::pathToUtf8(freeflight::pathFromUtf8(unicode_path)) == unicode_path,
+                "UTF-8 filesystem conversion changed characters");
 #ifdef _WIN32
         _putenv_s("FREEFLIGHT_TEST_SECRET", "test-only-value");
         _putenv_s("NODE_OPTIONS", "test-only-value");
         _putenv_s("DOTNET_STARTUP_HOOKS", "test-only-value");
         _putenv_s("NuGetPackageSourceCredentials_private", "test-only-value");
-        const auto *previous_appdata = std::getenv("APPDATA");
-        const std::string original_appdata = previous_appdata ? previous_appdata : "";
-        const auto test_appdata = (fs::temp_directory_path() / "FreeFlight NuGet path").string();
-        _putenv_s("APPDATA", test_appdata.c_str());
 #else
         setenv("FREEFLIGHT_TEST_SECRET", "test-only-value", 1);
         setenv("NODE_OPTIONS", "test-only-value", 1);
@@ -151,6 +197,12 @@ int run_tests(int argc, char **argv) {
         setenv("NuGetPackageSourceCredentials_private", "test-only-value", 1);
 #endif
         {
+#ifdef _WIN32
+            // Win32 updates bypass the CRT narrow environment, exposing ACP/UTF-8 mixing.
+            ScopedUnicodeEnvironment appdata(
+                L"APPDATA", L"C:\\Users\\Jos\u00e9-\u65e5\u672c\u8a9e\\AppData\\Roaming");
+            ScopedUnicodeEnvironment path(L"PATH", L"C:\\Tools\\Jos\u00e9-\u65e5\u672c\u8a9e");
+#endif
             Process process({executable, "--worker", "echo"});
             const auto response = process.request({{"id", "environment"}});
             require(!response["secretInherited"].get<bool>(), "worker inherited unrelated secret");
@@ -161,14 +213,12 @@ int run_tests(int argc, char **argv) {
             require(!response["nugetCredentialInherited"].get<bool>(),
                     "worker inherited NuGet credentials");
 #ifdef _WIN32
-            require(response["APPDATA"] == test_appdata,
+            require(response["APPDATA"] == environment_value("APPDATA"),
                     "worker lost Windows NuGet user-settings directory");
-            _putenv_s("APPDATA", original_appdata.c_str());
 #else
             require(response["APPDATA"].is_null(), "Windows-only APPDATA forwarded on Unix");
 #endif
-            const auto *path = std::getenv("PATH");
-            require(response["PATH"] == (path ? json(path) : json(nullptr)), "worker PATH changed");
+            require(response["PATH"] == environment_value("PATH"), "worker PATH changed");
             require(response["DOTNET_CLI_TELEMETRY_OPTOUT"] == "1", "telemetry opt-out missing");
             require(response["DOTNET_EnableDiagnostics"] == "0", "diagnostic isolation missing");
             require(response["DOTNET_GENERATE_ASPNET_CERTIFICATE"] == "false",
@@ -183,8 +233,9 @@ int run_tests(int argc, char **argv) {
               "invalid worker argument");
         fails(
             [&] {
-                Process process(
-                    {(fs::path(executable).parent_path() / "missing-worker-executable").string()});
+                Process process({(freeflight::pathFromUtf8(executable).parent_path() /
+                                  "missing-worker-executable")
+                                     .string()});
             },
             "launch worker");
         {
@@ -199,8 +250,8 @@ int run_tests(int argc, char **argv) {
                 const auto response = process.request(request);
                 require(response["echo"] == request, "JSON round-trip differs");
                 require(response["args"] == arguments, "process argument corruption");
-                require(fs::equivalent(response["cwd"].get<std::string>(),
-                                       fs::path(executable).parent_path()),
+                require(fs::equivalent(freeflight::pathFromUtf8(response["cwd"].get<std::string>()),
+                                       freeflight::pathFromUtf8(executable).parent_path()),
                         "unsafe child cwd");
             }
             require(fs::current_path() == cwd, "parent cwd changed");
@@ -240,7 +291,7 @@ int run_tests(int argc, char **argv) {
             ("freeflight-process-" +
              std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
         {
-            Process process({executable, "--worker", "crash", marker.string()});
+            Process process({executable, "--worker", "crash", freeflight::pathToUtf8(marker)});
             fails([&] { process.request(message); }, "pipe closed");
             fails([&] { process.request(message); }, "stopped");
             std::ifstream file(marker);

@@ -26,6 +26,13 @@ alternatives are `cmake -S . -B bin/.local/build -DCMAKE_BUILD_TYPE=Release`,
 `ctest --test-dir bin/.local/build -C Release --output-on-failure`.
 Worker native commands are documented in their READMEs.
 
+MSVC builds link the C++ core and process test executable to the static CRT
+(`/MT`, or `/MTd` for Debug), using CMake policy CMP0091. This removes the core
+executable's separate VC++ redistributable requirement; it does not change the
+independently supplied Node or self-contained .NET worker runtimes. Windows
+release qualification must still inspect the actual PE imports and exercise the
+complete extracted bundle.
+
 ## Selected cleanup
 
 Stop servers/builds using the selected output before cleanup. Set

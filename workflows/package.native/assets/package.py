@@ -14,6 +14,7 @@ import tarfile
 import tempfile
 import threading
 import zipfile
+from pe_imports import verify_core_runtime
 
 REPO = pathlib.Path(__file__).resolve().parents[3]
 
@@ -57,7 +58,7 @@ def find_license(root, names):
 
 def verify_semantics(binary):
     """Exercise bundled runtime discovery with no external worker configuration."""
-    with tempfile.TemporaryDirectory(prefix="freeflight-installed-test-") as directory:
+    with tempfile.TemporaryDirectory(prefix="freeflight workspace é 测试-") as directory:
         root = pathlib.Path(directory).resolve()
         (root / "tsconfig.json").write_text(json.dumps({"compilerOptions": {"strict": True, "allowJs": True, "checkJs": True}, "include": ["*.ts", "*.js"]}))
         (root / "sample.ts").write_text("export const typed: string = 42;\n")
@@ -169,7 +170,7 @@ def pack_mcpb(bundle, system, rid, temporary):
     validate_manifest(manifest)
     archive = pathlib.Path(temporary) / (bundle.name + ".mcpb")
     create_mcpb_archive(bundle, archive)
-    extracted = pathlib.Path(temporary) / "mcpb-installed"
+    extracted = pathlib.Path(temporary) / "mcpb installed é 测试"
     extracted.mkdir()
     expected = {p.relative_to(bundle).as_posix(): p for p in bundle.rglob("*") if p.is_file()}
     with zipfile.ZipFile(archive) as source:
@@ -225,7 +226,9 @@ def main():
     output = REPO / "bin/.local/packages"
     output.mkdir(parents=True, exist_ok=True)
     # Only this invocation's temporary directory is cleaned; existing developer output is preserved.
-    with tempfile.TemporaryDirectory(prefix="assemble-", dir=output) as temporary:
+    # Exercise executable/worker discovery and argument handling in realistic
+    # installation paths on every host, including Windows UTF-16 paths.
+    with tempfile.TemporaryDirectory(prefix="assemble é 测试-", dir=output) as temporary:
         bundle = pathlib.Path(temporary) / ("freeflight-" + rid)
         run(["cmake", "--install", REPO / "bin/.local/build", "--config", "Release", "--prefix", bundle])
         lib = bundle / "lib/freeflight"
@@ -259,6 +262,7 @@ def main():
         for name in ("roslyn-LICENSE", "humanizer-LICENSE", "msbuild-locator-LICENSE", "SOURCES.md"):
             copy_file(pathlib.Path(__file__).parent / "licenses" / name, notices / name)
         binary = bundle / ("bin/freeflight" + suffix)
+        core_dependencies = verify_core_runtime(binary) if system == "win" else None
         run([os.environ.get("PYTHON", "python3"), REPO / "tests/protocol.py", binary])
         checks = verify_semantics(binary)
         run([os.environ.get("PYTHON", "python3"), "-B", REPO / "workers/roslyn/test_worker.py", "--native", roslyn])
@@ -268,6 +272,9 @@ def main():
             raise RuntimeError("Source commit changed during package qualification")
         source_dirty = source_dirty or bool(run(["git", "-C", REPO, "status", "--porcelain", "--untracked-files=normal"], capture_output=True, text=True).stdout.strip())
         receipt = {"sourceCommit": source_commit, "sourceTree": source_tree, "sourceDirty": source_dirty, "rid": rid, "nodeVersion": actual, "nodeExecutableSha256": digest(node), "checks": checks, "productionPublication": False}
+        if core_dependencies is not None:
+            receipt["corePeImports"] = core_dependencies
+            checks.append("native core PE imports exclude dynamic VC++ runtime")
         (bundle / "verification.json").write_text(json.dumps(receipt, indent=2) + "\n")
         mcpb = pack_mcpb(bundle, system, rid, temporary)
         # No archive is emitted until every verification gate succeeds. Unique output avoids overwriting artifacts.

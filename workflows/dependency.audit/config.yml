@@ -26,10 +26,14 @@ steps:
     kind: host
     cwd: repo
     cmd: npm audit --prefix tests/client --package-lock-only --audit-level=high
-  - id: npm-site
+  - id: prepare-site
     kind: host
     cwd: repo
     cmd: python3 -B workflows/dependency.audit/assets/site_tooling.py
+  - id: npm-site
+    kind: host
+    cwd: repo
+    cmd: npm audit --prefix bin/.local/audit-site-tooling --package-lock-only --audit-level=high
   - id: nuget
     kind: host
     cwd: repo

@@ -9,6 +9,12 @@ A release candidate must pass its native installed-bundle checks on each adverti
 platform. Only the core executable is produced by the current bare CPack target;
 that output is not a complete standalone release.
 
+The release qualification matrix uses Ubuntu 24.04 for Linux x64/ARM64,
+macOS 15 for ARM64, and Windows Server 2022 for x64. These are tested build/host
+baselines, not proof of compatibility with older operating systems. Linux artifacts
+are not musl/Alpine builds. Other RIDs accepted by development tooling are not
+advertised release platforms until their own installed-bundle checks pass.
+
 ## Native packaging through DockPipe
 
 First use the repository's DockPipe build/test workflows. Provision the official

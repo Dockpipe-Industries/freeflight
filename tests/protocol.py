@@ -39,7 +39,7 @@ class ProtocolTests(unittest.TestCase):
         if modern:
             params["_meta"] = META
         message = {"jsonrpc": "2.0", "id": self.sequence, "method": method, "params": params}
-        self.process.stdin.write(json.dumps(message) + "\n")
+        self.process.stdin.write(json.dumps(message, ensure_ascii=False) + "\n")
         self.process.stdin.flush()
         result = json.loads(self.process.stdout.readline())
         self.assertEqual(result["id"], self.sequence)
@@ -117,7 +117,7 @@ class ProtocolTests(unittest.TestCase):
         project = self.root / "projet-日本語.csproj"
         project.write_text("<Project />", encoding="utf-8")
         worker = self.root / "worker-日本語.py"
-        worker.write_text("import sys,json\nfor line in sys.stdin:\n"
+        worker.write_text("import sys,json\nfor line in sys.stdin.buffer:\n"
                           " request=json.loads(line)\n"
                           " result={'operations':['echo']} if request['method']=='capabilities' else request['params']\n"
                           " print(json.dumps({'id':request['id'],'result':result}),flush=True)\n",
@@ -154,7 +154,7 @@ class ProtocolTests(unittest.TestCase):
         self.process.stdout.close()
         self.process.stderr.close()
         worker = self.root / "slow.py"
-        worker.write_text("import sys,json,time\nfor line in sys.stdin:\n"
+        worker.write_text("import sys,json,time\nfor line in sys.stdin.buffer:\n"
                           " request=json.loads(line)\n time.sleep(10)\n"
                           " print(json.dumps({'id':request['id'],'result':{}}),flush=True)\n")
         self.config.write_text(json.dumps({"roots": [str(self.root)], "engines": {

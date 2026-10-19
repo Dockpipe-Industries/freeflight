@@ -70,7 +70,7 @@ ApplicationWindow {
                     Layout.leftMargin: window.compact ? 20 : 64
                     Layout.rightMargin: window.compact ? 20 : 64
                     Layout.topMargin: 32
-                    text: "INDEPENDENT · OPEN SOURCE · DEVELOPMENT PREVIEW"
+                    text: "INDEPENDENT · OPEN SOURCE · C++23"
                     color: window.accent
                     font.pixelSize: 11
                     wrapMode: Text.WordWrap

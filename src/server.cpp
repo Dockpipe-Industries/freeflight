@@ -1,6 +1,8 @@
 #include "freeflight/server.hpp"
+#include "freeflight/path.hpp"
 #include <algorithm>
 #include <fstream>
+#include <set>
 #include <stdexcept>
 
 namespace freeflight {
@@ -13,23 +15,26 @@ static bool within(const fs::path &root, const fs::path &path) {
 
 Server::Server(const Json &configuration) {
     for (const auto &root : configuration.at("roots")) {
-        auto path = fs::canonical(root.get<std::string>());
+        auto path = fs::canonical(pathFromUtf8(root.get<std::string>()));
         if (!fs::is_directory(path))
             throw std::runtime_error("Root is not a directory");
         roots_.push_back(path);
     }
     if (roots_.empty() || roots_.size() > 32)
         throw std::runtime_error("Require 1–32 roots");
-    for (const auto &[language, command] : configuration.value("engines", Json::object()).items()) {
+    const auto engines = configuration.value("engines", Json::object());
+    if (!engines.is_object())
+        throw std::runtime_error("engines must be an object");
+    for (const auto &[language, command] : engines.items()) {
         auto args = command.get<std::vector<std::string>>();
-        if (args.empty() || !fs::path(args.front()).is_absolute())
+        if (args.empty() || !pathFromUtf8(args.front()).is_absolute())
             throw std::runtime_error("Engine executable must be an absolute path");
         commands_.emplace(language, std::move(args));
     }
 }
 
 fs::path Server::authorize(const std::string &value) const {
-    auto path = fs::canonical(value);
+    auto path = fs::canonical(pathFromUtf8(value));
     for (const auto &root : roots_) {
         if (within(root, path))
             return path;
@@ -77,7 +82,7 @@ Server::Engine &Server::engine(const fs::path &root, const std::string &language
     const auto command = commands_.find(language);
     if (command == commands_.end())
         throw std::runtime_error("Language engine is not configured");
-    const auto key = root.string() + "\n" + language;
+    const auto key = pathToUtf8(root) + "\n" + language;
     if (auto found = engines_.find(key); found != engines_.end())
         return found->second;
     if (engines_.size() >= 8)
@@ -89,7 +94,7 @@ Server::Engine &Server::engine(const fs::path &root, const std::string &language
         throw std::runtime_error(response["error"].dump());
     auto capabilities = response.at("result");
     auto opened = process->request(
-        {{"id", ++sequence_}, {"method", "open"}, {"params", {{"root", root.string()}}}}, stop);
+        {{"id", ++sequence_}, {"method", "open"}, {"params", {{"root", pathToUtf8(root)}}}}, stop);
     if (opened.contains("error"))
         throw std::runtime_error(opened["error"].dump());
     return engines_.emplace(key, Engine{std::move(process), capabilities}).first->second;
@@ -104,18 +109,20 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
         Json workspaces = Json::array();
         for (const auto &root : roots_) {
             Json projects = Json::array();
+            std::set<std::string> languages;
             std::size_t scanned = 0;
             bool truncated = false;
             fs::recursive_directory_iterator it(root,
                                                 fs::directory_options::skip_permission_denied);
-            for (const auto &entry : it) {
+            for (const fs::recursive_directory_iterator end; it != end; ++it) {
+                const auto &entry = *it;
                 if (stop.stop_requested())
                     throw std::runtime_error("Cancelled");
                 if (++scanned > 50000) {
                     truncated = true;
                     break;
                 }
-                const auto filename = entry.path().filename().string();
+                const auto filename = pathToUtf8(entry.path().filename());
                 if (entry.is_directory() &&
                     (filename == ".git" || filename == "node_modules" || filename == "bin" ||
                      filename == "obj" || filename == ".dockpipe")) {
@@ -126,15 +133,23 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
                     it.disable_recursion_pending();
                     continue;
                 }
-                const auto ext = entry.path().extension().string();
+                const auto ext = pathToUtf8(entry.path().extension());
+                if (ext == ".cs")
+                    languages.insert("csharp");
+                else if (ext == ".ts" || ext == ".tsx" || ext == ".mts" || ext == ".cts")
+                    languages.insert("typescript");
+                else if (ext == ".js" || ext == ".jsx" || ext == ".mjs" || ext == ".cjs")
+                    languages.insert("javascript");
                 if (ext == ".sln" || ext == ".slnx" || ext == ".csproj" ||
                     filename == "tsconfig.json" || filename == "jsconfig.json" ||
                     filename == "package.json")
-                    projects.push_back(entry.path().string());
+                    projects.push_back(pathToUtf8(entry.path()));
             }
             std::sort(projects.begin(), projects.end());
-            workspaces.push_back(
-                {{"root", root.string()}, {"projects", projects}, {"truncated", truncated}});
+            workspaces.push_back({{"root", pathToUtf8(root)},
+                                  {"projects", projects},
+                                  {"languages", languages},
+                                  {"truncated", truncated}});
         }
         return {{"workspaces", workspaces}};
     }
@@ -150,7 +165,7 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
     if (!fs::is_directory(root))
         throw std::runtime_error("Workspace root is not a directory");
     const auto language = arguments.at("language").get<std::string>();
-    const auto key = root.string() + "\n" + language;
+    const auto key = pathToUtf8(root) + "\n" + language;
     try {
         auto &selected = engine(root, language, stop);
         if (name == "engine.capabilities")
@@ -166,9 +181,9 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
             const auto path = authorize(params["file"].get<std::string>());
             if (!within(root, path))
                 throw std::runtime_error("Document is outside selected workspace");
-            params["file"] = path.string();
+            params["file"] = pathToUtf8(path);
         }
-        params["root"] = root.string();
+        params["root"] = pathToUtf8(root);
         auto response = selected.process->request(
             {{"id", ++sequence_}, {"method", operation}, {"params", params}}, stop);
         if (response.contains("error"))

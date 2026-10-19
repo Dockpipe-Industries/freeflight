@@ -2,12 +2,18 @@
 
 FreeFlight's complete standalone bundle contains a C++ server, a supplied Node
 runtime and TypeScript Language Service worker, and a self-contained Roslyn worker.
-End users do not need DockPipe, Node or .NET installed separately.
+Default safe-source analysis requires no separately installed DockPipe, Node or .NET runtime. The optional, explicitly authorized trusted-MSBuild mode needs an operator-installed compatible .NET SDK; a complete SDK is not bundled. See [capabilities and trust boundaries](capabilities.md).
 
 No public release or production package is implied by these workflow definitions.
 A release candidate must pass its native installed-bundle checks on each advertised
 platform. Only the core executable is produced by the current bare CPack target;
 that output is not a complete standalone release.
+
+The release qualification matrix uses Ubuntu 24.04 for Linux x64/ARM64,
+macOS 15 for ARM64, and Windows Server 2022 for x64. These are tested build/host
+baselines, not proof of compatibility with older operating systems. Linux artifacts
+are not musl/Alpine builds. Other RIDs accepted by development tooling are not
+advertised release platforms until their own installed-bundle checks pass.
 
 ## Native packaging through DockPipe
 
@@ -22,7 +28,7 @@ Set these environment variables before `dockpipe --workflow package.native`:
 | --- | --- |
 | `FREEFLIGHT_RID` | Explicit native RID: `osx-arm64`, `osx-x64`, `linux-x64`, `linux-arm64`, `win-x64` or `win-arm64`; must match the running host. |
 | `NODE_DISTRIBUTION_ROOT` | Absolute path to the verified extracted official Node distribution; includes `LICENSE` and `bin/node` (or `node.exe` on Windows). |
-| `FREEFLIGHT_NODE_VERSION` | Exact expected `node --version` output, for example `v24.11.1`. |
+| `FREEFLIGHT_NODE_VERSION` | Exact expected `node --version` output, for example `v24.22.0`. |
 | `DOTNET_LICENSE_ROOT` | Absolute path to the provisioned .NET distribution containing `LICENSE.txt` and `ThirdPartyNotices.txt`. |
 | `NUGET_PACKAGES` | Absolute path to restored NuGet packages, containing the exact versions in the Roslyn lockfile. |
 
@@ -51,6 +57,7 @@ lib/freeflight/typescript/worker.mjs
 lib/freeflight/typescript/node_modules/typescript/
 lib/freeflight/roslyn/FreeFlight.Roslyn[.exe]
 lib/freeflight/roslyn/...              # self-contained .NET dependencies
+lib/freeflight/roslyn/BuildHost-netcore/ # optional trusted-mode host; SDK not bundled
 share/freeflight/licenses/
 verification.json
 SHA256SUMS
@@ -91,26 +98,22 @@ does not publish anything. No domain, hosting credential or new registry is used
 
 ## MCPB from the same native application
 
-The workflow also produces an MCP Bundle using the official
-[`@anthropic-ai/mcpb` tooling](https://github.com/modelcontextprotocol/mcpb), pinned
-to 2.1.2 in the workflow-local npm lockfile. Tool installation uses `npm ci
---ignore-scripts` under `bin/.local/mcpb-tools`; these are build-time tools, never
-application dependencies. The official Node distribution must retain its npm CLI
-for this packaging step. Native CLI users still do not need npm.
+The workflow also produces an MCP Bundle in the [official ZIP-based format](https://github.com/anthropics/mcpb/blob/2a788100a60db19a6b1c018fb1cf84ae85de9537/README.md). It uses Python's standard-library `zipfile` and validates manifest 0.3 against the unmodified official schema pinned by source commit and SHA-256 under `workflows/package.native/assets/schema/`. The schema and upstream validation fixtures retain their MIT license. The development environment needs the existing pinned `jsonschema` 4.25.1 dependency; no npm packaging tool is installed or shipped.
 
-The [official manifest specification](https://github.com/modelcontextprotocol/mcpb/blob/main/MANIFEST.md)
-provides `server.type: binary`, `${__dirname}` installation paths and a required
-workspace directory picker. FreeFlight uses manifest version 0.3 and the same
-`bin/freeflight --workspace` command. The original native file layout and licenses
-are preserved; this is an alternate archive format of one product.
+The [official manifest specification](https://github.com/anthropics/mcpb/blob/2a788100a60db19a6b1c018fb1cf84ae85de9537/MANIFEST.md) provides `server.type: binary`, `${__dirname}` installation paths and a required workspace directory picker. FreeFlight uses the same `bin/freeflight --workspace` command and native file layout. This is an alternate archive of one product, not a custom distribution format.
 
-The official CLI validates and packs the manifest. A workflow-generated `.mcpbignore` explicitly includes TypeScript `.d.ts` files, which the official packer otherwise excludes despite their being runtime semantic input. The workflow then verifies
-that every archived file matches the native bundle byte for byte, extracts it into
-a fresh directory, checks executable permissions and reruns the installed semantic
-checks. Missing/excluded files or changed hashes fail qualification. The bundle
-is unsigned; no signing keys or credentials are generated. Official Registry
-publication remains a separate authenticated action, permitted only with verified
-artifact URLs and matching checksums.
+The workflow tests the vendored official valid/invalid examples, then writes all bundle files including TypeScript `.d.ts` semantic inputs. ZIP entries preserve Unix executable modes. Every archived file must match its staged original byte for byte, and a fresh extraction must pass the installed semantic checks using its own binaries and runtimes. Installation, workspace and extraction paths deliberately contain spaces and non-ASCII characters. No archive is retained if these checks fail. The bundle is unsigned. Public Registry submission still requires separately verified asset URLs and publisher authorization.
+
+Windows packaging also inspects the core executable's regular and delay-load PE
+imports and rejects dynamic VC++ runtime dependencies (`VCRUNTIME`, `MSVCP`,
+`CONCRT`, `VCOMP`). The workflow-local standard-library parser follows the
+[Microsoft PE specification](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format)
+and avoids a dependency on Visual Studio diagnostic tools in the runner PATH.
+It fails closed on malformed or unsupported import tables and records the direct
+DLL names in `verification.json`. This verifies the native C++ core's static CRT
+configuration; it does not claim Node/.NET or transitive DLL dependencies are static.
+
+The build-only official MCPB CLI dependency was removed because the latest reviewed CLI 2.1.2 includes unpatched `node-forge` high-severity vulnerability [GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv). This removes the unused dependency graph rather than suppressing its audit. The high audit threshold remains unchanged; historical CLI-based receipts below describe earlier artifacts only.
 
 MCPB 0.3 declares operating systems but has no dedicated CPU architecture field.
 The artifact filename and description state the exact RID; release discovery and
@@ -119,7 +122,7 @@ binary. The local extraction test is not a claim that every MCPB desktop client 
 been tested. The general DockPipe Registry integration must consume this standalone
 distribution rather than publishing a duplicate FreeFlight store package.
 
-## Local qualification — 2026-10-19
+## Historical local qualification — 2026-10-19 (before trusted mode)
 
 `dockpipe --workflow package.native` passed on macOS ARM64 with Node v24.11.1
 and .NET SDK 10.0.402. Evidence: `bin/.local/package-native.log` (generated, ignored).
@@ -135,5 +138,27 @@ Local artifacts, not published releases:
 - `freeflight-osx-arm64-bdb3e394239f625a.tar.gz`: SHA-256 `33d2ea127049d3d39035eaa4a1ab22d80c4be59f9d88e13200693b655ed55eff`
 - `freeflight-osx-arm64-eb5057c9ec156aa2.mcpb`: SHA-256 `eb5057c9ec156aa27980275c2503b95e9a483eb091cf82e357849e6cb7927fb7`
 
-These artifacts predate this qualification note. Other platform artifacts, desktop
+These artifacts predate this qualification note and the trusted-MSBuild dependency update. They do not represent the current worker snapshot. Other platform artifacts, desktop
 host installation, signing and public Registry submission remain unverified.
+
+## Current local server qualification — 2026-10-19
+
+The expanded 12-operation Roslyn worker, optional trusted-MSBuild loader and core
+discovery fix passed `package.native` with checksum-verified official Node 24.22.0.
+Evidence: `bin/.local/package-native-final.log`. Eight installed core protocol tests,
+expanded native Roslyn safe-source suite, SDK-backed native trusted-project suite,
+exact installed C#/TS/JS assertions and official MCPB validation passed. All 610
+MCPB files matched the native bundle; fresh extraction preserved executable modes
+and passed semantic checks. The TypeScript suite separately passed 17/17 under
+Node 24.22.0 (`bin/.local/package-typescript-node24.22.log`).
+
+- `freeflight-osx-arm64-d1bec6d953f07329.tar.gz`: SHA-256 `d0d00ed5ba7514c22c62630436f4e831f1c17ac16880aba5d55b9307c2d7afbe`
+- `freeflight-osx-arm64-aee01a80832a71aa.mcpb`: SHA-256 `aee01a80832a71aa011f5f8803dcf1e723ccc5cd9c5f509b30ebdf32f64e612f`
+
+The official Node archive checksum was
+`6a9724d9b50a5f22b4816cded441b5a8d9ddae546191a5e5b7efa5a5e2ee26d5`
+for `node-v24.22.0-darwin-arm64.tar.gz`, verified before extraction against the
+vendor's versioned `SHASUMS256.txt`. Trusted native testing used an explicitly
+installed SDK; the bundled default remains safe-source and SDK-independent.
+These are local unsigned server artifacts, not a production release or deployed
+website. They predate this note and the Qt website adaptation.

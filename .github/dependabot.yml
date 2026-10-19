@@ -4,14 +4,14 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    target-branch: dev
+    target-branch: js/dev
   - package-ecosystem: npm
     directory: /workers/typescript
     schedule:
       interval: weekly
-    target-branch: dev
+    target-branch: js/dev
   - package-ecosystem: nuget
     directory: /workers/roslyn
     schedule:
       interval: weekly
-    target-branch: dev
+    target-branch: js/dev

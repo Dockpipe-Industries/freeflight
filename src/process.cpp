@@ -4,7 +4,9 @@
 #endif
 #endif
 #include "freeflight/process.hpp"
+#include "freeflight/path.hpp"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdlib>
@@ -31,6 +33,32 @@
 namespace freeflight {
 namespace {
 constexpr std::size_t max_line = 8 * 1024 * 1024;
+#ifdef _WIN32
+std::vector<std::wstring> worker_environment() {
+    std::vector<std::wstring> values;
+    // Read Windows' Unicode environment directly: CRT getenv can lose characters
+    // before UTF-8 conversion. APPDATA is required by NuGet's lockfile reader;
+    // credentials and runtime injection controls remain outside this allowlist.
+    for (const auto *name : {L"PATH", L"SystemRoot", L"WINDIR", L"TEMP", L"TMP", L"TMPDIR", L"LANG",
+                             L"LC_ALL", L"DOTNET_ROOT", L"APPDATA"}) {
+        std::wstring value(32768, L'\0');
+        SetLastError(ERROR_SUCCESS);
+        const DWORD size =
+            GetEnvironmentVariableW(name, value.data(), static_cast<DWORD>(value.size()));
+        if (!size && GetLastError() == ERROR_ENVVAR_NOT_FOUND)
+            continue;
+        if ((!size && GetLastError() != ERROR_SUCCESS) || size >= value.size())
+            throw std::runtime_error("cannot read worker environment");
+        value.resize(size);
+        values.push_back(std::wstring(name) + L"=" + value);
+    }
+    values.emplace_back(L"DOTNET_CLI_TELEMETRY_OPTOUT=1");
+    values.emplace_back(L"DOTNET_EnableDiagnostics=0");
+    values.emplace_back(L"DOTNET_GENERATE_ASPNET_CERTIFICATE=false");
+    values.emplace_back(L"DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1");
+    return values;
+}
+#else
 std::vector<std::string> worker_environment() {
     std::vector<std::string> values;
     // Language workers do not need unrelated cloud/provider credentials or
@@ -42,8 +70,11 @@ std::vector<std::string> worker_environment() {
     }
     values.emplace_back("DOTNET_CLI_TELEMETRY_OPTOUT=1");
     values.emplace_back("DOTNET_EnableDiagnostics=0");
+    values.emplace_back("DOTNET_GENERATE_ASPNET_CERTIFICATE=false");
+    values.emplace_back("DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1");
     return values;
 }
+#endif
 using Clock = std::chrono::steady_clock;
 void check(std::stop_token token, Clock::time_point deadline) {
     if (token.stop_requested())
@@ -169,7 +200,7 @@ struct Process::Impl {
 };
 
 Process::Process(std::vector<std::string> argv) : impl_(std::make_unique<Impl>()) {
-    if (argv.empty() || !std::filesystem::path(argv.front()).is_absolute())
+    if (argv.empty() || !pathFromUtf8(argv.front()).is_absolute())
         throw std::runtime_error("worker executable must be an absolute path");
     for (const auto &arg : argv)
         if (arg.find('\0') != std::string::npos || arg.size() > max_line)
@@ -242,9 +273,15 @@ Process::Process(std::vector<std::string> argv) : impl_(std::make_unique<Impl>()
                                                     &limits, sizeof(limits)))
             throw std::runtime_error("cannot create worker job");
         PROCESS_INFORMATION info{};
+        auto entries = worker_environment();
+        // CreateProcess requires a case-insensitive ordinally sorted environment block.
+        std::sort(entries.begin(), entries.end(), [](const auto &left, const auto &right) {
+            return CompareStringOrdinal(left.c_str(), -1, right.c_str(), -1, TRUE) ==
+                   CSTR_LESS_THAN;
+        });
         std::wstring environment;
-        for (const auto &item : worker_environment()) {
-            environment += wide(item);
+        for (const auto &item : entries) {
+            environment += item;
             environment.push_back(L'\0');
         }
         environment.push_back(L'\0');
@@ -266,6 +303,17 @@ Process::Process(std::vector<std::string> argv) : impl_(std::make_unique<Impl>()
         throw;
     }
 #else
+    // Finish allocation-bearing preparation before acquiring raw launch resources.
+    const auto directory = std::filesystem::path(argv.front()).parent_path().string();
+    std::vector<char *> args;
+    for (auto &arg : argv)
+        args.push_back(arg.data());
+    args.push_back(nullptr);
+    auto environment = worker_environment();
+    std::vector<char *> env;
+    for (auto &value : environment)
+        env.push_back(value.data());
+    env.push_back(nullptr);
     std::array<int, 2> input{-1, -1}, output{-1, -1};
     auto cleanup = [&] {
         for (auto &fd : input)
@@ -308,28 +356,20 @@ Process::Process(std::vector<std::string> argv) : impl_(std::make_unique<Impl>()
     for (int fd : {input[0], input[1], output[0], output[1]})
         if (fd != STDIN_FILENO && fd != STDOUT_FILENO)
             error |= posix_spawn_file_actions_addclose(&actions, fd);
-    const auto directory = std::filesystem::path(argv.front()).parent_path().string();
 #if defined(__APPLE__) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 260000
     error |= posix_spawn_file_actions_addchdir(&actions, directory.c_str());
 #else
     error |= posix_spawn_file_actions_addchdir_np(&actions, directory.c_str());
 #endif
 #ifdef __APPLE__
+    // CLOEXEC_DEFAULT also closes standard descriptors unless explicitly inherited.
+    error |= posix_spawn_file_actions_addinherit_np(&actions, STDERR_FILENO);
     error |= posix_spawnattr_setflags(&attrs, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT);
 #else
     error |= posix_spawn_file_actions_addclosefrom_np(&actions, STDERR_FILENO + 1);
     error |= posix_spawnattr_setflags(&attrs, POSIX_SPAWN_SETPGROUP);
 #endif
     error |= posix_spawnattr_setpgroup(&attrs, 0);
-    std::vector<char *> args;
-    for (auto &arg : argv)
-        args.push_back(arg.data());
-    args.push_back(nullptr);
-    auto environment = worker_environment();
-    std::vector<char *> env;
-    for (auto &value : environment)
-        env.push_back(value.data());
-    env.push_back(nullptr);
     if (!error)
         error =
             posix_spawn(&impl_->pid, argv[0].c_str(), &actions, &attrs, args.data(), env.data());
@@ -422,7 +462,16 @@ nlohmann::json Process::request(const nlohmann::json &message, std::stop_token t
             check(token, deadline);
             const auto newline = impl_->buffered.find('\n');
             if (newline != std::string::npos) {
-                auto result = nlohmann::json::parse(impl_->buffered.substr(0, newline));
+                // Abort before constructing a deeply recursive worker response.
+                auto result = nlohmann::json::parse(
+                    impl_->buffered.substr(0, newline),
+                    [](int depth, nlohmann::json::parse_event_t event, nlohmann::json &) {
+                        using Event = nlohmann::json::parse_event_t;
+                        if (depth >= 128 &&
+                            (event == Event::object_start || event == Event::array_start))
+                            throw std::runtime_error("worker JSON nesting exceeds 128 containers");
+                        return true;
+                    });
                 impl_->buffered.erase(0, newline + 1);
                 if (!result.is_object() || !result.contains("id") || result["id"] != message["id"])
                     throw std::runtime_error("worker response id mismatch");

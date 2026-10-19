@@ -1,0 +1,9 @@
+name: site.test
+description: Render the Qt WebAssembly site in task-local Chromium and verify responsive output.
+vault: none
+docker_preflight: false
+steps:
+  - id: browser-smoke
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/site.test/assets/test.py

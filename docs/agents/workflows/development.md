@@ -14,3 +14,10 @@ Focused unavoidable helper assets belong beneath their workflow and must explain
 why YAML/native tooling is insufficient. No root Make/npm/PowerShell wrappers.
 Validate YAML with dockpipe workflow validate. Pin CI toolchains and document any
 runner fallback; native builds remain possible without DockPipe.
+# Branch discipline
+
+Implement on js/dev only. Use promotion pull requests js/dev -> dev -> staging ->
+master; never push implementation directly to the three promotion branches.
+Keep master default. Preserve prior commits without force pushes. Security-sensitive
+branch protection changes require separately approved settings.
+

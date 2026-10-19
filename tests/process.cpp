@@ -44,6 +44,11 @@ template <typename Fn> void fails(Fn fn, const std::string &expected) {
 }
 int worker(int argc, char **argv) {
     const std::string mode = argv[2];
+    if (mode == "stderr") {
+        std::cerr << "worker startup diagnostic\n" << std::flush;
+        if (!std::cerr.good())
+            return 8;
+    }
     if (mode == "no-read") {
         std::this_thread::sleep_for(10s);
         return 0;
@@ -69,6 +74,11 @@ int worker(int argc, char **argv) {
             std::cout << "{\"id\":\"wrong\"}\n" << std::flush;
             continue;
         }
+        if (mode == "deep") {
+            std::cout << std::string(10000, '[') << '0' << std::string(10000, ']') << '\n'
+                      << std::flush;
+            continue;
+        }
         if (mode == "oversize") {
             std::cout << std::string(8 * 1024 * 1024 + 1, 'x') << std::flush;
             continue;
@@ -79,7 +89,8 @@ int worker(int argc, char **argv) {
         response["secretInherited"] = std::getenv("FREEFLIGHT_TEST_SECRET") != nullptr;
         response["injectionInherited"] = std::getenv("NODE_OPTIONS") != nullptr;
         for (const auto *name :
-             {"PATH", "DOTNET_CLI_TELEMETRY_OPTOUT", "DOTNET_EnableDiagnostics"}) {
+             {"PATH", "DOTNET_CLI_TELEMETRY_OPTOUT", "DOTNET_EnableDiagnostics",
+              "DOTNET_GENERATE_ASPNET_CERTIFICATE", "DOTNET_SKIP_FIRST_TIME_EXPERIENCE"}) {
             const auto *value = std::getenv(name);
             response[name] = value ? json(value) : json(nullptr);
         }
@@ -138,6 +149,10 @@ int run_tests(int argc, char **argv) {
             require(response["PATH"] == (path ? json(path) : json(nullptr)), "worker PATH changed");
             require(response["DOTNET_CLI_TELEMETRY_OPTOUT"] == "1", "telemetry opt-out missing");
             require(response["DOTNET_EnableDiagnostics"] == "0", "diagnostic isolation missing");
+            require(response["DOTNET_GENERATE_ASPNET_CERTIFICATE"] == "false",
+                    "ASP.NET certificate generation not disabled");
+            require(response["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] == "1",
+                    "first-run experience not disabled");
         }
         const json message = {{"id", 42}, {"method", "test"}, {"value", "Unicode: λ and 日本語"}};
         fails([] { Process process({"relative-worker"}); }, "absolute path");
@@ -176,12 +191,16 @@ int run_tests(int argc, char **argv) {
             fails([&] { process.request(message); }, "stopped");
         }
         {
+            Process diagnostic({executable, "--worker", "stderr"});
+            require(diagnostic.request(message)["echo"] == message,
+                    "startup stderr write prevented JSON response");
             Process process({executable, "--worker", "partial"});
             require(process.request(message)["echo"] == message, "fragmented response corrupted");
         }
         for (const auto &[mode, error] :
              std::vector<std::pair<std::string, std::string>>{{"malformed", "invalid worker JSON"},
                                                               {"mismatch", "id mismatch"},
+                                                              {"deep", "nesting exceeds"},
                                                               {"oversize", "exceeds limit"}}) {
             Process process({executable, "--worker", mode});
             fails([&] { process.request(message); }, error);

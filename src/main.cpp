@@ -17,6 +17,14 @@ constexpr auto version = "2026-07-28";
 constexpr auto versionKey = "io.modelcontextprotocol/protocolVersion";
 constexpr auto capabilitiesKey = "io.modelcontextprotocol/clientCapabilities";
 const Json identity = {{"name", "freeflight"}, {"version", "0.1.0"}};
+// Limit container nesting before constructing deeply recursive JSON values.
+// Throwing aborts parsing; returning false would still consume the nested input.
+bool boundedJsonDepth(int depth, Json::parse_event_t event, Json &) {
+    if (depth >= 128 &&
+        (event == Json::parse_event_t::object_start || event == Json::parse_event_t::array_start))
+        throw std::runtime_error("JSON nesting exceeds 128 containers");
+    return true;
+}
 std::filesystem::path executablePath() {
 #ifdef _WIN32
     std::wstring buffer(32768, L'\0');
@@ -62,7 +70,7 @@ int main(int argc, char **argv) {
         Json config;
         if (std::string(argv[1]) == "--config") {
             std::ifstream input(argv[2]);
-            config = Json::parse(input);
+            config = Json::parse(input, boundedJsonDepth);
         } else {
             const auto library =
                 executablePath().parent_path().parent_path() / "lib" / "freeflight";
@@ -162,7 +170,7 @@ int main(int argc, char **argv) {
             }
             Json request;
             try {
-                request = Json::parse(line);
+                request = Json::parse(line, boundedJsonDepth);
             } catch (...) {
                 error(nullptr, -32700, "Parse error");
                 continue;

@@ -1,13 +1,13 @@
 name: release.verify
-description: Verify core tests and core-only CPack archive; does not qualify a complete standalone release.
+description: Verify hosted qualification, promotion ancestry and complete native release bytes; never publishes.
 vault: none
 docker_preflight: false
 steps:
-  - id: test
+  - id: policy-tests
     kind: host
     cwd: repo
-    cmd: ctest --test-dir bin/.local/build -C Release --output-on-failure
-  - id: package
+    cmd: python3 -B workflows/release.verify/assets/test_policy.py
+  - id: candidate
     kind: host
     cwd: repo
-    cmd: cpack --config bin/.local/build/CPackConfig.cmake -B bin/.local/packages
+    cmd: python3 -B workflows/release.verify/assets/policy.py

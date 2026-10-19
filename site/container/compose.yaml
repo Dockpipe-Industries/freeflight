@@ -1,0 +1,21 @@
+name: freeflight-site
+services:
+  site:
+    image: ${FREEFLIGHT_SITE_IMAGE:?Select the qualified immutable FreeFlight site image}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${FREEFLIGHT_SITE_PORT:?Select a verified unused loopback port}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    user: "101:101"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 32
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/healthz]
+      interval: 30s
+      timeout: 3s
+      retries: 3

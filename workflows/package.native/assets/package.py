@@ -6,6 +6,9 @@ import pathlib
 import platform
 import queue
 import shutil
+import stat
+
+import jsonschema
 import subprocess
 import tarfile
 import tempfile
@@ -108,15 +111,42 @@ def verify_semantics(binary):
         return ["legacy MCP initialization", "TypeScript TS2322", "JavaScript increment symbol", "Roslyn CS0029", "Roslyn Widget symbol", "graceful shutdown"]
 
 
-def pack_mcpb(bundle, node, node_root, system, rid, temporary):
-    """Use the official pinned CLI; validate the exact extracted bundle before retaining it."""
-    tooling = REPO / "bin/.local/mcpb-tools"
-    tooling.mkdir(parents=True, exist_ok=True)
-    for name in ("package.json", "package-lock.json"):
-        copy_file(pathlib.Path(__file__).parent / "tooling" / name, tooling / name)
-    npm = node_root / ("node_modules/npm/bin/npm-cli.js" if system == "win" else "lib/node_modules/npm/bin/npm-cli.js")
-    run([node, npm, "ci", "--ignore-scripts", "--no-audit", "--prefix", tooling])
-    cli = tooling / "node_modules/@anthropic-ai/mcpb/dist/cli/cli.js"
+SCHEMA_SHA256 = "3a0ac9d845711a1b9b17dfa5a52f8b60628239d6a86a9db417206a9efc78592d"
+
+
+def validate_manifest(manifest):
+    schema_path = pathlib.Path(__file__).parent / "schema/mcpb-manifest-v0.3.schema.json"
+    if digest(schema_path) != SCHEMA_SHA256:
+        raise RuntimeError("Pinned official MCPB schema checksum mismatch")
+    schema = json.loads(schema_path.read_text())
+    jsonschema.Draft7Validator.check_schema(schema)
+    jsonschema.Draft7Validator(schema).validate(manifest)
+    if manifest.get("manifest_version") != "0.3":
+        raise RuntimeError("FreeFlight packaging requires MCPB manifest 0.3")
+
+
+def create_mcpb_archive(bundle, archive):
+    """MCPB is a ZIP containing the manifest and complete local server files."""
+    validate_manifest(json.loads((bundle / "manifest.json").read_text()))
+    files = sorted(bundle.rglob("*"))
+    for file in files:
+        if file.is_symlink() or not (file.is_file() or file.is_dir()):
+            raise RuntimeError("Nonregular MCPB packaging input: " + str(file))
+    with zipfile.ZipFile(archive, "x", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as target:
+        for file in files:
+            if file.is_dir():
+                continue
+            name = file.relative_to(bundle).as_posix()
+            member = zipfile.ZipInfo.from_file(file, arcname=name, strict_timestamps=False)
+            member.create_system = 3
+            member.external_attr = (stat.S_IFREG | stat.S_IMODE(file.stat().st_mode)) << 16
+            member.compress_type = zipfile.ZIP_DEFLATED
+            with file.open("rb") as source, target.open(member, "w", force_zip64=True) as destination:
+                shutil.copyfileobj(source, destination)
+
+
+def pack_mcpb(bundle, system, rid, temporary):
+    """Validate the official manifest and retain only an exactly verified ZIP bundle."""
     suffix = ".exe" if system == "win" else ""
     entry = "bin/freeflight" + suffix
     manifest = {
@@ -134,18 +164,18 @@ def pack_mcpb(bundle, node, node_root, system, rid, temporary):
         "tools_generated": True
     }
     (bundle / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    # Type declarations are runtime input to the TypeScript language service.
-    (bundle / ".mcpbignore").write_text("!lib/freeflight/typescript/**/*.d.ts\n!.mcpbignore\n")
     files = sorted(p for p in bundle.rglob("*") if p.is_file() and p.name != "SHA256SUMS")
     (bundle / "SHA256SUMS").write_text("".join(digest(p) + "  " + p.relative_to(bundle).as_posix() + "\n" for p in files))
-    run([node, cli, "validate", bundle / "manifest.json"])
+    validate_manifest(manifest)
     archive = pathlib.Path(temporary) / (bundle.name + ".mcpb")
-    run([node, cli, "pack", bundle, archive])
+    create_mcpb_archive(bundle, archive)
     extracted = pathlib.Path(temporary) / "mcpb-installed"
     extracted.mkdir()
     expected = {p.relative_to(bundle).as_posix(): p for p in bundle.rglob("*") if p.is_file()}
     with zipfile.ZipFile(archive) as source:
         members = {member.filename: member for member in source.infolist() if not member.is_dir()}
+        if len(members) != len(source.infolist()):
+            raise RuntimeError("Duplicate or unexpected directory members in MCPB")
         if set(members) != set(expected):
             raise RuntimeError("MCPB packer omitted or added bundle files: " + str(set(members) ^ set(expected)))
         for name, member in members.items():
@@ -239,7 +269,7 @@ def main():
         source_dirty = source_dirty or bool(run(["git", "-C", REPO, "status", "--porcelain", "--untracked-files=normal"], capture_output=True, text=True).stdout.strip())
         receipt = {"sourceCommit": source_commit, "sourceTree": source_tree, "sourceDirty": source_dirty, "rid": rid, "nodeVersion": actual, "nodeExecutableSha256": digest(node), "checks": checks, "productionPublication": False}
         (bundle / "verification.json").write_text(json.dumps(receipt, indent=2) + "\n")
-        mcpb = pack_mcpb(bundle, node, node_root, system, rid, temporary)
+        mcpb = pack_mcpb(bundle, system, rid, temporary)
         # No archive is emitted until every verification gate succeeds. Unique output avoids overwriting artifacts.
         archive = output / (bundle.name + "-" + digest(bundle / "SHA256SUMS")[:16] + ".tar.gz")
         if archive.exists():

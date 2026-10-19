@@ -75,6 +75,22 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(json.loads(self.process.stdout.readline())["error"]["code"], -32700)
         self.assertIn("result", self.call("ping"))
 
+    def test_nesting_limit_and_recovery(self):
+        for opening, closing in (("[", "]"), ('{"value":', '}')):
+            # Construct text directly: Python's encoder also has recursion limits.
+            self.process.stdin.write(opening * 10000 + "0" + closing * 10000 + "\n")
+            self.process.stdin.flush()
+            response = json.loads(self.process.stdout.readline())
+            self.assertEqual(response["error"]["code"], -32700)
+            self.assertIsNone(response["id"])
+            self.assertIn("result", self.call("ping"))
+        # Root and params count toward the 128-container budget.
+        allowed = '[' * 126 + '0' + ']' * 126
+        self.process.stdin.write('{"jsonrpc":"2.0","id":99,"method":"ping",'
+                                 '"params":{"value":' + allowed + '}}\n')
+        self.process.stdin.flush()
+        self.assertIn("result", json.loads(self.process.stdout.readline()))
+
     def test_project_discovery(self):
         (self.root / "tsconfig.json").write_text("{}")
         (self.root / "example.ts").write_text("export const value = 1")

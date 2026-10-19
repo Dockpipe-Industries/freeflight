@@ -1,6 +1,6 @@
 # FreeFlight documentation
 
-This repository is the authoritative documentation source. The static website
+This repository is the authoritative documentation source. The Qt WebAssembly website
 links here and must not claim more than the verified implementation.
 
 ## Architecture and dependencies
@@ -12,6 +12,8 @@ At most sixteen calls are pending; calls execute serially while the input thread
 continues processing cancellation. Cancellation terminates an active worker;
 the next explicit request starts a fresh one. Failed requests are never replayed.
 Stdout is protocol-only. Stdin EOF cancels outstanding work and reaps workers.
+Incoming JSON and worker responses reject nesting beyond 128 containers before
+constructing deeply recursive values.
 
 The protocol adapter uses nlohmann JSON 3.12.0 (MIT), pinned by archive SHA-256.
 We evaluated hkr04/cpp-mcp (documents the older 2025-03-26 protocol) and
@@ -29,6 +31,8 @@ runs inside Node. Semantic compilation excludes repository plugins, custom
 generators and analyzers. See SECURITY.md and worker READMEs for boundaries.
 
 ## Developer setup
+
+See [developer onboarding](development.md) for setup, startup and safe cleanup.
 
 Use DockPipe `build`, `test`, `repo.check`, `site.build`, `core.build`, `core.test`,
 `workers.typescript`, `workers.roslyn`, and `integration.test` workflows. All task
@@ -92,13 +96,15 @@ Pipelang API, SDK, LSP support or additional language support is claimed today.
 
 - Default C# source-only analysis does not reproduce MSBuild references or project
   settings. Explicit trusted MSBuildWorkspace mode passes a controlled two-project
-  SDK fixture; broad solution/multi-targeting/generated-source fidelity is pending.
+  SDK fixture and the actual FreeFlight Roslyn project; broad solution/multi-targeting/generated-source fidelity is pending.
 - Worker root authorization is not an OS sandbox; filesystem races remain possible
   against a hostile concurrent local writer. No source mutation is supported.
 - Discovery scans at most 50,000 entries; worker/project/file limits are documented.
 - Incremental worker refresh occurs on queries; no native filesystem watcher yet.
 - Thread execution is serialized; long calls can delay other calls.
-- Real-world large solution/monorepo and full Windows/Linux testing are pending.
+- Real-world large solution/monorepo qualification and exact-head cross-platform gates remain pending.
 - Registry publication, DockPipe end-to-end installation and hosting are pending.
 
 See [acceptance](acceptance.md), [comparison](comparison.md), and [release](release.md).
+
+Additional evidence: [real project](real-project-qualification.md), [LSP evaluation](lsp-evaluation.md), [release preparation](release-preparation.md), and [Registry publication](registry-publication.md).

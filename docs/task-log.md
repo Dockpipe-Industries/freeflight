@@ -315,3 +315,23 @@ no branch protection.
 Automatic approval review denied marking PR12 ready, treating draft-to-ready as
 an external workflow commitment needing explicit approval. No bypass or retry
 performed. Production promotion remains paused pending that approval.
+
+
+Ubuntu22.04 candidate b22a53a passed job118359090816 in pushCI39340039835,
+including exact bundled semantic tests inside a pinned clean Ubuntu22.04 container
+with no network/host runtimes and unprivileged user65532. All18 ELF requirements
+passed (core GLIBC2.34/GLIBCXX3.4.30). Published separate preview
+v0.1.0-preview.20261019.jammy.b22a53a; all4assets anonymously downloaded and
+SHA256 verified. Archive7253390795ee026cec2581f6a7184a4d0912fb0e65fcd3adec982462d1826668.
+Prior incompatible preview notes link this replacement baseline. PopOS/Fedora/
+Bazzite runtime testing remains pending; no host-image or client settings changed.
+Current-client-root ergonomics assessment found MCP2026 roots deprecated and
+informational; no authorization expansion or workspaceAPI change implemented.
+
+
+Fedora44 clean-runtime qualification was added to the existing DockPipe Jammy
+packaging gate, using the same native archive and a separately pinned official
+Fedora image. It reuses bundled officialSDK tests under unprivileged/network-none
+execution, records RPMversions and binds evidence to the exact archive/source.
+Bazzite remains explicitly untested. Local release.policy passes52tests and
+repo.check passes; actual Fedora runtime execution awaits hostedCI.

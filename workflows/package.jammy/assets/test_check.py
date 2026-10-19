@@ -32,6 +32,17 @@ class CompatibilityTests(unittest.TestCase):
                 check.version_needs(output)
 
     def test_clean_container_uses_only_bundle_and_cleans_unique_image(self):
+        self.check_clean_container('ubuntu22', check.IMAGE, 'libicu70 libssl3 libstdc++6', '/usr/bin/dpkg-query')
+
+    def test_fedora_uses_same_isolated_semantics_with_rpm_inventory(self):
+        self.check_clean_container('fedora44', check.FEDORA_IMAGE, 'openssl-libs libstdc++ tzdata zlib-ng-compat', '/usr/bin/rpm')
+
+    def test_unknown_runtime_profile_fails_before_docker(self):
+        with patch.object(check.subprocess, 'run') as run, self.assertRaises(ValueError):
+            check.clean_runtime(Path('/unused'), 'custom-image')
+        run.assert_not_called()
+
+    def check_clean_container(self, profile, image, packages, query):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             client = root / 'bin/.local/client'
@@ -45,13 +56,20 @@ class CompatibilityTests(unittest.TestCase):
                 calls.append(args)
                 if args[1] == 'build':
                     dockerfile = (Path(args[-1]) / 'Dockerfile').read_text()
-                    self.assertIn(check.IMAGE, dockerfile)
-                    self.assertIn('libicu70 libssl3 libstdc++6', dockerfile)
+                    self.assertIn(image, dockerfile)
+                    self.assertIn(packages, dockerfile)
                     self.assertNotIn('apt-get install -y node', dockerfile)
+                    if profile == 'fedora44':
+                        self.assertIn('dnf -y --setopt=install_weak_deps=False install', dockerfile)
+                        self.assertNotIn('apt-get', dockerfile)
                 return subprocess.CompletedProcess(args, 0, 'Official MCP SDK verified packaged TS definition/references/diagnostics, JS symbol, C# diagnostics/symbol and engine capabilities\n')
             with patch.object(check, 'ROOT', root), patch.object(check.subprocess, 'run', side_effect=run), \
-                    patch.object(check.subprocess, 'check_output', return_value='libc6=2.35\n'):
-                receipt = check.clean_runtime(archive)
+                    patch.object(check.subprocess, 'check_output', return_value='library=1.0\n') as inventory:
+                receipt = check.clean_runtime(archive, profile)
+            query_args = inventory.call_args.args[0]
+            self.assertEqual(query_args[query_args.index('--entrypoint') + 1], query)
+            self.assertEqual(receipt['packages'], ['library=1.0'])
+            self.assertEqual(receipt['baseImage'], image)
             invocation = calls[1]
             self.assertEqual(invocation[invocation.index('--network') + 1], 'none')
             self.assertIn('--read-only', invocation)

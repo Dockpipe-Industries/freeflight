@@ -18,7 +18,7 @@ else:
         raise SystemExit(f"Cannot find .NET executable: {sys.argv[1]}")
     command = [dotnet, str(worker)]
 process = subprocess.Popen(command, stdin=subprocess.PIPE,
-                           stdout=subprocess.PIPE, text=True)
+                           stdout=subprocess.PIPE, text=True, encoding="utf-8", errors="strict")
 sequence = 0
 responses = queue.Queue()
 
@@ -38,7 +38,7 @@ def response():
 def call(method, **params):
     global sequence
     sequence += 1
-    process.stdin.write(json.dumps(dict(id=sequence, method=method, params=params)) + "\n")
+    process.stdin.write(json.dumps(dict(id=sequence, method=method, params=params), ensure_ascii=False) + "\n")
     process.stdin.flush()
     result = response()
     assert result["id"] == sequence, result
@@ -145,6 +145,15 @@ try:
         unicode_character = len(unicode_source[:unicode_source.rindex("text")].encode("utf-16-le")) // 2
         unicode_type = call("typeInfo", file="Unicode.cs", line=0, character=unicode_character)["result"]
         assert unicode_type["display"] == "string", unicode_type
+        utf8_file = root / "Καλημέρα-日本語.cs"
+        utf8_source = 'class Καλημέρα { string text = "😀"; public int 値 = 7; public int Read() => 値; }'
+        utf8_file.write_text(utf8_source, encoding="utf-8")
+        utf8_symbols = call("symbols", file=str(utf8_file))["result"]
+        assert {item["name"] for item in utf8_symbols} >= {"Καλημέρα", "値"}, utf8_symbols
+        utf8_use = len(utf8_source[:utf8_source.rindex("値")].encode("utf-16-le")) // 2
+        utf8_definition = call("definition", file=str(utf8_file), line=0, character=utf8_use)["result"]
+        assert len(utf8_definition) == 1 and pathlib.Path(utf8_definition[0]["file"]) == utf8_file, utf8_definition
+        assert utf8_definition[0]["range"]["start"] == {"line": 0, "character": len(utf8_source[:utf8_source.index("値")].encode("utf-16-le")) // 2}, utf8_definition
         (root / "Bounds.cs").write_text("\n".join(f"class QueryLimit{i} {{}}" for i in range(1001)))
         bounded = call("workspaceSymbols", query="QueryLimit")
         assert "1000 symbols" in bounded["error"]["message"], bounded
@@ -160,3 +169,13 @@ try:
 finally:
     process.stdin.close()
     process.wait(timeout=15)
+
+# Invalid raw UTF-8 is rejected deterministically instead of silently decoding as ACP
+# or replacement characters. A decoding failure closes this worker stream safely.
+for malformed_bytes in (b'{"id":"\xff","method":"capabilities"}\n', b'{"id":"\xe2\x82'):
+    result = subprocess.run(command, input=malformed_bytes, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, timeout=15, check=True)
+    assert not result.stdout.startswith(b'\xef\xbb\xbf'), 'Worker emitted a UTF-8 BOM'
+    reply = json.loads(result.stdout.decode('utf-8', errors='strict'))
+    assert reply == {"id": None, "error": {"message": "Invalid UTF-8 input"}}, reply
+print("Roslyn raw UTF-8 filename/symbol semantics and strict invalid/truncated UTF-8 rejection passed")

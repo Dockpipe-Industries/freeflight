@@ -23,6 +23,12 @@ The same semantic test can validate a self-contained publish without launching
 
 UTF-8 newline-delimited JSON on stdin/stdout: `{id,method,params}` and
 `{id,result}` or `{id,error:{message}}`. Positions are zero-based UTF-16.
+The worker opens its pipe streams explicitly as strict UTF-8, independently of
+Windows console code pages, and never emits a BOM. Malformed or truncated UTF-8
+returns `Invalid UTF-8 input` with a null ID and closes the worker stream safely;
+ordinary malformed JSON retains the existing recoverable error behavior.
+Tests send unescaped UTF-8 Greek/Japanese filenames and symbols, verify exact
+definition positions after a supplementary-plane character, and reject invalid bytes.
 Call `capabilities`, then `open` with an absolute authorized `root`.
 Supported operations are `symbols`, `definition`, `references`, `hover`,
 `diagnostics`, `rename`, `implementations`, `typeInfo`, `signatureHelp`,

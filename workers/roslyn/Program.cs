@@ -17,6 +17,12 @@ internal static class Program
 
     public static async Task Main(string[] commandLine)
     {
+        // Worker pipes are UTF-8 on every platform, independent of console code pages.
+        var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+        using var input = new StreamReader(Console.OpenStandardInput(), utf8,
+            detectEncodingFromByteOrderMarks: false, bufferSize: 4096, leaveOpen: true);
+        using var output = new StreamWriter(Console.OpenStandardOutput(), utf8,
+            bufferSize: 4096, leaveOpen: true) { AutoFlush = true, NewLine = "\n" };
         if (commandLine.Any(argument => argument != "--trusted-msbuild"))
             throw new ArgumentException("Only --trusted-msbuild is accepted");
         var trustedMsbuild = commandLine.Contains("--trusted-msbuild", StringComparer.Ordinal);
@@ -29,12 +35,13 @@ internal static class Program
         var outputGate = new object();
         void Reply(object value)
         {
-            lock (outputGate) Console.WriteLine(JsonSerializer.Serialize(value, Json));
+            lock (outputGate) output.WriteLine(JsonSerializer.Serialize(value, Json));
         }
         while (true)
         {
             string? line;
-            try { line = ReadBoundedLine(Console.In, 1024 * 1024); }
+            try { line = ReadBoundedLine(input, 1024 * 1024); }
+            catch (DecoderFallbackException) { Reply(new { id = (object?)null, error = new { message = "Invalid UTF-8 input" } }); break; }
             catch (Exception ex) { Reply(new { id = (object?)null, error = new { message = ex.Message } }); break; }
             if (line is null) break;
             JsonElement request;

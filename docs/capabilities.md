@@ -1,7 +1,9 @@
 # Language capabilities and evidence
 
-FreeFlight is a development preview. The capabilities below have local macOS ARM64
-fixture evidence; they are not a released cross-platform support guarantee. The
+The capabilities below have semantic fixture evidence. Hosted candidate qualification
+has also passed Linux x64/ARM64 and macOS ARM64; Windows qualification remains a
+release gate. See [distribution evidence](distribution.md) and [current CI](https://github.com/Dockpipe-Industries/freeflight/actions/workflows/ci.yml)
+for candidate-specific results. This matrix does not announce a production release. The
 C++ endpoint exposes `workspace.discover`, `engine.capabilities` and
 `semantic.query`. Clients must inspect the selected engine's advertised operations.
 

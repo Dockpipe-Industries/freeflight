@@ -68,7 +68,7 @@ def verify_semantics(binary):
         for language, file, operation in [("typescript", "sample.ts", "diagnostics"), ("javascript", "sample.js", "symbols"), ("csharp", "Sample.cs", "diagnostics"), ("csharp", "Sample.cs", "symbols")]:
             requests.append({"jsonrpc": "2.0", "id": len(requests), "method": "tools/call", "params": {"name": "semantic.query", "arguments": {"root": str(root), "language": language, "operation": operation, "arguments": {"file": str(root / file)}}}})
         # EOF would cancel work in an asynchronous server: send one request at a time.
-        process = subprocess.Popen([str(binary), "--workspace", str(root)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        process = subprocess.Popen([str(binary), "--workspace", str(root)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="strict")
         replies = queue.Queue()
         def read_replies():
             for line in process.stdout:
@@ -78,7 +78,7 @@ def verify_semantics(binary):
         results = []
         try:
             for request in requests:
-                process.stdin.write(json.dumps(request) + "\n")
+                process.stdin.write(json.dumps(request, ensure_ascii=False) + "\n")
                 process.stdin.flush()
                 if "id" not in request:
                     continue

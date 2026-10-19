@@ -199,3 +199,24 @@ tests and five MCPB tests pass. The Windows core import gate rejects dynamic
 VC++ runtime dependencies and records actual import names; real Windows execution
 remains pending. Evidence: bin/.local/package-native-unicode-pe.log. Generated
 local artifacts contain dirty-source provenance and are not release candidates.
+
+Candidate 122237f46bef1b9e177caef4bcadddc70ea1de68 Windows run
+39332231466 passed Unicode workspace discovery and process tests, but a Python
+echo fixture decoded raw UTF-8 using the Windows legacy code page. Corrected
+the fixture to read bytes and retain exact Unicode assertions. MCP test clients
+now explicitly use UTF-8 and send raw non-ASCII JSON. Roslyn independently uses
+strict UTF-8 standard-pipe readers/writers with no BOM; new tests verify Greek
+and Japanese filenames/symbols, exact UTF-16 definition positions after an emoji,
+and controlled rejection of invalid/truncated UTF-8.
+
+DockPipe worker build/safe/trusted suites, actual-project integration and core
+tests passed locally. Complete package.native qualification passed again with
+the updated bundled worker, Unicode installation paths and fresh MCPB extraction;
+evidence is bin/.local/package-native-strict-utf8.log. Windows remains pending
+next-candidate qualification. Distribution docs now state the actual runner
+baselines rather than implying older-OS or musl compatibility.
+
+Website and README installation copy now points to GitHub Releases and
+candidate-specific qualification evidence instead of stale local-macOS-only
+claims. Capability/security limits remain explicit. Content/link checks passed;
+next-candidate hosted Qt builds and browser tests will qualify the changed copy.

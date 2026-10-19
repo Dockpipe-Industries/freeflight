@@ -2,6 +2,22 @@
 
 Status: implementation in progress; no production release is approved by tests yet.
 
+## Verified milestones (2026-10-19)
+
+Broad acceptance items below remain unchecked where any required portion is pending.
+
+| Scope | Verified evidence | Still pending |
+| --- | --- | --- |
+| C++ core | macOS ARM64 DockPipe build; protocol/process CTest 2/2; independent official MCP SDK client | Hosted Windows/macOS qualification; full client matrix |
+| TS/JS | 17 worker tests; real-worker definitions/references/diagnostics and incremental changes | Large real repositories and broad configuration fidelity |
+| C# | Safe-source semantics/security/cancellation; explicit trusted MSBuildWorkspace two-project SDK fixture, exact cross-project results | Broad solutions/multi-targeting; analyzers unsupported |
+| Standalone | macOS ARM64 native/MCPB extraction, hashes and semantic tests | Requalification after trusted-mode dependencies; other platforms; publication |
+| DockPipe | Draft DockPipe PR #168, registry search/version/history and config contract tests plus live discovery | Installation/lifecycle/gateway integration |
+| Security audit | npm 0 vulnerabilities; NuGet no findings; 11 fail-closed audit-policy tests | Hosted scan completion and ongoing dependency monitoring |
+| Branch policy | Implementation moved to js/dev; PR #2 promotes to dev; master remains default | Approved protection settings; promotion gates |
+
+No production release, registry listing or website deployment has been performed.
+
 ## Mandatory instruction prerequisite (latest amendment)
 - [x] Pause implementation/builds and preserve existing code when gate was requested.
 - [x] Inspect actual Cloud YAML schemas and current extracted DorkPipe bootstrap.

@@ -42,12 +42,9 @@ the hash, and apply the complete set atomically or abort on conflicts.
 `safe-source` mode builds one AdhocWorkspace project from C# source files and
 references only the worker runtime's platform assemblies. It never evaluates
 MSBuild, reads project imports, restores packages, loads repository assemblies,
-or runs analyzers/generators. A request for another mode is rejected. There is
-currently **no MSBuildWorkspace/full-solution mode**, even with trust opt-in.
-MSBuild evaluation can execute project-supplied tasks; a future trusted mode needs
-an explicit authorization and isolation contract before it can be implemented.
+or runs analyzers/generators. A request for another mode is rejected. The default worker rejects attempts to change mode through an `open` request.
 
-Results are semantic Roslyn results for this source view, not necessarily the
+Safe-source results are semantic Roslyn results for this source view, not necessarily the
 repository's real build. Multiple projects are combined; dependency assemblies,
 project defines, generated code, language-version settings and implicit usings
 are not inferred. Duplicate types or unresolved dependencies can produce extra
@@ -71,3 +68,50 @@ rejection of project-evaluation mode. The malicious project fixture is inert.
 Protocol checks cover malformed JSON and non-object requests with recovery, and
 cancellation during workspace loading followed by a successful new workspace.
 Large real solution fidelity and performance remain release blockers.
+
+## Explicitly trusted project mode
+
+The operator can add `--trusted-msbuild` to the configured absolute worker argv.
+This is startup authorization for every root that worker opens. No request can
+turn it on or switch modes; normal bundled `--workspace` startup remains safe-source.
+Capabilities report `fidelity` and `mode` as `safe-source` or `trusted-msbuild`.
+A warning is written to stderr at trusted startup.
+
+**MSBuildWorkspace runs design-time project evaluation, which can execute arbitrary
+repository code, custom targets, SDK resolvers, and imports. This is not a sandbox.**
+Root checks constrain the returned project/document graph, not MSBuild's execution:
+external imports and referenced projects can already have been evaluated before a
+path is rejected. Only opt in for repositories and SDKs the operator trusts, under
+appropriately limited OS permissions and environment. Do not expose this mode to
+untrusted remote users. A 60-second request cancellation is best effort for the
+MSBuild host; process supervision remains the final timeout boundary.
+
+Trusted mode uses Microsoft.CodeAnalysis.Workspaces.MSBuild 4.14.0 and
+Microsoft.Build.Locator 1.7.8. MSBuild references are pinned to 17.14.28 with runtime
+assets excluded; Locator selects the operator's installed SDK. Explicit crypto
+10.0.13 pins replace vulnerable transitive versions. NuGet vulnerability warnings
+remain errors. The trusted mode requires a compatible .NET SDK and the repository's
+necessary targeting packs/workloads. The standalone bundle remains SDK-free for
+safe-source mode; it does not contain a complete SDK for trusted evaluation.
+
+`open` accepts an optional root-relative `project` ending in `.csproj` or `.sln`.
+Without it, the root must contain exactly one solution, or exactly one C# project.
+The worker never requests restore or a production build. Restore dependencies
+explicitly before opening. Design-time settings disable compiler/analyzer execution
+and NET analyzers; all analyzer/generator references are removed before semantic
+compilation, and validated options, references and source documents are copied into
+AdhocWorkspace. Preview refactorings never use MSBuildWorkspace.TryApplyChanges.
+
+Project and document paths must remain under the authorized root and cannot traverse
+symlinks. Limits also include 256 projects. Unsupported/missing files fail loading;
+linked documents shared between projects currently fail rather than picking a
+project silently. Multi-targeted projects, generated sources, arbitrary custom SDKs,
+VB projects and large real solutions are not qualified. Content edits refresh;
+changes to project configuration or the project graph require reopening. No analyzer
+diagnostics or source-generator output are provided.
+
+`dockpipe --workflow workers.roslyn` runs both suites. The trusted test creates and
+explicitly restores a locally authored pair of dependency-free SDK projects under
+`bin/.local`, then checks a conditional project define, exact cross-project definition
+and reference locations, clean diagnostics, changed-file type errors, and root/mode
+rejections. This verifies a small SDK project graph, not universal solution fidelity.

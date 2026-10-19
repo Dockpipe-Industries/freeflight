@@ -72,6 +72,8 @@ try:
         (root / "Unsafe.csproj").write_text('<Project Sdk="Microsoft.NET.Sdk"><Target Name="Run" BeforeTargets="Build"><WriteLinesToFile File="executed" Lines="unsafe" /></Target></Project>')
         opened = call("open", root=str(root))["result"]
         assert opened["mode"] == "safe-source" and opened["files"] == 1
+        assert call("capabilities")["result"]["projectEvaluation"] is False
+        assert "error" in call("open", root=str(root), mode="trusted-msbuild")
         assert not (root / "executed").exists()
         symbols = call("symbols", file="Sample.cs")["result"]
         assert {s["name"] for s in symbols} >= {"Counter", "Value", "Increment", "Consumer", "Read"}

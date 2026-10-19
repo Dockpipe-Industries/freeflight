@@ -2,24 +2,53 @@ name: CI
 on:
   pull_request:
     branches: [master, staging, dev, js/dev]
+  # Implementation is pushed to js/dev. Protected-branch PRs validate promotion proposals.
   push:
-    branches: [master, staging, dev, js/dev]
+    branches: [js/dev]
   workflow_dispatch:
   workflow_call:
 permissions:
   contents: read
 concurrency:
-  group: freeflight-ci-${{ github.workflow }}-${{ github.ref }}
+  group: freeflight-ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/staging' && github.ref != 'refs/heads/master' }}
 jobs:
+  promotion-policy:
+    name: Promotion policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check protected-branch promotion source
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_BRANCH: ${{ github.base_ref }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ github.repository }}
+        shell: python
+        run: |
+          import os
+          expected = {'dev': 'js/dev', 'staging': 'dev', 'master': 'staging'}
+          base = os.environ['BASE_BRANCH']
+          if os.environ['EVENT_NAME'] == 'pull_request' and base in expected:
+              if os.environ['HEAD_BRANCH'] != expected[base] or os.environ['HEAD_REPOSITORY'] != os.environ['REPOSITORY']:
+                  raise SystemExit(f'Promotion to {base} requires the same-repository {expected[base]} branch')
+              print(f'Valid promotion: {expected[base]} -> {base}')
+          else:
+              print('No protected-branch promotion requested')
   qualify:
+    needs: promotion-policy
     name: Qualify (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-2022, macos-15, ubuntu-24.04-arm]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 35
+    timeout-minutes: 45
+    env:
+      NUGET_PACKAGES: ${{ github.workspace }}/bin/.local/nuget
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1'
     defaults:
       run:
         shell: bash
@@ -30,7 +59,7 @@ jobs:
           python-version: '3.13'
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '24.11.1'
+          node-version: '24.22.0'
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: '10.0.402'
@@ -68,14 +97,21 @@ jobs:
         run: dockpipe --workflow registry.check
       - name: Website
         run: dockpipe --workflow site.build
-      - name: Core-only archive checks (not a standalone release)
-        run: dockpipe --workflow release.verify
+      - uses: ./.github/actions/setup-native-inputs
+      - name: Complete native bundle and installed semantic verification
+        run: dockpipe --workflow package.native
+      - name: Retain qualified native bundles
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-${{ matrix.os }}
+          path: bin/.local/packages/
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: qualification-${{ matrix.os }}
           path: |
             bin/.local/build/Testing/Temporary/LastTest.log
-            bin/.local/packages/
           if-no-files-found: warn
           retention-days: 14

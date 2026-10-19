@@ -27,7 +27,8 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
     subprocess.run([dotnet, "restore", str(root / "App/App.csproj"), "--ignore-failed-sources"], check=True, timeout=60)
     env = os.environ.copy()
     env["DOTNET_ROOT"] = str(pathlib.Path(dotnet).resolve().parent)
-    process = subprocess.Popen([dotnet, str(worker), "--trusted-msbuild"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
+    worker_command = [str(worker)] if "--native" in sys.argv[3:] else [dotnet, str(worker)]
+    process = subprocess.Popen(worker_command + ["--trusted-msbuild"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
     replies = queue.Queue()
     def read():
         for line in process.stdout:

@@ -124,7 +124,16 @@ test("incremental content updates refresh diagnostic results", (t) => {
 test("workspace traversal, symlinks and invalid positions are rejected", (t) => {
   const { root, worker } = fixture(t);
   assert.throws(() => worker.handle("symbols", { file: "../outside.ts" }));
-  fs.symlinkSync("/etc/passwd", path.join(root, "escape.ts"));
+  // A real fixture target works on Windows as well as Unix; /etc/passwd does not.
+  const external = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), "freeflight-outside-")),
+  );
+  t.after(() => fs.rmSync(external, { recursive: true, force: true }));
+  const target = path.join(external, "outside.ts");
+  fs.writeFileSync(target, "export const forbidden = 1;\n");
+  const link = path.join(root, "escape.ts");
+  fs.symlinkSync(target, link, "file");
+  assert.equal(fs.realpathSync(link), fs.realpathSync(target));
   assert.throws(
     () => worker.handle("symbols", { file: "escape.ts" }),
     /outside/,

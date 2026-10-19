@@ -77,10 +77,18 @@ class ProtocolTests(unittest.TestCase):
 
     def test_project_discovery(self):
         (self.root / "tsconfig.json").write_text("{}")
+        (self.root / "example.ts").write_text("export const value = 1")
+        (self.root / "example.cs").write_text("class Example {}")
+        (self.root / "example.mjs").write_text("export const value = 1")
+        ignored = self.root / "node_modules"
+        ignored.mkdir()
+        (ignored / "hidden.csproj").write_text("<Project />")
         result = self.call("tools/call", {"name": "workspace.discover"})["result"]
         self.assertFalse(result["isError"])
         self.assertEqual(result["structuredContent"]["workspaces"][0]["projects"],
                          [str(self.root / "tsconfig.json")])
+        self.assertEqual(result["structuredContent"]["workspaces"][0]["languages"],
+                         ["csharp", "javascript", "typescript"])
 
     def test_outside_root(self):
         result = self.call("tools/call", {"name": "engine.capabilities",

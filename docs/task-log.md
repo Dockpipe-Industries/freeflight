@@ -55,3 +55,14 @@ Read-only GitHub inspection found master/dev/staging protected=false, protection
 endpoints returned 'Branch not protected', and inherited/repository rulesets list
 was empty. No protection settings changed; proposed protections await action-time
 approval.
+
+### Approved branch protection applied
+
+Jamie explicitly approved protection of dev/staging/master with no mandatory
+reviewer approval. Read actual check runs before setting requirements: four
+`Qualify (...)` platform checks and `cpp` from GitHub Actions app 15368, plus
+`CodeQL` from app 57789. Applied and read back each branch: required pull requests,
+strict/up-to-date checks, resolved conversations, enforce_admins=true,
+required_approving_review_count=0, allow_force_pushes=false, allow_deletions=false.
+js/dev and other repositories were not modified. Settings succeeded; no credential
+expansion was necessary.

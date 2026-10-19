@@ -187,6 +187,8 @@ def main():
     stage = REPO / "bin/.local/typescript"
     if json.loads((stage / "node_modules/typescript/package.json").read_text())["version"] != json.loads((REPO / "workers/typescript/package.json").read_text())["dependencies"]["typescript"]:
         raise RuntimeError("Staged TypeScript differs from the declared pinned dependency")
+    if digest(stage / "worker.mjs") != digest(REPO / "workers/typescript/worker.mjs"):
+        raise RuntimeError("Staged TypeScript worker is stale; run workers.typescript")
     output = REPO / "bin/.local/packages"
     output.mkdir(parents=True, exist_ok=True)
     # Only this invocation's temporary directory is cleaned; existing developer output is preserved.
@@ -200,6 +202,8 @@ def main():
         copy_file(stage / "worker.mjs", lib / "typescript/worker.mjs")
         run(["dotnet", "publish", REPO / "workers/roslyn/FreeFlight.Roslyn.csproj", "--configuration", "Release", "--runtime", rid, "--self-contained", "true", "-p:RestoreLockedMode=true", "--artifacts-path", REPO / "bin/.local/roslyn", "--output", lib / "roslyn", "-p:PublishSingleFile=false"])
         roslyn = lib / ("roslyn/FreeFlight.Roslyn" + suffix)
+        if not (lib / "roslyn/BuildHost-netcore/Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.dll").is_file():
+            raise RuntimeError("Trusted-mode MSBuild host missing from publish output")
         for executable in (bundle / ("bin/freeflight" + suffix), bundled_node, roslyn):
             if not executable.is_file() or (system != "win" and not os.access(executable, os.X_OK)):
                 raise RuntimeError("Expected executable missing: " + str(executable))
@@ -214,15 +218,19 @@ def main():
             package_root = nuget / package.lower() / info["resolved"]
             metadata = package_root / (package.lower() + ".nuspec")
             copy_file(metadata, notices / "nuget" / package / metadata.name)
-            for notice in package_root.iterdir():
-                if notice.is_file() and ("license" in notice.name.lower() or "thirdpartynotices" in notice.name.lower()):
-                    copy_file(notice, notices / "nuget" / package / notice.name)
-        for name in ("roslyn-LICENSE", "humanizer-LICENSE", "SOURCES.md"):
+            for notice in package_root.rglob("*"):
+                normalized = notice.name.lower().replace("-", "").replace("_", "")
+                relative = notice.relative_to(package_root)
+                if notice.is_file() and ("license" in normalized or "thirdpartynotices" in normalized or "notices" in relative.parts):
+                    copy_file(notice, notices / "nuget" / package / relative)
+        for name in ("roslyn-LICENSE", "humanizer-LICENSE", "msbuild-locator-LICENSE", "SOURCES.md"):
             copy_file(pathlib.Path(__file__).parent / "licenses" / name, notices / name)
         binary = bundle / ("bin/freeflight" + suffix)
         run([os.environ.get("PYTHON", "python3"), REPO / "tests/protocol.py", binary])
         checks = verify_semantics(binary)
         run([os.environ.get("PYTHON", "python3"), "-B", REPO / "workers/roslyn/test_worker.py", "--native", roslyn])
+        run([os.environ.get("PYTHON", "python3"), "-B", REPO / "workers/roslyn/test_trusted.py", "dotnet", roslyn, "--native"])
+        checks.extend(["native Roslyn safe-source semantic suite", "native Roslyn trusted-project suite (external SDK)"])
         receipt = {"rid": rid, "nodeVersion": actual, "nodeExecutableSha256": digest(node), "checks": checks, "productionPublication": False}
         (bundle / "verification.json").write_text(json.dumps(receipt, indent=2) + "\n")
         mcpb = pack_mcpb(bundle, node, node_root, system, rid, temporary)

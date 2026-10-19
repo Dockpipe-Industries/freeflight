@@ -101,7 +101,62 @@ try:
         diagnostics = call("diagnostics", file="Sample.cs")["result"]
         assert any(d["code"] == "CS0103" and d["location"]["range"]["start"]["line"] == 4 for d in diagnostics), diagnostics
         assert "error" in call("open", root=str(root), mode="msbuild")
-    print("Roslyn semantic, preview, refresh, boundary, no-MSBuild, malformed input, and cancellation checks passed")
+        advanced = pathlib.Path(__file__).parent / "fixtures" / "Advanced.cs"
+        (root / "Advanced.cs").write_text(advanced.read_text())
+        def position(line, word, offset=0):
+            return dict(file="Advanced.cs", line=line,
+                        character=advanced.read_text().splitlines()[line].index(word) + offset)
+        implementations = call("implementations", **position(1, "Add", 1))["result"]
+        assert {item["locations"][0]["range"]["start"]["line"] for item in implementations} == {4, 8}, implementations
+        info = call("typeInfo", **position(15, "42"))["result"]
+        assert info["display"] == "int" and info["kind"] == "Struct", info
+        signatures = call("signatureHelp", **position(15, "42"))["result"]
+        assert len(signatures["signatures"]) == 2, signatures
+        assert {item["parameters"][0]["display"] for item in signatures["signatures"]} == {"int value", "string value"}, signatures
+        assert signatures["argumentIndex"] == 0 and signatures["argumentCount"] == 1, signatures
+        assert signatures["signatures"][signatures["selectedItemIndex"]]["parameters"][0]["display"] == "int value", signatures
+        two_arguments = call("signatureHelp", **position(12, "2"))["result"]
+        assert two_arguments["argumentIndex"] == 1 and two_arguments["argumentCount"] == 2, two_arguments
+        found = call("workspaceSymbols", query="deriv")["result"]
+        assert len(found) == 1 and found[0]["name"] == "Derived", found
+        assert found[0]["locations"][0]["range"]["start"] == dict(line=6, character=13), found
+        assert "error" in call("workspaceSymbols", query="")
+        hierarchy = call("typeHierarchy", **position(6, "Derived", 1))["result"]
+        assert [item["name"] for item in hierarchy["supertypes"]] == ["Base"], hierarchy
+        assert hierarchy["subtypes"] == [], hierarchy
+        hierarchy = call("typeHierarchy", **position(2, "Base", 1))["result"]
+        assert [item["name"] for item in hierarchy["subtypes"]] == ["Derived"], hierarchy
+        hierarchy = call("typeHierarchy", **position(1, "ICalc", 1))["result"]
+        assert [item["name"] for item in hierarchy["subtypes"]] == ["Base"], hierarchy
+        calls = call("callHierarchy", **position(12, "Run", 1))["result"]
+        assert len(calls) == 1 and calls[0]["incoming"] == [], calls
+        assert {edge["to"]["name"] for edge in calls[0]["outgoing"]} == {".ctor", "Add"}, calls
+        assert all(edge["locations"][0]["range"]["start"]["line"] == 12 for edge in calls[0]["outgoing"]), calls
+        callers = call("callHierarchy", **position(8, "Add", 1))["result"]
+        assert [edge["from"]["name"] for edge in callers[0]["incoming"] if edge["isDirect"]] == ["Run"], callers
+        assert [edge["from"]["name"] for edge in callers[0]["incoming"] if not edge["isDirect"]] == ["Add"], callers
+        assert callers[0]["incoming"][0]["locations"][0]["range"]["start"]["line"] == 12, callers
+        nested = call("callHierarchy", **position(16, "Nested", 1))["result"]
+        assert nested[0]["outgoing"] == [], nested
+        local = call("callHierarchy", **position(16, "Local", 1))["result"]
+        assert [edge["to"]["name"] for edge in local[0]["outgoing"]] == ["Overload"], local
+        unicode_source = 'class Unicode { string text = "😀"; int Read() => text.Length; }'
+        (root / "Unicode.cs").write_text(unicode_source)
+        unicode_character = len(unicode_source[:unicode_source.rindex("text")].encode("utf-16-le")) // 2
+        unicode_type = call("typeInfo", file="Unicode.cs", line=0, character=unicode_character)["result"]
+        assert unicode_type["display"] == "string", unicode_type
+        (root / "Bounds.cs").write_text("\n".join(f"class QueryLimit{i} {{}}" for i in range(1001)))
+        bounded = call("workspaceSymbols", query="QueryLimit")
+        assert "1000 symbols" in bounded["error"]["message"], bounded
+        (root / "Bounds.cs").unlink()
+        (root / "Calls.cs").write_text("class CallLimit { static void Target() {} public static void Burst() {" + "Target();" * 501 + "} }")
+        bounded = call("callHierarchy", file="Calls.cs", line=0, character=61)
+        assert "500 outgoing" in bounded["error"]["message"], bounded
+        (root / "Calls.cs").unlink()
+        assert len(call("workspaceSymbols", query="Derived")["result"]) == 1
+
+
+    print("Roslyn semantic navigation, implementations, types, signatures, hierarchies, limits, preview, refresh, boundary, no-MSBuild, malformed input, and cancellation checks passed")
 finally:
     process.stdin.close()
     process.wait(timeout=15)

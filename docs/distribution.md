@@ -2,7 +2,7 @@
 
 FreeFlight's complete standalone bundle contains a C++ server, a supplied Node
 runtime and TypeScript Language Service worker, and a self-contained Roslyn worker.
-End users do not need DockPipe, Node or .NET installed separately.
+Default safe-source analysis requires no separately installed DockPipe, Node or .NET runtime. The optional, explicitly authorized trusted-MSBuild mode needs an operator-installed compatible .NET SDK; a complete SDK is not bundled. See [capabilities and trust boundaries](capabilities.md).
 
 No public release or production package is implied by these workflow definitions.
 A release candidate must pass its native installed-bundle checks on each advertised
@@ -22,7 +22,7 @@ Set these environment variables before `dockpipe --workflow package.native`:
 | --- | --- |
 | `FREEFLIGHT_RID` | Explicit native RID: `osx-arm64`, `osx-x64`, `linux-x64`, `linux-arm64`, `win-x64` or `win-arm64`; must match the running host. |
 | `NODE_DISTRIBUTION_ROOT` | Absolute path to the verified extracted official Node distribution; includes `LICENSE` and `bin/node` (or `node.exe` on Windows). |
-| `FREEFLIGHT_NODE_VERSION` | Exact expected `node --version` output, for example `v24.11.1`. |
+| `FREEFLIGHT_NODE_VERSION` | Exact expected `node --version` output, for example `v24.22.0`. |
 | `DOTNET_LICENSE_ROOT` | Absolute path to the provisioned .NET distribution containing `LICENSE.txt` and `ThirdPartyNotices.txt`. |
 | `NUGET_PACKAGES` | Absolute path to restored NuGet packages, containing the exact versions in the Roslyn lockfile. |
 
@@ -51,6 +51,7 @@ lib/freeflight/typescript/worker.mjs
 lib/freeflight/typescript/node_modules/typescript/
 lib/freeflight/roslyn/FreeFlight.Roslyn[.exe]
 lib/freeflight/roslyn/...              # self-contained .NET dependencies
+lib/freeflight/roslyn/BuildHost-netcore/ # optional trusted-mode host; SDK not bundled
 share/freeflight/licenses/
 verification.json
 SHA256SUMS
@@ -119,7 +120,7 @@ binary. The local extraction test is not a claim that every MCPB desktop client 
 been tested. The general DockPipe Registry integration must consume this standalone
 distribution rather than publishing a duplicate FreeFlight store package.
 
-## Local qualification — 2026-10-19
+## Historical local qualification — 2026-10-19 (before trusted mode)
 
 `dockpipe --workflow package.native` passed on macOS ARM64 with Node v24.11.1
 and .NET SDK 10.0.402. Evidence: `bin/.local/package-native.log` (generated, ignored).
@@ -135,5 +136,5 @@ Local artifacts, not published releases:
 - `freeflight-osx-arm64-bdb3e394239f625a.tar.gz`: SHA-256 `33d2ea127049d3d39035eaa4a1ab22d80c4be59f9d88e13200693b655ed55eff`
 - `freeflight-osx-arm64-eb5057c9ec156aa2.mcpb`: SHA-256 `eb5057c9ec156aa27980275c2503b95e9a483eb091cf82e357849e6cb7927fb7`
 
-These artifacts predate this qualification note. Other platform artifacts, desktop
+These artifacts predate this qualification note and the trusted-MSBuild dependency update. They do not represent the current worker snapshot. Other platform artifacts, desktop
 host installation, signing and public Registry submission remain unverified.

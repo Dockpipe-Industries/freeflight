@@ -31,7 +31,7 @@ No production release, registry listing or website deployment has been performed
 - [x] Inspect DockPipe, DockPipe Cloud and Nucleon agent guidance and conventions.
 - [x] Inspect public Pipelang compiler/Qt boundary; keep future integration decoupled.
 - [x] Create public Apache-2.0 repository; master default, staging, dev, js/dev.
-- [ ] Establish branch protections using separately approved security changes.
+- [x] Establish branch protections using separately approved security changes.
 - [ ] C++23/CMake core, licensed dependencies, tested engine interfaces and CI.
 
 ## B — Core server

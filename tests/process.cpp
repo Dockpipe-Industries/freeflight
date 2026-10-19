@@ -1,7 +1,9 @@
 #include "freeflight/process.hpp"
 #include "freeflight/path.hpp"
 
+#include <charconv>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -88,8 +90,21 @@ template <typename Fn> void fails(Fn fn, const std::string &expected) {
     }
     throw std::runtime_error("expected failure: " + expected);
 }
+fs::path crash_directory(std::uint64_t token) {
+    return fs::temp_directory_path() / ("freeflight-process-" + std::to_string(token));
+}
+
 int worker(int argc, char **argv) {
     const std::string mode = argv[2];
+    std::uint64_t crash_token = 0;
+    if (mode == "crash") {
+        if (argc != 4)
+            return 9;
+        const std::string_view input(argv[3]);
+        const auto parsed = std::from_chars(input.data(), input.data() + input.size(), crash_token);
+        if (input.empty() || parsed.ec != std::errc{} || parsed.ptr != input.data() + input.size())
+            return 9;
+    }
     if (mode == "stderr") {
         std::cerr << "worker startup diagnostic\n" << std::flush;
         if (!std::cerr.good())
@@ -103,7 +118,13 @@ int worker(int argc, char **argv) {
     while (std::getline(std::cin, line)) {
         const auto message = json::parse(line);
         if (mode == "crash") {
-            std::ofstream marker(freeflight::pathFromUtf8(argv[3]), std::ios::app);
+            // Only a normalized integer influences this fixed, test-owned location.
+            const auto directory = crash_directory(crash_token);
+            const auto marker_path = directory / "invocations.txt";
+            if (fs::is_symlink(directory) || !fs::is_directory(directory) ||
+                fs::is_symlink(marker_path))
+                return 9;
+            std::ofstream marker(marker_path, std::ios::app);
             marker << "one invocation\n";
             marker.close();
             return 7;
@@ -286,12 +307,39 @@ int run_tests(int argc, char **argv) {
                 "request exceeds limit");
             require(process.request(message)["id"] == 42, "large input validation killed worker");
         }
-        const auto marker =
-            fs::temp_directory_path() /
-            ("freeflight-process-" +
-             std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        auto token =
+            static_cast<std::uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+        // Atomic reservation prevents parallel test processes sharing a marker.
+        while (!fs::create_directory(crash_directory(token)))
+            ++token;
+        const auto marker_directory = crash_directory(token);
+        fs::permissions(marker_directory, fs::perms::owner_all, fs::perm_options::replace);
+        const auto marker = marker_directory / "invocations.txt";
+        const auto sentinel = marker_directory / "sentinel.txt";
         {
-            Process process({executable, "--worker", "crash", freeflight::pathToUtf8(marker)});
+            std::ofstream file(sentinel);
+            file << "unchanged";
+        }
+        for (const auto &invalid :
+             std::vector<std::vector<std::string>>{{},
+                                                   {""},
+                                                   {"-1"},
+                                                   {"1suffix"},
+                                                   {"18446744073709551616"},
+                                                   {"../sentinel.txt"},
+                                                   {freeflight::pathToUtf8(sentinel)}}) {
+            std::vector<std::string> command = {executable, "--worker", "crash"};
+            command.insert(command.end(), invalid.begin(), invalid.end());
+            Process process(command);
+            fails([&] { process.request(message); }, "pipe");
+            std::ifstream file(sentinel);
+            std::string content;
+            std::getline(file, content);
+            require(content == "unchanged", "invalid crash token modified sentinel");
+            require(!fs::exists(marker), "invalid crash token wrote an invocation");
+        }
+        {
+            Process process({executable, "--worker", "crash", std::to_string(token)});
             fails([&] { process.request(message); }, "pipe closed");
             fails([&] { process.request(message); }, "stopped");
             std::ifstream file(marker);
@@ -301,6 +349,8 @@ int run_tests(int argc, char **argv) {
             require(first == "one invocation" && second.empty(), "crashed request was retried");
         }
         fs::remove(marker);
+        fs::remove(sentinel);
+        fs::remove(marker_directory);
         {
             // Recovery is an explicit new instance; a crashed request is never replayed.
             Process replacement({executable, "--worker", "echo"});

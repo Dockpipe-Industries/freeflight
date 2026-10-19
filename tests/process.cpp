@@ -10,8 +10,11 @@
 #include <thread>
 #ifdef _WIN32
 #define NOMINMAX
-#include <shellapi.h>
+// Windows SDK declarations must precede Shell API declarations.
+// clang-format off
 #include <windows.h>
+#include <shellapi.h>
+// clang-format on
 #else
 #include <cerrno>
 #include <sys/wait.h>

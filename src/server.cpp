@@ -20,7 +20,10 @@ Server::Server(const Json &configuration) {
     }
     if (roots_.empty() || roots_.size() > 32)
         throw std::runtime_error("Require 1–32 roots");
-    for (const auto &[language, command] : configuration.value("engines", Json::object()).items()) {
+    const auto engines = configuration.value("engines", Json::object());
+    if (!engines.is_object())
+        throw std::runtime_error("engines must be an object");
+    for (const auto &[language, command] : engines.items()) {
         auto args = command.get<std::vector<std::string>>();
         if (args.empty() || !fs::path(args.front()).is_absolute())
             throw std::runtime_error("Engine executable must be an absolute path");

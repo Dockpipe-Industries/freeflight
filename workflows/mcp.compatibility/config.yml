@@ -1,0 +1,21 @@
+name: mcp.compatibility
+description: Verify FreeFlight using the pinned official MCP SDK client.
+vault: none
+docker_preflight: false
+steps:
+  - id: directory
+    kind: host
+    cwd: repo
+    cmd: cmake -E make_directory bin/.local/client
+  - id: stage
+    kind: host
+    cwd: repo
+    cmd: cmake -E copy_if_different tests/client/client.mjs tests/client/package.json tests/client/package-lock.json bin/.local/client
+  - id: dependencies
+    kind: host
+    cwd: repo
+    cmd: npm ci --ignore-scripts --prefix bin/.local/client
+  - id: verify
+    kind: host
+    cwd: repo
+    cmd: node bin/.local/client/client.mjs

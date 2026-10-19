@@ -1,0 +1,82 @@
+schema: 1
+description: Machine-readable routing map for FreeFlight agent guidance.
+tasks:
+  orientation:
+    read:
+      - AGENTS.md
+      - docs/agents/brain/index.md
+      - docs/agents/brain/source-of-truth-rules.md
+      - docs/agents/brain/repo-knowledge.md
+      - docs/agents/brain/open-gaps.md
+    skills: []
+    validation:
+      - dockpipe --workflow repo.check
+  core_protocol:
+    read:
+      - AGENTS.md
+      - docs/agents/core/architecture.md
+      - docs/agents/core/verification.md
+      - src/AGENTS.md
+      - SECURITY.md
+    skills: []
+    validation:
+      - dockpipe --workflow repo.check
+  language_engines:
+    read:
+      - AGENTS.md
+      - workers/AGENTS.md
+      - docs/agents/core/architecture.md
+      - docs/agents/core/verification.md
+      - workers/typescript/README.md
+      - workers/roslyn/README.md
+    skills: []
+    validation:
+      - dockpipe --workflow repo.check
+  dockpipe_workflows:
+    read:
+      - AGENTS.md
+      - workflows/AGENTS.md
+      - workflows/README.md
+      - docs/agents/workflows/development.md
+      - dockpipe.config.json
+    skills: []
+    validation:
+      - dockpipe --workflow repo.check
+  security_or_dependencies:
+    read:
+      - AGENTS.md
+      - SECURITY.md
+      - docs/agents/core/dependencies.md
+      - docs/agents/core/verification.md
+    skills: []
+    validation:
+      - dockpipe --workflow repo.check
+  release_or_registry:
+    read:
+      - AGENTS.md
+      - docs/agents/release/distribution.md
+      - docs/release.md
+      - docs/distribution.md
+      - docs/acceptance.md
+    skills: []
+    validation:
+      - dockpipe --workflow repo.check
+  website_or_marketing:
+    read:
+      - AGENTS.md
+      - site/AGENTS.md
+      - docs/agents/site/product.md
+      - docs/agents/brain/source-of-truth-rules.md
+    skills: []
+    validation:
+      - dockpipe --workflow repo.check
+  agent_guidance_or_tasks:
+    read:
+      - AGENTS.md
+      - docs/agents/README.md
+      - docs/agents/TASKS.md
+      - docs/agents/task-index.yaml
+      - docs/acceptance.md
+    skills: []
+    validation:
+      - dockpipe --workflow repo.check

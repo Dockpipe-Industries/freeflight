@@ -1,0 +1,17 @@
+name: package.native
+description: Assemble and verify a complete native FreeFlight bundle using explicitly provisioned runtime inputs.
+vault: none
+docker_preflight: false
+steps:
+  - id: pe-import-contract
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/package.native/assets/test_pe_imports.py
+  - id: mcpb-contract
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/package.native/assets/test_mcpb.py
+  - id: package
+    kind: host
+    cwd: repo
+    cmd: python3 workflows/package.native/assets/package.py

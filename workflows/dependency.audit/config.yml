@@ -1,0 +1,40 @@
+name: dependency.audit
+description: Query vulnerability feeds for runtime and client-test dependency graphs.
+vault: none
+docker_preflight: false
+dependencies:
+  host:
+    - id: python3
+      command: python3
+      description: Standard-library NuGet audit policy adapter and tests.
+    - id: dotnet
+      command: dotnet
+      description: Query the restored Roslyn dependency graph.
+    - id: npm
+      command: npm
+      description: Audit TypeScript runtime and locked client-test graphs.
+steps:
+  - id: policy-test
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/dependency.audit/assets/test_nuget_audit.py
+  - id: npm
+    kind: host
+    cwd: repo
+    cmd: npm audit --prefix bin/.local/typescript --omit=dev --audit-level=high
+  - id: npm-client
+    kind: host
+    cwd: repo
+    cmd: npm audit --prefix tests/client --package-lock-only --audit-level=high
+  - id: prepare-site
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/dependency.audit/assets/site_tooling.py
+  - id: npm-site
+    kind: host
+    cwd: repo
+    cmd: npm audit --prefix bin/.local/audit-site-tooling --package-lock-only --audit-level=high
+  - id: nuget
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/dependency.audit/assets/nuget_audit.py

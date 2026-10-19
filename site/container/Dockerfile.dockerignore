@@ -1,0 +1,9 @@
+**
+!site/
+!site/container/
+!site/container/Dockerfile
+!site/container/nginx.conf
+!bin/
+!bin/.local/
+!bin/.local/site/
+!bin/.local/site/**

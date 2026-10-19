@@ -1,0 +1,23 @@
+{
+  "qt": "6.12.0",
+  "emsdk": "5.0.5",
+  "emsdkCommit": "c9ef2c9d6000341d667a32a807ba47ca489d1e1b",
+  "aqt": "3.3.0",
+  "qtSources": {
+    "qtbase": "a951bd163c7b80fc6b8c88d7668fb56abf91c152373e13c10666763238131307",
+    "qtdeclarative": "311f3a2603e1973bb59baef9dfa740a376de713157d4782ee043681e889c9260",
+    "qtsvg": "e4ab39534ec97987b1b9b60ef7f4d3253d5912a69f8c713a01753174a4029331"
+  },
+  "emscriptenSourceCommit": "bc569045b14c3fa7b960734ed2c50da7b20adea4",
+  "runtimeNotices": {
+    "LICENSE": "620a78084fc7ca97c0b5dea9abf891f3ffcadfdbf305276f099c9c4e12fc1d86",
+    "AUTHORS": "8585fa1b981f576f52806833481323007ccac5c00f31a873215e31c0f42820f0",
+    "system/lib/libc/musl/COPYRIGHT": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af",
+    "system/lib/libcxx/LICENSE.TXT": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b",
+    "system/lib/libcxxabi/LICENSE.TXT": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c",
+    "system/lib/compiler-rt/LICENSE.TXT": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d",
+    "system/lib/libunwind/LICENSE.TXT": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d",
+    "system/lib/llvm-libc/LICENSE.TXT": "ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47",
+    "system/lib/mimalloc/LICENSE": "19c99805e7a44a34b297a75d1edea9985e300066dfc024d5c99d4236d4573b5d"
+  }
+}

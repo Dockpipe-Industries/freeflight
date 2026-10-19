@@ -96,7 +96,16 @@ The workflow also produces an MCP Bundle in the [official ZIP-based format](http
 
 The [official manifest specification](https://github.com/anthropics/mcpb/blob/2a788100a60db19a6b1c018fb1cf84ae85de9537/MANIFEST.md) provides `server.type: binary`, `${__dirname}` installation paths and a required workspace directory picker. FreeFlight uses the same `bin/freeflight --workspace` command and native file layout. This is an alternate archive of one product, not a custom distribution format.
 
-The workflow tests the vendored official valid/invalid examples, then writes all bundle files including TypeScript `.d.ts` semantic inputs. ZIP entries preserve Unix executable modes. Every archived file must match its staged original byte for byte, and a fresh extraction must pass the installed semantic checks using its own binaries and runtimes. No archive is retained if these checks fail. The bundle is unsigned. Public Registry submission still requires separately verified asset URLs and publisher authorization.
+The workflow tests the vendored official valid/invalid examples, then writes all bundle files including TypeScript `.d.ts` semantic inputs. ZIP entries preserve Unix executable modes. Every archived file must match its staged original byte for byte, and a fresh extraction must pass the installed semantic checks using its own binaries and runtimes. Installation, workspace and extraction paths deliberately contain spaces and non-ASCII characters. No archive is retained if these checks fail. The bundle is unsigned. Public Registry submission still requires separately verified asset URLs and publisher authorization.
+
+Windows packaging also inspects the core executable's regular and delay-load PE
+imports and rejects dynamic VC++ runtime dependencies (`VCRUNTIME`, `MSVCP`,
+`CONCRT`, `VCOMP`). The workflow-local standard-library parser follows the
+[Microsoft PE specification](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format)
+and avoids a dependency on Visual Studio diagnostic tools in the runner PATH.
+It fails closed on malformed or unsupported import tables and records the direct
+DLL names in `verification.json`. This verifies the native C++ core's static CRT
+configuration; it does not claim Node/.NET or transitive DLL dependencies are static.
 
 The build-only official MCPB CLI dependency was removed because the latest reviewed CLI 2.1.2 includes unpatched `node-forge` high-severity vulnerability [GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv). This removes the unused dependency graph rather than suppressing its audit. The high audit threshold remains unchanged; historical CLI-based receipts below describe earlier artifacts only.
 

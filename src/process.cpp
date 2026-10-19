@@ -4,6 +4,7 @@
 #endif
 #endif
 #include "freeflight/process.hpp"
+#include "freeflight/path.hpp"
 
 #include <algorithm>
 #include <array>
@@ -32,6 +33,32 @@
 namespace freeflight {
 namespace {
 constexpr std::size_t max_line = 8 * 1024 * 1024;
+#ifdef _WIN32
+std::vector<std::wstring> worker_environment() {
+    std::vector<std::wstring> values;
+    // Read Windows' Unicode environment directly: CRT getenv can lose characters
+    // before UTF-8 conversion. APPDATA is required by NuGet's lockfile reader;
+    // credentials and runtime injection controls remain outside this allowlist.
+    for (const auto *name : {L"PATH", L"SystemRoot", L"WINDIR", L"TEMP", L"TMP", L"TMPDIR", L"LANG",
+                             L"LC_ALL", L"DOTNET_ROOT", L"APPDATA"}) {
+        std::wstring value(32768, L'\0');
+        SetLastError(ERROR_SUCCESS);
+        const DWORD size =
+            GetEnvironmentVariableW(name, value.data(), static_cast<DWORD>(value.size()));
+        if (!size && GetLastError() == ERROR_ENVVAR_NOT_FOUND)
+            continue;
+        if ((!size && GetLastError() != ERROR_SUCCESS) || size >= value.size())
+            throw std::runtime_error("cannot read worker environment");
+        value.resize(size);
+        values.push_back(std::wstring(name) + L"=" + value);
+    }
+    values.emplace_back(L"DOTNET_CLI_TELEMETRY_OPTOUT=1");
+    values.emplace_back(L"DOTNET_EnableDiagnostics=0");
+    values.emplace_back(L"DOTNET_GENERATE_ASPNET_CERTIFICATE=false");
+    values.emplace_back(L"DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1");
+    return values;
+}
+#else
 std::vector<std::string> worker_environment() {
     std::vector<std::string> values;
     // Language workers do not need unrelated cloud/provider credentials or
@@ -41,19 +68,13 @@ std::vector<std::string> worker_environment() {
         if (const char *value = std::getenv(name))
             values.push_back(std::string(name) + "=" + value);
     }
-#ifdef _WIN32
-    // NuGet's lockfile reader resolves UserSettingsDirectory unconditionally as
-    // Path.Combine(APPDATA, "NuGet"). Preserve this directory, not NuGet credentials
-    // or the ambient environment, so trusted MSBuild can read project.assets.json.
-    if (const char *value = std::getenv("APPDATA"))
-        values.push_back(std::string("APPDATA=") + value);
-#endif
     values.emplace_back("DOTNET_CLI_TELEMETRY_OPTOUT=1");
     values.emplace_back("DOTNET_EnableDiagnostics=0");
     values.emplace_back("DOTNET_GENERATE_ASPNET_CERTIFICATE=false");
     values.emplace_back("DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1");
     return values;
 }
+#endif
 using Clock = std::chrono::steady_clock;
 void check(std::stop_token token, Clock::time_point deadline) {
     if (token.stop_requested())
@@ -179,7 +200,7 @@ struct Process::Impl {
 };
 
 Process::Process(std::vector<std::string> argv) : impl_(std::make_unique<Impl>()) {
-    if (argv.empty() || !std::filesystem::path(argv.front()).is_absolute())
+    if (argv.empty() || !pathFromUtf8(argv.front()).is_absolute())
         throw std::runtime_error("worker executable must be an absolute path");
     for (const auto &arg : argv)
         if (arg.find('\0') != std::string::npos || arg.size() > max_line)
@@ -252,9 +273,7 @@ Process::Process(std::vector<std::string> argv) : impl_(std::make_unique<Impl>()
                                                     &limits, sizeof(limits)))
             throw std::runtime_error("cannot create worker job");
         PROCESS_INFORMATION info{};
-        std::vector<std::wstring> entries;
-        for (const auto &item : worker_environment())
-            entries.push_back(wide(item));
+        auto entries = worker_environment();
         // CreateProcess requires a case-insensitive ordinally sorted environment block.
         std::sort(entries.begin(), entries.end(), [](const auto &left, const auto &right) {
             return CompareStringOrdinal(left.c_str(), -1, right.c_str(), -1, TRUE) ==

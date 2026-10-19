@@ -1,3 +1,4 @@
+#include "freeflight/path.hpp"
 #include "freeflight/server.hpp"
 #include <condition_variable>
 #include <deque>
@@ -53,7 +54,8 @@ struct Job {
 };
 } // namespace
 
-int main(int argc, char **argv) {
+int runMain(const std::vector<std::string> &argv) {
+    const auto argc = argv.size();
     try {
         if (argc == 2 && std::string(argv[1]) == "--version") {
             std::cout << "FreeFlight 0.1.0\n";
@@ -65,11 +67,11 @@ int main(int argc, char **argv) {
                          "/absolute/freeflight.json\n";
             return 2;
         }
-        if (!std::filesystem::path(argv[2]).is_absolute())
+        if (!freeflight::pathFromUtf8(argv[2]).is_absolute())
             throw std::runtime_error("Configuration or workspace path must be absolute");
         Json config;
         if (std::string(argv[1]) == "--config") {
-            std::ifstream input(argv[2]);
+            std::ifstream input(freeflight::pathFromUtf8(argv[2]));
             config = Json::parse(input, boundedJsonDepth);
         } else {
             const auto library =
@@ -86,11 +88,12 @@ int main(int argc, char **argv) {
                 !std::filesystem::exists(roslyn))
                 throw std::runtime_error(
                     "Incomplete runtime bundle; use --config for development builds");
-            config = {{"roots", {argv[2]}},
-                      {"engines",
-                       {{"typescript", {node.string(), worker.string()}},
-                        {"javascript", {node.string(), worker.string()}},
-                        {"csharp", {roslyn.string()}}}}};
+            config = {
+                {"roots", {argv[2]}},
+                {"engines",
+                 {{"typescript", {freeflight::pathToUtf8(node), freeflight::pathToUtf8(worker)}},
+                  {"javascript", {freeflight::pathToUtf8(node), freeflight::pathToUtf8(worker)}},
+                  {"csharp", {freeflight::pathToUtf8(roslyn)}}}}};
         }
         freeflight::Server server(config);
         std::mutex outputMutex;
@@ -295,3 +298,21 @@ int main(int argc, char **argv) {
         return 1;
     }
 }
+
+#ifdef _WIN32
+int wmain(int argc, wchar_t **argv) {
+    try {
+        std::vector<std::string> arguments;
+        for (int i = 0; i < argc; ++i)
+            arguments.push_back(freeflight::pathToUtf8(std::filesystem::path(argv[i])));
+        return runMain(arguments);
+    } catch (const std::exception &) {
+        std::cerr << "Cannot decode command-line arguments as Unicode\n";
+        return 1;
+    }
+}
+#else
+int main(int argc, char **argv) {
+    return runMain(std::vector<std::string>(argv, argv + argc));
+}
+#endif

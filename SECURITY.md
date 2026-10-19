@@ -12,9 +12,13 @@ dependencies are installed during explicit development/provisioning only.
 
 The process boundary provides cancellation and fault isolation, not an OS security
 sandbox. Workers retain the server's OS privileges. Their environment is reduced
-to runtime search, OS/temp/locale and .NET root settings; unrelated credentials,
+to runtime search, OS/temp/locale and .NET root settings, plus Windows APPDATA
+required by NuGet project loading. Windows values are read and passed as Unicode
+without a lossy ANSI-codepage conversion; this does not expand the allowlist. Unrelated credentials,
 NODE_OPTIONS and DOTNET_STARTUP_HOOKS are not forwarded. Run with only the OS
 permissions needed; filesystem access is not constrained by this environment filter.
+MCP and worker paths use UTF-8 at the protocol boundary; Windows CLI paths enter
+through the wide-character entry point. Filesystem authorization uses native paths.
 Canonical path checks reject ordinary traversal/symlink escape but do not make
 concurrently hostile filesystem mutation race-free. This limitation blocks claims
 of secure multitenant hosting. Only local single-user stdio is implemented.

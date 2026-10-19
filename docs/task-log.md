@@ -166,3 +166,36 @@ while rejecting NuGet credential and .NET startup-hook environment variables.
 Local DockPipe core build, CTest 2/2, lint and actual-project integration passed;
 Windows still requires hosted verification. Release-policy tests now pass 35
 cases, including required pinned Emscripten notice archive/receipt integrity.
+
+Candidate a9e37ca99a021853cf2e50eaea1d5f3578498812 PR CI 39330975608 passed
+Linux x64/ARM64, macOS ARM64 and both Qt site modes. Windows passed actual
+project semantics and official-client compatibility, confirming the NuGet path
+fix, then failed Python's attempt to launch the npm command shim. Moved that
+audit invocation into a native DockPipe step; all six local dependency-audit
+steps now pass, with zero npm findings and no NuGet findings.
+
+Focused Windows review found ANSI/UTF-8 conversions could corrupt non-ASCII
+workspace and environment paths. Windows now reads the allowlisted environment
+through its wide API; wide CLI arguments normalize to UTF-8, and filesystem/JSON
+boundaries explicitly convert UTF-8. Unicode protocol fixtures and exact-path
+assertions pass locally with core CTest 2/2, lint and repo.check. Windows-specific
+execution remains a hosted gate. CMake selects the static MSVC CRT for the C++
+core/tests so ordinary standalone users do not need a separate VC++ runtime for
+that executable; Node/.NET runtime closure is a separate qualification concern.
+
+After a reported 21:59 UTC transient environment disconnect, fresh pwd, Git status
+and process inspection verified shell continuity and preserved edits. No external
+action was uncertain and no push or deployment was repeated.
+
+Separate DockPipe PR #168 at 98867e03 passed CI 39329758384 (Linux, Windows and
+Cockpit) and CodeQL 39329758498. Flatpak qualification was still in progress when
+checked. This verifies the scoped discovery/configuration changes, not an
+implemented MCPB installer or gateway lifecycle.
+
+Full local package.native qualification passed after the Unicode changes:
+10 installed protocol tests, Roslyn safe/trusted suites, bundled TS/JS/C# semantic
+assertions, and fresh MCPB extraction from Unicode/space paths. Five PE policy
+tests and five MCPB tests pass. The Windows core import gate rejects dynamic
+VC++ runtime dependencies and records actual import names; real Windows execution
+remains pending. Evidence: bin/.local/package-native-unicode-pe.log. Generated
+local artifacts contain dirty-source provenance and are not release candidates.

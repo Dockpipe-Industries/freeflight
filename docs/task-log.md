@@ -361,3 +361,12 @@ lifecycle checks (local dirty-source test artifacts, not publication candidates)
 Legacy roots-change notifications invalidate associations before refresh; stale,
 malformed and unresponsive replies are tested. Canonical path alias handling was
 preserved. Exact-head hosted qualification remains required for these changes.
+
+Independent review caught queued cancelled lifecycle calls still mutating state
+and MRTR roots discovery bypassing duplicate in-flight ID validation. Dispatch now
+skips cancelled jobs before state changes and validates IDs before early results.
+A controlled-worker regression proves cancelled open/close/root updates preserve
+state and release request IDs. Windows CI at78a6f46 also exposed locale decoding
+in the synthetic Python worker; its IPC is now explicitly UTF-8 and the exact
+Unicode assertion is unchanged. Local 17 protocol tests, process tests, lint and
+official MCP SDK compatibility pass; the correction still requires hosted CI.

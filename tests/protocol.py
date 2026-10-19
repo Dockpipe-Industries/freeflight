@@ -95,7 +95,8 @@ class ProtocolTests(unittest.TestCase):
         a, b = self.root / "a", self.root / "b"
         a.mkdir(); b.mkdir()
         worker = self.root / "lifecycle.py"
-        worker.write_text("import json,sys,os\nfor line in sys.stdin:\n"
+        worker.write_text("import json,sys,os\nsys.stdin.reconfigure(encoding='utf-8')\n"
+                          "sys.stdout.reconfigure(encoding='utf-8')\nfor line in sys.stdin:\n"
                           " r=json.loads(line)\n"
                           " v={'operations':['identity']} if r['method']=='capabilities' else {'pid':os.getpid(),'root':r['params']['root']}\n"
                           " print(json.dumps({'id':r['id'],'result':v}),flush=True)\n")
@@ -311,6 +312,69 @@ class ProtocolTests(unittest.TestCase):
     def test_unknown_tools(self):
         self.assertEqual(self.call("tools/call", {"name": "invented"})["error"]["code"], -32602)
         self.assertEqual(self.call("invented")["error"]["code"], -32601)
+
+    def test_cancelled_queued_lifecycle_calls_have_no_side_effects(self):
+        active, unopened = self.root / "active", self.root / "unopened"
+        active.mkdir(); unopened.mkdir()
+        ready, release = self.root / "ready", self.root / "release"
+        worker = self.root / "controlled.py"
+        worker.write_text("import sys,json,time,pathlib\n"
+                          "sys.stdin.reconfigure(encoding='utf-8')\n"
+                          "sys.stdout.reconfigure(encoding='utf-8')\n"
+                          "ready,release=map(pathlib.Path,sys.argv[1:])\n"
+                          "for line in sys.stdin:\n"
+                          " r=json.loads(line)\n"
+                          " if r['method']=='capabilities':\n"
+                          "  ready.write_text('ready')\n"
+                          "  while not release.exists(): time.sleep(.01)\n"
+                          " print(json.dumps({'id':r['id'],'result':{'operations':[]}}),flush=True)\n")
+        self.config.write_text(json.dumps({"roots": [str(self.root)], "engines": {
+            "controlled": [sys.executable, str(worker), str(ready), str(release)]}}))
+        self.restart(["--config", str(self.config)])
+        self.roots([{"uri": active.as_uri()}])
+        self.assertFalse(self.tool("workspace.open", {"root": str(active),
+                                                     "candidateUri": active.as_uri()})["isError"])
+        before = self.tool("workspace.list")["structuredContent"]
+        def send(value):
+            self.process.stdin.write(json.dumps(value) + "\n")
+            self.process.stdin.flush()
+        send({"jsonrpc": "2.0", "id": "blocker", "method": "tools/call", "params": {
+            "_meta": META, "name": "engine.capabilities",
+            "arguments": {"root": str(self.root), "language": "controlled"}}})
+        deadline = time.monotonic() + 5
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(.01)
+        self.assertTrue(ready.exists(), "controlled worker never started")
+        # MRTR roots discovery must not bypass duplicate in-flight ID checks.
+        send({"jsonrpc": "2.0", "id": "blocker", "method": "tools/call", "params": {
+            "name": "workspace.clientRoots", "_meta": {
+                **META, "io.modelcontextprotocol/clientCapabilities": {"roots": {}}}}})
+        duplicate = json.loads(self.process.stdout.readline())
+        self.assertEqual(duplicate["id"], "blocker")
+        self.assertEqual(duplicate["error"]["code"], -32600)
+        self.assertNotIn("result", duplicate)
+        queued = [
+            ("cancel-open", {"name": "workspace.open", "arguments": {"root": str(unopened)}}),
+            ("cancel-close", {"name": "workspace.close", "arguments": {"root": str(active)}}),
+            ("cancel-roots", {"name": "workspace.clientRoots", "inputResponses": {"roots": {"roots": []}}}),
+        ]
+        for identifier, params in queued:
+            send({"jsonrpc": "2.0", "id": identifier, "method": "tools/call", "params": {
+                **params, "_meta": {**META, "io.modelcontextprotocol/clientCapabilities": {"roots": {}}}}})
+            send({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": identifier}})
+        # The reader's ping response proves all preceding cancellations were
+        # accepted while the executor was still blocked inside the first worker.
+        self.assertIn("result", self.call("ping"))
+        release.write_text("release")
+        self.assertEqual(json.loads(self.process.stdout.readline())["id"], "blocker")
+        self.assertEqual(self.tool("workspace.list")["structuredContent"], before)
+        for identifier, _ in queued:
+            # No suppressed response leaked, and the pending-ID slot was erased.
+            send({"jsonrpc": "2.0", "id": identifier, "method": "tools/call", "params": {
+                "_meta": META, "name": "workspace.list"}})
+            response = json.loads(self.process.stdout.readline())
+            self.assertEqual(response["id"], identifier)
+            self.assertEqual(response["result"]["structuredContent"], before)
 
     def test_inflight_cancellation_keeps_protocol_responsive(self):
         self.process.stdin.close()

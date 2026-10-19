@@ -26,6 +26,8 @@ The candidate must satisfy these gates:
   successful HIGH/CRITICAL scans bound to those exact image hashes, plus
   corresponding Qt/relink sources. Inner receipts match the same clean source,
   environment and per-file checksums.
+  Emscripten's exact pinned runtime notices and checksum receipt are also required;
+  every original notice must be present in the archive and combined served notices.
 
 Explicit `mode=publish` first runs a read-only verification job. A separate
 publication job independently reacquires and revalidates the candidate, checks

@@ -146,3 +146,23 @@ resuming bounded CI with existing zero-dollar overage budgets unchanged. To avoi
 duplicating large candidate archives, PRs still build and qualify everything but
 retain only diagnostic evidence; canonical push runs retain release artifacts.
 No existing artifacts were deleted.
+
+Candidate d30f780e9073e5f132cf9399038fec24886d2f3b PR CI 39329692409 passed
+Linux x64, Linux ARM64 and macOS ARM64 complete native qualification. Both Qt
+site modes passed actual browser navigation, serving-container smoke and exact
+image vulnerability checks. CodeQL run 39329692386 passed. Windows passed core,
+workers and mixed-engine integration but failed the actual Roslyn project load:
+NuGet assets processing reported null path1. This is an unresolved Windows
+runtime issue, not a passed release gate. No promotion or publication occurred.
+
+Source-notice review added nine pinned Emscripten runtime license/AUTHORS files
+to served notices and a hashed archive. Local site.sources and site.build passed;
+next-candidate hosted requalification remains required. Closed completed routing
+task and refreshed stale release/site task descriptions to reflect evidence.
+
+Windows project-load fix preserves only APPDATA, which NuGet's lockfile reader
+requires for its user-settings directory. Regression tests preserve that path
+while rejecting NuGet credential and .NET startup-hook environment variables.
+Local DockPipe core build, CTest 2/2, lint and actual-project integration passed;
+Windows still requires hosted verification. Release-policy tests now pass 35
+cases, including required pinned Emscripten notice archive/receipt integrity.

@@ -88,8 +88,11 @@ int worker(int argc, char **argv) {
         response["args"] = json::array();
         response["secretInherited"] = std::getenv("FREEFLIGHT_TEST_SECRET") != nullptr;
         response["injectionInherited"] = std::getenv("NODE_OPTIONS") != nullptr;
+        response["dotnetInjectionInherited"] = std::getenv("DOTNET_STARTUP_HOOKS") != nullptr;
+        response["nugetCredentialInherited"] =
+            std::getenv("NuGetPackageSourceCredentials_private") != nullptr;
         for (const auto *name :
-             {"PATH", "DOTNET_CLI_TELEMETRY_OPTOUT", "DOTNET_EnableDiagnostics",
+             {"PATH", "APPDATA", "DOTNET_CLI_TELEMETRY_OPTOUT", "DOTNET_EnableDiagnostics",
               "DOTNET_GENERATE_ASPNET_CERTIFICATE", "DOTNET_SKIP_FIRST_TIME_EXPERIENCE"}) {
             const auto *value = std::getenv(name);
             response[name] = value ? json(value) : json(nullptr);
@@ -135,9 +138,17 @@ int run_tests(int argc, char **argv) {
 #ifdef _WIN32
         _putenv_s("FREEFLIGHT_TEST_SECRET", "test-only-value");
         _putenv_s("NODE_OPTIONS", "test-only-value");
+        _putenv_s("DOTNET_STARTUP_HOOKS", "test-only-value");
+        _putenv_s("NuGetPackageSourceCredentials_private", "test-only-value");
+        const auto *previous_appdata = std::getenv("APPDATA");
+        const std::string original_appdata = previous_appdata ? previous_appdata : "";
+        const auto test_appdata = (fs::temp_directory_path() / "FreeFlight NuGet path").string();
+        _putenv_s("APPDATA", test_appdata.c_str());
 #else
         setenv("FREEFLIGHT_TEST_SECRET", "test-only-value", 1);
         setenv("NODE_OPTIONS", "test-only-value", 1);
+        setenv("DOTNET_STARTUP_HOOKS", "test-only-value", 1);
+        setenv("NuGetPackageSourceCredentials_private", "test-only-value", 1);
 #endif
         {
             Process process({executable, "--worker", "echo"});
@@ -145,6 +156,17 @@ int run_tests(int argc, char **argv) {
             require(!response["secretInherited"].get<bool>(), "worker inherited unrelated secret");
             require(!response["injectionInherited"].get<bool>(),
                     "worker inherited runtime injection");
+            require(!response["dotnetInjectionInherited"].get<bool>(),
+                    "worker inherited .NET startup hooks");
+            require(!response["nugetCredentialInherited"].get<bool>(),
+                    "worker inherited NuGet credentials");
+#ifdef _WIN32
+            require(response["APPDATA"] == test_appdata,
+                    "worker lost Windows NuGet user-settings directory");
+            _putenv_s("APPDATA", original_appdata.c_str());
+#else
+            require(response["APPDATA"].is_null(), "Windows-only APPDATA forwarded on Unix");
+#endif
             const auto *path = std::getenv("PATH");
             require(response["PATH"] == (path ? json(path) : json(nullptr)), "worker PATH changed");
             require(response["DOTNET_CLI_TELEMETRY_OPTOUT"] == "1", "telemetry opt-out missing");

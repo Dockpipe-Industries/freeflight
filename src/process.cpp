@@ -41,6 +41,13 @@ std::vector<std::string> worker_environment() {
         if (const char *value = std::getenv(name))
             values.push_back(std::string(name) + "=" + value);
     }
+#ifdef _WIN32
+    // NuGet's lockfile reader resolves UserSettingsDirectory unconditionally as
+    // Path.Combine(APPDATA, "NuGet"). Preserve this directory, not NuGet credentials
+    // or the ambient environment, so trusted MSBuild can read project.assets.json.
+    if (const char *value = std::getenv("APPDATA"))
+        values.push_back(std::string("APPDATA=") + value);
+#endif
     values.emplace_back("DOTNET_CLI_TELEMETRY_OPTOUT=1");
     values.emplace_back("DOTNET_EnableDiagnostics=0");
     values.emplace_back("DOTNET_GENERATE_ASPNET_CERTIFICATE=false");

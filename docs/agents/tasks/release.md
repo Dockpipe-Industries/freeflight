@@ -1,7 +1,10 @@
 # TASK-003: Standalone release and registry qualification
 
-Status: open. The full acceptance ledger is docs/acceptance.md; execution evidence
-is docs/task-log.md. Follow the matching route in docs/agents/index.yaml.
+Status: open. Follow docs/agents/index.yaml and docs/acceptance.md.
 
-Native bundle stopped at missing RID in locked .NET dependencies. Registry
-metadata remains draft; no production artifact, listing or hosting is verified.
+Hosted candidate d30f780 passed Linux x64/ARM64 and macOS ARM64 native bundle
+qualification. Windows failed actual-project MSBuild loading; investigate and
+requalify the exact corrected source before promotion. Release verification and
+publication policy have 34 passing local tests; no production tag, release or
+Registry listing exists. Registry authentication and actual asset URLs remain
+publication prerequisites. See docs/task-log.md for run IDs and current evidence.

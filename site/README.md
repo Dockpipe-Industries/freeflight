@@ -108,3 +108,19 @@ with SHA256SUMS and a provenance receipt including Docker image ID. Load this ex
 image using `docker load --input freeflight-site-image.tar.gz`; deployment should not
 rebuild from source or a mutable tag. The workflow saves only after the disposable
 container's served bytes and indexing headers pass. Hosting activation remains separate.
+
+
+### Emscripten runtime notices
+
+The emitted JavaScript and WASM also contain Emscripten runtime and C/C++ support
+code. `site.sources` validates and includes the pinned SDK LICENSE/AUTHORS, musl
+COPYRIGHT, and original libc++, libc++abi, compiler-rt, libunwind, llvm-libc and
+mimalloc license texts in both served NOTICES.txt and
+`emscripten-runtime-notices.tar.gz`. The latter is a conservative SDK notice set;
+it does not assert that every listed runtime component survives linking.
+`runtime-notice-checksums.json` identifies the exact upstream Emscripten source
+commit and per-file hashes, also pinned in `site/toolchain.json`. Installed texts
+were compared byte-for-byte with the official5.0.5 source tag. Missing or altered
+texts fail source qualification. This closes the identified runtime-notice gap,
+not a blanket legal clearance for every dependency or future build configuration.
+See https://emscripten.org/docs/introducing_emscripten/emscripten_license.html.

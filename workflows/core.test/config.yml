@@ -1,0 +1,9 @@
+name: core.test
+description: FreeFlight core.test operation.
+vault: none
+docker_preflight: false
+steps:
+  - id: test
+    kind: host
+    cwd: repo
+    cmd: ctest --test-dir bin/.local/build -C Release --output-on-failure

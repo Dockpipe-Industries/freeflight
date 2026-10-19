@@ -1,0 +1,9 @@
+name: lint
+description: Check C++ formatting without modifying source.
+vault: none
+docker_preflight: false
+steps:
+  - id: cpp
+    kind: host
+    cwd: repo
+    cmd: clang-format --dry-run --Werror src/main.cpp src/server.cpp src/process.cpp include/freeflight/server.hpp include/freeflight/process.hpp include/freeflight/path.hpp tests/process.cpp

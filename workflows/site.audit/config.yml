@@ -1,0 +1,13 @@
+name: site.audit
+description: Scan the exact qualified container archive for HIGH and CRITICAL vulnerabilities with pinned Trivy; fail closed.
+vault: none
+docker_preflight: false
+steps:
+  - id: policy
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/site.audit/assets/test_policy.py
+  - id: scan
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/site.audit/assets/scan.py

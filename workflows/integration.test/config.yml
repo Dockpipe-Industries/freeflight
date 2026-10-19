@@ -1,0 +1,9 @@
+name: integration.test
+description: Verify real TypeScript and Roslyn semantics through the C++ MCP endpoint and record fixture latency.
+vault: none
+docker_preflight: false
+steps:
+  - id: semantic-contract
+    kind: host
+    cwd: repo
+    cmd: python3 -B tests/integration.py

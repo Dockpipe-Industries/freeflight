@@ -1,0 +1,9 @@
+name: clean
+description: Preview selected generated development output removal; explicit apply required.
+vault: none
+docker_preflight: false
+steps:
+  - id: selected-output
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/clean/assets/clean.py

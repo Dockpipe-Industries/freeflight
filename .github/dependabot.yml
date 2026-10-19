@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    target-branch: js/dev
+  - package-ecosystem: npm
+    directory: /workers/typescript
+    schedule:
+      interval: weekly
+    target-branch: js/dev
+  - package-ecosystem: nuget
+    directory: /workers/roslyn
+    schedule:
+      interval: weekly
+    target-branch: js/dev

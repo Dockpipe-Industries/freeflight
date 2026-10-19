@@ -1,0 +1,9 @@
+name: integration.real
+description: Qualify trusted C# project semantics through MCP using a disposable copy of FreeFlight's own worker project.
+vault: none
+docker_preflight: false
+steps:
+  - id: real-project
+    kind: host
+    cwd: repo
+    cmd: python3 -B tests/real_project.py

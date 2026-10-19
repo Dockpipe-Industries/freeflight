@@ -1,0 +1,17 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Dockpipe-Industries/freeflight",
+  "title": "FreeFlight",
+  "description": "Independent C++ language intelligence MCP server with internal TypeScript and Roslyn workers.",
+  "repository": {
+    "url": "https://github.com/Dockpipe-Industries/freeflight",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "publicationStatus": "draft",
+      "distributionStatus": "MCPB release artifacts and runtime bundling are not yet qualified"
+    }
+  }
+}

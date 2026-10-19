@@ -50,10 +50,10 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
         diagnostics = call("diagnostics", file="App/Consumer.cs")
         assert diagnostics["result"] == [], diagnostics
         definition = call("definition", file="App/Consumer.cs", line=1, character=57)["result"]
-        assert len(definition) == 1 and definition[0]["file"].endswith("Lib/Widget.cs"), definition
+        assert len(definition) == 1 and pathlib.Path(definition[0]["file"]).resolve() == (root / "Lib/Widget.cs").resolve(), definition
         assert definition[0]["range"]["start"] == dict(line=2, character=33), definition
         references = call("references", file="Lib/Widget.cs", line=2, character=34)["result"]
-        assert len(references) == 1 and references[0]["file"].endswith("App/Consumer.cs"), references
+        assert len(references) == 1 and pathlib.Path(references[0]["file"]).resolve() == (root / "App/Consumer.cs").resolve(), references
         (root / "App/Consumer.cs").write_text(source.replace("value.Value", '"invalid"'))
         diagnostics = call("diagnostics", file="App/Consumer.cs")["result"]
         assert any(d["code"] == "CS0029" for d in diagnostics), diagnostics

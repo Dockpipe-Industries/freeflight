@@ -1,12 +1,6 @@
 schema: 2
 description: Open-only FreeFlight acceptance work.
 tasks:
-  - id: TASK-001
-    topic: Agent routing prerequisite
-    path: docs/agents/tasks/routing.md
-    dispatch:
-      readiness: in-progress
-      ownership: current-task
   - id: TASK-002
     topic: Core and language semantic hardening
     path: docs/agents/tasks/semantics.md

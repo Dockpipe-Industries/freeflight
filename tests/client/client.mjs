@@ -7,7 +7,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const repo = process.cwd();
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "freeflight-client-"));
-const root = fs.realpathSync(temporary);
+const root = fs.realpathSync.native(temporary);
 const config = path.join(root, "freeflight.json");
 fs.writeFileSync(config, JSON.stringify({ roots: [root], engines: {} }));
 const binary = process.platform === "win32"
@@ -21,7 +21,9 @@ try {
     ["workspace.discover", "engine.capabilities", "semantic.query"]);
   const called = await client.callTool({ name: "workspace.discover", arguments: {} });
   assert.equal(called.isError, false);
-  assert.equal(called.structuredContent.workspaces[0].root, root);
+  // Native canonicalization expands Windows 8.3 aliases as the C++ core does.
+  // Compare exact canonical directories, not raw spellings or basenames.
+  assert.equal(fs.realpathSync.native(called.structuredContent.workspaces[0].root), root);
   console.log("Official MCP SDK client initialized, discovered and invoked FreeFlight");
 } finally {
   await client.close();

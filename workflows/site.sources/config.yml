@@ -1,0 +1,9 @@
+name: site.sources
+description: Preserve checksum-verified Qt corresponding source and original notices for redistribution.
+vault: none
+docker_preflight: false
+steps:
+  - id: corresponding-source
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/site.sources/assets/sources.py

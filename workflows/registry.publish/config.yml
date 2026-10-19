@@ -1,0 +1,17 @@
+name: registry.publish
+description: Verify prepared release metadata; submit only with explicit publish mode and existing authentication.
+vault: none
+docker_preflight: false
+steps:
+  - id: policy-tests
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/registry.publish/assets/test_publish.py
+  - id: registry-schema
+    kind: host
+    cwd: repo
+    cmd: dockpipe --workflow registry.check
+  - id: submission
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/registry.publish/assets/publish.py

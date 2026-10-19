@@ -1,0 +1,55 @@
+name: Native distribution inputs
+description: Provision checksum-pinned official Node binaries and existing .NET notices for native qualification.
+runs:
+  using: composite
+  steps:
+    - name: Verify runtime inputs
+      shell: python
+      run: |
+        import hashlib
+        import os
+        import pathlib
+        import platform
+        import shutil
+        import tarfile
+        import urllib.request
+        import zipfile
+
+        # Official https://nodejs.org/dist/v24.22.0/SHASUMS256.txt
+        assets = {
+            ('Linux', 'x86_64'): ('linux-x64', 'linux-x64.tar.gz', '28ea0a438de9a13bd7891fd758eee6c7819ee8af5442dfd8d45bd65e56d4228c'),
+            ('Linux', 'aarch64'): ('linux-arm64', 'linux-arm64.tar.gz', 'b7e7991d5407815adfa74a2a9cd4db683552c8ce32ff4a295c22e972849c3f5d'),
+            ('Darwin', 'arm64'): ('osx-arm64', 'darwin-arm64.tar.gz', '6a9724d9b50a5f22b4816cded441b5a8d9ddae546191a5e5b7efa5a5e2ee26d5'),
+            ('Windows', 'AMD64'): ('win-x64', 'win-x64.zip', 'f9683a19877e12a9b167305c8db71040d812876359de21f0d2e97c3f321f80c3'),
+        }
+        rid, suffix, digest = assets[(platform.system(), platform.machine())]
+        root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'freeflight-native-inputs'
+        root.mkdir()
+        name = 'node-v24.22.0-' + suffix
+        archive = root / name
+        urllib.request.urlretrieve('https://nodejs.org/dist/v24.22.0/' + name, archive)
+        if hashlib.sha256(archive.read_bytes()).hexdigest() != digest:
+            raise RuntimeError('Node archive checksum mismatch')
+        if name.endswith('.zip'):
+            with zipfile.ZipFile(archive) as bundle:
+                for member in bundle.namelist():
+                    if not (root / member).resolve().is_relative_to(root.resolve()):
+                        raise RuntimeError('Unsafe archive path')
+                bundle.extractall(root)
+            distribution = root / name.removesuffix('.zip')
+        else:
+            with tarfile.open(archive) as bundle:
+                bundle.extractall(root, filter='data')
+            distribution = root / name.removesuffix('.tar.gz')
+        if not (distribution / 'LICENSE').is_file():
+            raise RuntimeError('Node redistribution license missing')
+        dotnet = pathlib.Path(os.environ.get('DOTNET_ROOT') or pathlib.Path(shutil.which('dotnet')).resolve().parent)
+        if not any((dotnet / name).is_file() for name in ('LICENSE.txt', 'LICENSE.TXT', 'LICENSE')):
+            raise RuntimeError('Installed .NET SDK redistribution license missing')
+        if not (dotnet / 'ThirdPartyNotices.txt').is_file():
+            raise RuntimeError('Installed .NET SDK third-party notices missing')
+        with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+            output.write(f'FREEFLIGHT_RID={rid}\n')
+            output.write(f'NODE_DISTRIBUTION_ROOT={distribution}\n')
+            output.write('FREEFLIGHT_NODE_VERSION=v24.22.0\n')
+            output.write(f'DOTNET_LICENSE_ROOT={dotnet}\n')

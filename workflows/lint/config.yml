@@ -6,4 +6,4 @@ steps:
   - id: cpp
     kind: host
     cwd: repo
-    cmd: clang-format --dry-run --Werror src/main.cpp src/server.cpp src/process.cpp include/freeflight/server.hpp include/freeflight/process.hpp tests/process.cpp
+    cmd: clang-format --dry-run --Werror src/main.cpp src/server.cpp src/process.cpp include/freeflight/server.hpp include/freeflight/process.hpp include/freeflight/path.hpp tests/process.cpp

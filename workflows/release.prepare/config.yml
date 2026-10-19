@@ -1,0 +1,13 @@
+name: release.prepare
+description: Validate selected native release artifacts and prepare unpublished release metadata.
+vault: none
+docker_preflight: false
+steps:
+  - id: policy-tests
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/release.prepare/assets/test_prepare.py
+  - id: prepare
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/release.prepare/assets/prepare.py

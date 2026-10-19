@@ -19,3 +19,11 @@ steps:
     kind: host
     cwd: repo
     cmd: dockpipe --workflow integration.test
+  - id: integration.real
+    kind: host
+    cwd: repo
+    cmd: dockpipe --workflow integration.real
+  - id: mcp.compatibility
+    kind: host
+    cwd: repo
+    cmd: dockpipe --workflow mcp.compatibility

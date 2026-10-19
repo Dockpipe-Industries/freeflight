@@ -82,7 +82,7 @@ with tempfile.TemporaryDirectory(prefix="freeflight-integration-") as directory:
         output.mkdir(parents=True, exist_ok=True)
         (output / "latency.json").write_text(json.dumps({"fixture": "two tiny source files; warm engine",
             "excludes": ["large repository", "project evaluation", "RSS"], "measurements": report}, indent=2) + "\n")
-        print("C++ MCP → real TS/Roslyn semantic assertions passed")
+        print("C++ MCP -> real TS/Roslyn semantic assertions passed")
         print(json.dumps(report, indent=2))
     finally:
         process.stdin.close()

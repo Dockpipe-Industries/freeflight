@@ -110,7 +110,7 @@ jobs:
         run: dockpipe --workflow package.jammy
       - name: Retain qualified native bundles
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.os == 'ubuntu-22.04' && 'preview-ubuntu-22.04-linux-x64' || format('native-{0}', matrix.os) }}
           path: |
@@ -118,7 +118,7 @@ jobs:
             bin/.local/jammy-compatibility.json
           if-no-files-found: error
           retention-days: 14
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: qualification-${{ matrix.os }}
@@ -162,7 +162,7 @@ jobs:
         run: dockpipe --workflow site.audit
       - name: Retain qualified website assets
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: qt-wasm-site-${{ matrix.environment }}
           path: bin/.local/site/
@@ -170,7 +170,7 @@ jobs:
           retention-days: 14
       - name: Retain browser verification evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: qt-wasm-browser-evidence-${{ matrix.environment }}
           path: bin/.local/site-test/
@@ -178,7 +178,7 @@ jobs:
           retention-days: 14
       - name: Retain tested serving container
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: qt-site-container-${{ matrix.environment }}
           path: bin/.local/site-container/
@@ -186,7 +186,7 @@ jobs:
           retention-days: 14
       - name: Retain corresponding Qt sources and relink materials
         if: matrix.environment == 'staging' && github.event_name != 'pull_request'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: qt-corresponding-sources
           path: bin/.local/site-sources/
@@ -194,7 +194,7 @@ jobs:
           retention-days: 14
       - name: Retain container vulnerability evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: qt-site-audit-${{ matrix.environment }}
           path: |

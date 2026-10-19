@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Offline GitHub request and redirect regressions; never use real credentials."""
 import importlib.util
+import copy
 import io
 import json
 from pathlib import Path
@@ -15,6 +16,67 @@ spec.loader.exec_module(api)
 
 
 class GitHubApiTests(unittest.TestCase):
+    def promotion_fixture(self):
+        pull = {'number': 3, 'merged_at': '2026-10-19T22:46:42Z',
+                'base': {'ref': 'master', 'repo': {'full_name': api.REPO}},
+                'head': {'ref': 'staging', 'sha': 'a' * 40, 'repo': {'full_name': api.REPO}}}
+        event = {'event': 'merged', 'commit_id': 'b' * 40,
+                 'commit_url': api.API + '/commits/' + 'b' * 40,
+                 'created_at': pull['merged_at']}
+        return pull, event
+
+    def test_current_api_promotion_uses_authoritative_timeline_commit(self):
+        pull, event = self.promotion_fixture()
+        with patch.object(api, 'request', return_value=[event]) as request:
+            evidence = api.promotion_evidence([pull])
+        request.assert_called_once_with('/issues/3/timeline?per_page=100&page=1')
+        self.assertEqual(evidence[0]['merge_commit_sha'], 'b' * 40)
+        self.assertEqual(evidence[0]['merge_event'], event)
+        self.assertNotIn('merge_commit_sha', pull)
+        self.assertNotEqual(evidence[0]['merge_commit_sha'], pull['head']['sha'])
+
+    def test_promotion_ignores_unmerged_foreign_deleted_and_unrelated_heads(self):
+        pull, _ = self.promotion_fixture()
+        variants = [copy.deepcopy(pull) for _ in range(5)]
+        variants[0]['merged_at'] = None
+        variants[1]['head']['repo']['full_name'] = 'elsewhere/freeflight'
+        variants[2]['base']['repo']['full_name'] = 'elsewhere/freeflight'
+        variants[3]['head']['repo'] = None
+        variants[4]['head']['ref'] = 'feature/unrelated'
+        with patch.object(api, 'request') as request:
+            self.assertEqual(api.promotion_evidence(variants), [])
+            request.assert_not_called()
+
+    def test_promotion_rejects_missing_ambiguous_or_mismatched_events(self):
+        pull, event = self.promotion_fixture()
+        invalid = [[], [event, event],
+                   [{**event, 'commit_id': 'not-a-sha'}],
+                   [{**event, 'commit_url': 'https://api.github.com/repos/elsewhere/repo/commits/' + 'b' * 40}],
+                   [{**event, 'created_at': '2026-10-19T00:00:00Z'}]]
+        for events in invalid:
+            with self.subTest(events=events), patch.object(api, 'request', return_value=events):
+                with self.assertRaises(ValueError):
+                    api.promotion_evidence([pull])
+
+    def test_promotion_paginates_and_rejects_exhausted_history(self):
+        pull, event = self.promotion_fixture()
+        page = [{'event': 'commented'}] * 100
+        with patch.object(api, 'request', side_effect=[page, [event]]) as request:
+            self.assertEqual(api.promotion_evidence([pull])[0]['merge_commit_sha'], 'b' * 40)
+            self.assertEqual(request.call_args.args[0], '/issues/3/timeline?per_page=100&page=2')
+        with patch.object(api, 'request', return_value=page) as request:
+            with self.assertRaisesRegex(ValueError, 'exceeds bounded query'):
+                api.promotion_evidence([pull])
+            self.assertEqual(request.call_count, 10)
+
+    def test_promotion_rejects_non_numeric_identifier_before_request(self):
+        pull, _ = self.promotion_fixture()
+        for number in ('../3', True, 0):
+            with self.subTest(number=number), patch.object(api, 'request') as request:
+                with self.assertRaisesRegex(ValueError, 'Invalid promotion PR number'):
+                    api.promotion_evidence([{**pull, 'number': number}])
+                request.assert_not_called()
+
     def request_with_response(self, payload, **options):
         response = io.BytesIO(payload)
         opener = Mock()

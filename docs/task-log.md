@@ -283,3 +283,16 @@ controls response consumption. Six offline regressions cover request headers,
 binary/JSON handling, POST encoding and credential-stripping/host-restricted
 redirects. DockPipe release.policy passes 41 tests; workflow validation, repo.check
 and diff checks pass. No permission, pin, provenance or promotion rule changed.
+
+
+The Linux-download priority adds official MCP SDK semantic qualification to
+package.native for both assembled and freshly extracted bundles, using their own
+Node and internal workers. Local package.native passed. Hosted Linux qualification
+and public preview upload remain pending; no download is advertised yet.
+
+GitHub API 2026-03-10 also removed merge_commit_sha from all PR payloads. The
+collector now normalizes authoritative merged timeline commit IDs with exact
+repository/timestamp validation and bounded pagination. DockPipe release.policy
+passes 46 tests. A read-only rehearsal verified all 11 source artifacts, 8 native
+archives, 7 supplementary artifacts and promotion chain #2 -> #1 -> #3. No tag,
+release, permissions or promotion gates changed.

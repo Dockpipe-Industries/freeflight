@@ -15,6 +15,15 @@ baselines, not proof of compatibility with older operating systems. Linux artifa
 are not musl/Alpine builds. Other RIDs accepted by development tooling are not
 advertised release platforms until their own installed-bundle checks pass.
 
+## Linux system prerequisites
+
+The Linux preview targets Ubuntu 24.04 x64. Bundled runtimes still use operating
+system libraries: `ca-certificates`, `libc6`, `libgcc-s1`, `libgssapi-krb5-2`,
+`libicu74`, `libssl3t64`, `libstdc++6`, `tzdata` and `zlib1g`. See Microsoft's
+[Ubuntu 24.04 self-contained application dependencies](https://learn.microsoft.com/en-us/dotnet/core/install/linux-ubuntu-install#dependencies).
+No separate Node, .NET runtime or DockPipe installation is required for default
+safe-source analysis. Older distributions and Alpine/musl are not qualified.
+
 ## Native packaging through DockPipe
 
 First use the repository's DockPipe build/test workflows. Provision the official
@@ -82,7 +91,11 @@ installed executable. It then starts that executable using only `--workspace` an
 checks exact TypeScript diagnostic `2322`, the JavaScript `increment` symbol,
 Roslyn diagnostic `CS0029`, the C# `Widget` symbol and graceful shutdown. These
 checks exercise actual bundled runtime discovery, not external worker commands.
-Each request has a timeout. A failed gate produces no release archive.
+The pinned official MCP SDK additionally verifies exact TypeScript definition
+range, two references and diagnostics, JavaScript and C# symbols, C# diagnostics
+and capability discovery, using bundled Node against both the assembled bundle
+and fresh MCPB extraction. Each request has a timeout. A failed gate produces no
+release archive.
 
 The bundle includes `verification.json` and per-file SHA-256 checksums. A tar.gz
 archive and its checksum are emitted under ignored `bin/.local/packages/`. Archive

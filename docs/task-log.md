@@ -335,3 +335,29 @@ Fedora image. It reuses bundled officialSDK tests under unprivileged/network-non
 execution, records RPMversions and binds evidence to the exact archive/source.
 Bazzite remains explicitly untested. Local release.policy passes52tests and
 repo.check passes; actual Fedora runtime execution awaits hostedCI.
+
+Follow-up verification: source009a9c1 passed pushCI39341090754 and PRCI39341094941
+on all five native targets and both site configurations; both CodeQL runs passed.
+Downloaded artifact12228657320 matches its GitHub outer digest. Its tar archive
+005cd976a380d0c60a0d92cf3ea91d1f84607efaf7d4b438457f1d4f0d733fa8 passed exact
+source/tree, native/MCPB payload, license, ABI and clean Ubuntu22/Fedora44 semantic
+receipt checks. This candidate was not published; public b22a53a remains unchanged.
+
+Workspace lifecycle follow-up is in progress: dormant no-argument startup, explicit
+open/list/close inside immutable startup permissions, optional informational client
+roots and candidate-associated session revocation. No unrestricted access policy
+is introduced. MCP2026 roots are deprecated, so this is isolated compatibility
+support; ordinary project tools do not depend on it. Cross-platform qualification
+is required before publishing this new UX. Fresh branch-protection readback
+confirmed strict/admin-enforced checks on master/staging/dev, eight required
+contexts, zero required reviews, no force/deletion, and no inherited rulesets;
+js/dev remains unprotected. No protection changes were made.
+
+Local workspace lifecycle qualification passed: DockPipe format/core.build/lint,
+16 protocol tests plus process tests, official MCP SDK clients with/without roots,
+real TS/Roslyn integration and the explicitly trusted own-project C# test. The
+native macOS ARM64 tar/MCPB package also passed extracted semantic and workspace
+lifecycle checks (local dirty-source test artifacts, not publication candidates).
+Legacy roots-change notifications invalidate associations before refresh; stale,
+malformed and unresponsive replies are tested. Canonical path alias handling was
+preserved. Exact-head hosted qualification remains required for these changes.

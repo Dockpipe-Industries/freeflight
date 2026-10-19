@@ -10,7 +10,7 @@ was inspected. This is a prioritization guide, not a parity or performance claim
 | Diagnostics | Both document analysis/diagnostics | Compiler diagnostics; repository analyzers intentionally disabled |
 | Rename/editing | TGlider documents preview/live document/save operations | Preview edits only; source is not modified |
 | Hierarchies/callers | TGlider documents hierarchy/caller tools | See actual worker capabilities; no blanket parity claim |
-| Workspace setup | Public Codex configuration launches both without workspace paths; Glider documents runtime project loading | Startup roots required; descendant projects load lazily on queries; explicit open/status/close UX pending |
+| Workspace setup | Public Codex configuration launches both without workspace paths; Glider documents runtime project loading | Published preview uses startup roots. Development branch adds dormant no-argument startup and runtime open/list/close within explicit startup access policy; client suggestions do not grant access |
 | Transport | TGlider documents stdio and Streamable HTTP | stdio; HTTP pending |
 | Distribution | Language products documented separately | One C++ server and internal workers; release verification pending |
 | Licensing | Public support resources do not establish product source licensing | FreeFlight source Apache-2.0 |

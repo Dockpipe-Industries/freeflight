@@ -1,0 +1,25 @@
+name: workers.typescript
+description: Stage, install and verify the internal TypeScript worker outside source directories.
+vault: none
+docker_preflight: false
+steps:
+  - id: directory
+    kind: host
+    cwd: repo
+    cmd: cmake -E make_directory bin/.local/typescript/test
+  - id: source
+    kind: host
+    cwd: repo
+    cmd: cmake -E copy_if_different workers/typescript/worker.mjs workers/typescript/package.json workers/typescript/package-lock.json bin/.local/typescript
+  - id: tests
+    kind: host
+    cwd: repo
+    cmd: cmake -E copy_if_different workers/typescript/test/worker.test.mjs bin/.local/typescript/test
+  - id: dependencies
+    kind: host
+    cwd: repo
+    cmd: npm ci --ignore-scripts --prefix bin/.local/typescript
+  - id: verify
+    kind: host
+    cwd: repo
+    cmd: node --test bin/.local/typescript/test/worker.test.mjs

@@ -1,0 +1,25 @@
+name: workers.roslyn
+description: Build and verify the safe-source Roslyn worker with locked dependencies.
+vault: none
+docker_preflight: false
+dependencies:
+  host:
+    - id: dotnet
+      command: dotnet
+      description: .NET SDK 10.0.402 builds the internal Roslyn worker.
+    - id: python3
+      command: python3
+      description: Runs the Roslyn semantic and protocol contract tests.
+steps:
+  - id: build
+    kind: host
+    cwd: repo
+    cmd: dotnet build workers/roslyn/FreeFlight.Roslyn.csproj -p:RestoreLockedMode=true --artifacts-path bin/.local/roslyn
+  - id: test
+    kind: host
+    cwd: repo
+    cmd: python3 -B workers/roslyn/test_worker.py dotnet bin/.local/roslyn/bin/FreeFlight.Roslyn/debug/FreeFlight.Roslyn.dll
+  - id: trusted-project-test
+    kind: host
+    cwd: repo
+    cmd: python3 -B workers/roslyn/test_trusted.py dotnet bin/.local/roslyn/bin/FreeFlight.Roslyn/debug/FreeFlight.Roslyn.dll

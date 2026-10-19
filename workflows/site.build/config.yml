@@ -1,0 +1,9 @@
+name: site.build
+description: Build the independent Qt Quick/WebAssembly product site and its accessible HTML fallback.
+vault: none
+docker_preflight: false
+steps:
+  - id: qt-site
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/site.build/assets/build.py

@@ -1,0 +1,80 @@
+name: Qualified release
+on:
+  workflow_dispatch:
+    inputs:
+      qualification_run:
+        description: Successful js/dev CI push run ID with all qualified artifacts
+        required: true
+        type: string
+      mode:
+        description: Verify only or explicitly publish qualified bytes
+        type: choice
+        default: verify
+        options: [verify, publish]
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+concurrency:
+  group: freeflight-production-release
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/master' && github.repository == 'Dockpipe-Industries/freeflight'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13'
+      - uses: ./.github/actions/setup-dockpipe
+      - name: Acquire hosted evidence and immutable artifacts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          QUALIFICATION_RUN: ${{ inputs.qualification_run }}
+        run: python3 -B .github/release/api.py collect
+      - name: Apply DockPipe release gates
+        run: dockpipe --workflow release.verify
+  publish:
+    needs: verify
+    if: inputs.mode == 'publish' && github.ref == 'refs/heads/master' && github.repository == 'Dockpipe-Industries/freeflight'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13'
+      - uses: ./.github/actions/setup-dockpipe
+      - name: Reacquire exact candidate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          QUALIFICATION_RUN: ${{ inputs.qualification_run }}
+        run: python3 -B .github/release/api.py collect
+      - name: Revalidate and explicitly publish identical bytes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_MODE: ${{ inputs.mode }}
+        run: python3 -B .github/release/api.py publish
+      - name: Retain publication and reconciliation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-publication-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            bin/.local/release-candidate/*.json
+            bin/.local/release-prepared/*/release-manifest.json
+            bin/.local/release-prepared/*/SHA256SUMS
+          if-no-files-found: warn
+          retention-days: 30

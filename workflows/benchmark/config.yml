@@ -1,0 +1,20 @@
+name: benchmark
+description: Measure the compiled MCP endpoint against fixed generated mixed-language fixtures and FreeFlight source.
+vault: none
+docker_preflight: false
+dependencies:
+  host:
+    - id: python3
+      command: python3
+      description: Standard-library benchmark driver.
+    - id: node
+      command: node
+      description: Provisioned TypeScript worker runtime.
+    - id: dotnet
+      command: dotnet
+      description: Provisioned Roslyn worker runtime.
+steps:
+  - id: measure
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark/assets/measure.py

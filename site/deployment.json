@@ -1,0 +1,9 @@
+{
+  "productionHostname": "freeflight.dockpipe.com",
+  "stagingHostname": "freeflight.staging.dockpipe.com",
+  "hostnameOverrideEnvironment": "FREEFLIGHT_SITE_HOSTNAME",
+  "existingVpcOnly": true,
+  "dedicatedContainer": true,
+  "authentication": false,
+  "deploymentEnabled": false
+}

@@ -257,3 +257,29 @@ recovery assertions remain. Local DockPipe core.build, core.test (2/2), lint and
 repo.check passed. The alert is not dismissed; hosted reanalysis must clear it.
 Acceptance milestones now distinguish implemented/tested work from publication,
 gateway lifecycle and broad language/project fidelity still pending.
+
+Candidate 2c29369a3a5132d14204d7153f05985b5bea7a64 passed push CI
+39335341348, CodeQL 39335341377, and the separate CodeQL alert check. Alert #4
+was marked fixed without dismissal, then its bot thread was resolved. Promotion
+PRs #2, #1 and #3 merged normally; master 70af9b1780ae516b71a94e967da077f5ba54a18b
+has identical tree 56d04adba67d3d7cd73d0910e3d213b6bf6edd9f.
+
+Verification-only release run 39337332446 stopped before publication because the
+artifact API rejected Accept: application/octet-stream (HTTP 415). A read-only
+reproduction confirmed that header fails while application/vnd.github+json returns
+the expected HTTPS artifact redirect. No tag or release was created. The API
+adapter needs a focused correction and another protected qualification/promotion.
+
+A pinned macOS trial was downloaded from CI 39335341348, with GitHub ZIP digest,
+inner archive digest and every installed file checksum verified. Source provenance
+is clean 2c29369. Bundled Node 24.22.0 ran official MCP SDK 1.32.1 against the
+packaged FreeFlight 0.1.0 and a disposable fixture: exact TS2322, definition range,
+two references, JavaScript increment symbol, Roslyn CS0029/Widget symbol and clean
+shutdown passed. Trial/configuration/receipt files are isolated under
+bin/.local/trial-2c29369; no client configuration or existing workspace was modified.
+
+The API collector now uses GitHub JSON Accept for all API calls; binary mode only
+controls response consumption. Six offline regressions cover request headers,
+binary/JSON handling, POST encoding and credential-stripping/host-restricted
+redirects. DockPipe release.policy passes 41 tests; workflow validation, repo.check
+and diff checks pass. No permission, pin, provenance or promotion rule changed.

@@ -33,7 +33,8 @@ class Redirect(HTTPRedirectHandler):
 def request(path, method='GET', data=None, binary=False):
     url = path if path.startswith('https://') else API + path
     require(urlparse(url).hostname in {'api.github.com', 'uploads.github.com'}, 'Unexpected API host')
-    headers = {'Accept': 'application/octet-stream' if binary else 'application/vnd.github+json',
+    # Binary selects response handling, not the media type of the GitHub API request.
+    headers = {'Accept': 'application/vnd.github+json',
                'X-GitHub-Api-Version': '2026-03-10'}
     if isinstance(data, dict):
         data = json.dumps(data).encode()

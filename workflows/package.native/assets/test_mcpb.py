@@ -1,18 +1,62 @@
 # SPDX-License-Identifier: Apache-2.0
 import json
+import hashlib
 import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 import zipfile
 
 import jsonschema
-from package import create_mcpb_archive, validate_manifest
+from package import REPO, SCHEMA_SHA256, create_mcpb_archive, validate_manifest
 
 SCHEMA = Path(__file__).parent / 'schema'
 
 
 class MCPBContract(unittest.TestCase):
+    def test_autocrlf_checkout_preserves_pinned_schema(self):
+        # A real isolated index/checkout reproduces Git for Windows conversion;
+        # never change the contributor's repository config, index or worktree.
+        relative = Path('workflows/package.native/assets/schema/mcpb-manifest-v0.3.schema.json')
+        original = (REPO / relative).read_bytes()
+        self.assertEqual(hashlib.sha256(original).hexdigest(), SCHEMA_SHA256)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            environment = dict(os.environ, GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull)
+
+            def git(*arguments):
+                subprocess.run(['git', '-c', 'core.autocrlf=true', '-c', 'core.eol=crlf',
+                                '-c', 'core.safecrlf=false', '-c', 'core.attributesFile=' + os.devnull,
+                                '-C', str(root), *arguments], check=True, env=environment,
+                               capture_output=True, timeout=30)
+
+            git('init', '--quiet', '--template=')
+            schema = root / relative
+            schema.parent.mkdir(parents=True)
+            schema.write_bytes(original)
+            git('add', '--', relative.as_posix())
+            schema.unlink()
+            git('checkout-index', '--', relative.as_posix())
+            converted = schema.read_bytes()
+            self.assertIn(b'\r\n', converted)
+            self.assertNotEqual(hashlib.sha256(converted).hexdigest(), SCHEMA_SHA256)
+
+            # The policy must preserve the original bytes, not normalize them
+            # inside the checksum verifier. Check general source LF policy too.
+            attributes = root / '.gitattributes'
+            attributes.write_bytes((REPO / '.gitattributes').read_bytes())
+            schema.write_bytes(original)
+            source = root / 'source.txt'
+            source.write_bytes(b'first\nsecond\n')
+            git('add', '--', '.gitattributes', relative.as_posix(), 'source.txt')
+            for path in (schema, source, attributes):
+                path.unlink()
+            git('checkout-index', '--all')
+            self.assertEqual(schema.read_bytes(), original)
+            self.assertEqual(hashlib.sha256(schema.read_bytes()).hexdigest(), SCHEMA_SHA256)
+            self.assertEqual(source.read_bytes(), b'first\nsecond\n')
+
     def test_official_valid_example(self):
         validate_manifest(json.loads((SCHEMA / 'upstream-valid-manifest.json').read_text()))
 

@@ -1,0 +1,6 @@
+# Consistent source text on every host, including Git for Windows.
+* text=auto eol=lf
+
+# Vendored official MCPB schemas, fixtures and license have upstream byte hashes.
+# Preserve their exact bytes rather than applying any text conversion.
+/workflows/package.native/assets/schema/** -text

@@ -220,3 +220,16 @@ Website and README installation copy now points to GitHub Releases and
 candidate-specific qualification evidence instead of stale local-macOS-only
 claims. Capability/security limits remain explicit. Content/link checks passed;
 next-candidate hosted Qt builds and browser tests will qualify the changed copy.
+
+Candidate 9da055b47931e9f9d7e4fb15e60f21ada5e7eeb8 Windows run
+39333345879 passed core, raw UTF-8 workers, actual Roslyn project and official
+MCP client checks, then failed the pinned MCPB schema checksum after Git
+converted LF to CRLF. Added repository attributes for LF source text and exact
+vendored schema bytes, without changing the hash or weakening verification.
+An isolated Git autocrlf=true checkout regression reproduces the original
+failure and verifies the policy preserves the exact upstream bytes.
+
+Full local DockPipe package.native qualification passed: six MCPB tests, five
+PE policy tests, installed protocol and worker/semantic checks, and fresh bundle
+extraction. Evidence: bin/.local/package-native-attributes.log. repo.check now
+requires the attributes file. Windows hosted qualification remains pending.

@@ -1,0 +1,13 @@
+name: core.build
+description: FreeFlight core.build operation.
+vault: none
+docker_preflight: false
+steps:
+  - id: configure
+    kind: host
+    cwd: repo
+    cmd: cmake -S . -B bin/.local/build -DCMAKE_BUILD_TYPE=Release
+  - id: build
+    kind: host
+    cwd: repo
+    cmd: cmake --build bin/.local/build --config Release --parallel 2

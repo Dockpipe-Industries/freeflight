@@ -1,0 +1,13 @@
+name: workers.build
+description: Compose FreeFlight workers.build workflows.
+vault: none
+docker_preflight: false
+steps:
+  - id: workers.typescript
+    kind: host
+    cwd: repo
+    cmd: dockpipe --workflow workers.typescript
+  - id: workers.roslyn
+    kind: host
+    cwd: repo
+    cmd: dockpipe --workflow workers.roslyn

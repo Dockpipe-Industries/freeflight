@@ -1,0 +1,33 @@
+schema: 2
+description: Open-only FreeFlight acceptance work.
+tasks:
+  - id: TASK-001
+    topic: Agent routing prerequisite
+    path: docs/agents/tasks/routing.md
+    dispatch:
+      readiness: in-progress
+      ownership: current-task
+  - id: TASK-002
+    topic: Core and language semantic hardening
+    path: docs/agents/tasks/semantics.md
+    dispatch:
+      readiness: in-progress
+      ownership: current-task
+  - id: TASK-003
+    topic: Standalone release and registry qualification
+    path: docs/agents/tasks/release.md
+    dispatch:
+      readiness: in-progress
+      ownership: current-task
+  - id: TASK-004
+    topic: General DockPipe Registry integration
+    path: docs/agents/tasks/dockpipe.md
+    dispatch:
+      readiness: in-progress
+      ownership: current-task
+  - id: TASK-005
+    topic: Website and remaining release gates
+    path: docs/agents/tasks/site.md
+    dispatch:
+      readiness: in-progress
+      ownership: current-task

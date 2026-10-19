@@ -1,0 +1,7 @@
+{
+  "name": "freeflight-mcpb-packaging-tools",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Pinned build-only official MCPB validator and packer, operated by DockPipe.",
+  "dependencies": { "@anthropic-ai/mcpb": "2.1.2" }
+}

@@ -141,7 +141,7 @@ try:
         local = call("callHierarchy", **position(16, "Local", 1))["result"]
         assert [edge["to"]["name"] for edge in local[0]["outgoing"]] == ["Overload"], local
         unicode_source = 'class Unicode { string text = "😀"; int Read() => text.Length; }'
-        (root / "Unicode.cs").write_text(unicode_source)
+        (root / "Unicode.cs").write_text(unicode_source, encoding="utf-8")
         unicode_character = len(unicode_source[:unicode_source.rindex("text")].encode("utf-16-le")) // 2
         unicode_type = call("typeInfo", file="Unicode.cs", line=0, character=unicode_character)["result"]
         assert unicode_type["display"] == "string", unicode_type

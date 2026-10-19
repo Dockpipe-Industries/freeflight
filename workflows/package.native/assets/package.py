@@ -167,6 +167,9 @@ def pack_mcpb(bundle, node, node_root, system, rid, temporary):
 
 
 def main():
+    source_commit = run(["git", "-C", REPO, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    source_tree = run(["git", "-C", REPO, "rev-parse", "HEAD^{tree}"], capture_output=True, text=True).stdout.strip()
+    source_dirty = bool(run(["git", "-C", REPO, "status", "--porcelain", "--untracked-files=normal"], capture_output=True, text=True).stdout.strip())
     os.environ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1"
     os.environ["DOTNET_GENERATE_ASPNET_CERTIFICATE"] = "false"
     os.environ["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1"
@@ -231,7 +234,10 @@ def main():
         run([os.environ.get("PYTHON", "python3"), "-B", REPO / "workers/roslyn/test_worker.py", "--native", roslyn])
         run([os.environ.get("PYTHON", "python3"), "-B", REPO / "workers/roslyn/test_trusted.py", "dotnet", roslyn, "--native"])
         checks.extend(["native Roslyn safe-source semantic suite", "native Roslyn trusted-project suite (external SDK)"])
-        receipt = {"rid": rid, "nodeVersion": actual, "nodeExecutableSha256": digest(node), "checks": checks, "productionPublication": False}
+        if run(["git", "-C", REPO, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip() != source_commit:
+            raise RuntimeError("Source commit changed during package qualification")
+        source_dirty = source_dirty or bool(run(["git", "-C", REPO, "status", "--porcelain", "--untracked-files=normal"], capture_output=True, text=True).stdout.strip())
+        receipt = {"sourceCommit": source_commit, "sourceTree": source_tree, "sourceDirty": source_dirty, "rid": rid, "nodeVersion": actual, "nodeExecutableSha256": digest(node), "checks": checks, "productionPublication": False}
         (bundle / "verification.json").write_text(json.dumps(receipt, indent=2) + "\n")
         mcpb = pack_mcpb(bundle, node, node_root, system, rid, temporary)
         # No archive is emitted until every verification gate succeeds. Unique output avoids overwriting artifacts.

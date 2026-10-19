@@ -6,6 +6,10 @@ Every changed candidate must be requalified before release. See [distribution ev
 for candidate-specific results. This matrix does not announce a production release. The
 C++ endpoint exposes `workspace.discover`, `engine.capabilities` and
 `semantic.query`. Clients must inspect the selected engine's advertised operations.
+The development branch also provides `workspace.list`, `workspace.open`,
+`workspace.close` and optional `workspace.clientRoots` compatibility. See
+[workspace lifecycle](workspaces.md); these additions are not in the published
+Ubuntu 22.04 preview.
 
 | Operation | TypeScript | JavaScript | C# / Roslyn |
 | --- | --- | --- | --- |

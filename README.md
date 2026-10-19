@@ -70,5 +70,10 @@ trusted MSBuild mode can execute repository code and requires explicit startup
 authorization. Analyzer execution and large-repository scale are not qualified.
 Code signing and notarization are not currently provided.
 
+The development branch adds runtime project selection inside an explicit startup
+access boundary. See [workspace setup](docs/workspaces.md) for configure-once use,
+dormant no-argument startup and optional client-root compatibility. Published
+previews retain their documented interface until a replacement is qualified.
+
 Read [security](SECURITY.md), [contributing](CONTRIBUTING.md), and
 [release gates](docs/acceptance.md) before extending or distributing FreeFlight.

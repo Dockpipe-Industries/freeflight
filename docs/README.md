@@ -81,13 +81,17 @@ Other clients supporting `mcpServers` can use:
 {"mcpServers":{"freeflight":{"command":"/absolute/freeflight/bin/freeflight","args":["--workspace","/absolute/project"]}}}
 ```
 
-The preview accepts one `--workspace` directory (not a repeatable flag). It
+The published Ubuntu 22.04 preview accepts one `--workspace` directory (not a repeatable flag). It
 serves every supported language and may query narrower project directories within
 that authorized root. A common parent avoids per-project client edits but grants
 access to all descendants. Advanced `--config` supports 1–32 roots and explicit
 engine paths. There is no runtime root grant, workspace open/close API or automatic
 MCP client-roots integration yet. Authorization changes require restart. See
-[platform-specific preview instructions](distribution.md).
+[platform-specific preview instructions](distribution.md). The development branch
+adds a dormant no-argument endpoint and explicit runtime workspace lifecycle;
+[workspace selection and access](workspaces.md) explains its policy and the
+difference between client suggestions and filesystem authorization. This does not
+change the already published preview.
 
 ## Engine contract
 

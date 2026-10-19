@@ -1,6 +1,7 @@
 #include "freeflight/server.hpp"
 #include <algorithm>
 #include <fstream>
+#include <set>
 #include <stdexcept>
 
 namespace freeflight {
@@ -107,11 +108,13 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
         Json workspaces = Json::array();
         for (const auto &root : roots_) {
             Json projects = Json::array();
+            std::set<std::string> languages;
             std::size_t scanned = 0;
             bool truncated = false;
             fs::recursive_directory_iterator it(root,
                                                 fs::directory_options::skip_permission_denied);
-            for (const auto &entry : it) {
+            for (const fs::recursive_directory_iterator end; it != end; ++it) {
+                const auto &entry = *it;
                 if (stop.stop_requested())
                     throw std::runtime_error("Cancelled");
                 if (++scanned > 50000) {
@@ -130,14 +133,22 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
                     continue;
                 }
                 const auto ext = entry.path().extension().string();
+                if (ext == ".cs")
+                    languages.insert("csharp");
+                else if (ext == ".ts" || ext == ".tsx" || ext == ".mts" || ext == ".cts")
+                    languages.insert("typescript");
+                else if (ext == ".js" || ext == ".jsx" || ext == ".mjs" || ext == ".cjs")
+                    languages.insert("javascript");
                 if (ext == ".sln" || ext == ".slnx" || ext == ".csproj" ||
                     filename == "tsconfig.json" || filename == "jsconfig.json" ||
                     filename == "package.json")
                     projects.push_back(entry.path().string());
             }
             std::sort(projects.begin(), projects.end());
-            workspaces.push_back(
-                {{"root", root.string()}, {"projects", projects}, {"truncated", truncated}});
+            workspaces.push_back({{"root", root.string()},
+                                  {"projects", projects},
+                                  {"languages", languages},
+                                  {"truncated", truncated}});
         }
         return {{"workspaces", workspaces}};
     }

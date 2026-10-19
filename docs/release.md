@@ -9,7 +9,7 @@ Do not publish a tag or artifact merely because a build succeeded.
 
 `.github/workflows/ci.yml` invokes the repository's authoritative DockPipe tasks
 for C++ compilation, protocol/process tests, both workers, MCP integration,
-repository health, site generation and core-only archive verification. The matrix covers
+repository health, site generation and complete native/MCPB bundle verification. The matrix covers
 Linux x64/ARM64, Windows x64 and macOS ARM64. These are configured targets; hosted
 results, not the presence of YAML, establish support. GitHub-hosted compiler and
 OS image revisions remain runner-managed; this is not a bit-reproducibility claim.
@@ -17,7 +17,7 @@ OS image revisions remain runner-managed; this is not a bit-reproducibility clai
 The manual **Release verification** workflow reuses CI. It has read-only repository
 permissions and cannot create a GitHub Release. CodeQL uses the same `core.build`
 DockPipe task under manual C++ tracing. Dependabot tracks Actions, npm and NuGet
-updates into `dev`; it does not replace vulnerability scanning.
+updates into `js/dev`; it does not replace vulnerability scanning.
 
 ## Pinned DockPipe bootstrap
 
@@ -34,12 +34,11 @@ recompilation, which otherwise requires a core authoring tree and invokes its
 source build hook. It does not bypass FreeFlight task compilation or tests.
 `DOCKPIPE_GLOBAL_ROOT` points at the isolated runner installation. The exact candidate CLI and core archive downloads passed checksum validation on
 macOS ARM64. Workflow compilation, repo.check (8 routes/5 open tasks) and
-registry.check passed using that isolated installation. Linux and Windows
-bootstrap still require hosted verification. The local smoke used Python 3.9
+registry.check passed using that isolated installation. Linux and Windows bootstrap passed hosted verification. The local smoke used Python 3.9
 with manual archive validation; the composite action uses Python 3.13 extraction
 filters in CI.
 
-Node 24.11.1, .NET SDK 10.0.402 and CMake 3.31.6 are selected explicitly. Official
+Node 24.22.0, .NET SDK 10.0.402 and CMake 3.31.6 are selected explicitly. Official
 GitHub Actions use immutable commit references. Python uses its 3.13 release line; CI provisions PyYAML 6.0.2 for repository
 routing checks and jsonschema 4.25.1 for Registry metadata checks.
 The composite action contains only acquisition, checksum validation and DockPipe
@@ -48,9 +47,10 @@ initialization; project build/test logic stays in `workflows/`.
 ## Publication gates still open
 
 A native CPack archive is a development candidate until installation tests prove
-it contains both workers and their runtime dependencies. No complete standalone
-runtime bundle, official MCP Registry publication, signing identity, hosting
-target or production deployment is claimed by this scaffold. Store/gateway
+it contains both workers and their runtime dependencies. macOS ARM64 complete bundles have passed local installation/semantic tests;
+updated bundles and all other platforms require exact-commit qualification.
+Official MCP Registry publication, signing identity and production deployment
+remain pending. Store/gateway
 availability is not a prerequisite for the standalone product.
 
 Before enabling publication: qualify the complete bundle on each advertised
@@ -79,5 +79,6 @@ transport to server.json. The URL must contain `mcp` (the `.mcpb` extension does
 
 Publisher authentication and namespace ownership must be verified through the
 official publisher flow when the artifact exists. CI currently has no publishing
-permission, token, login action or secret. Store integration and gateway contracts
-are outside this revised distribution scope.
+permission, token, login action or secret. General DockPipe discovery/configuration contracts are reviewable in DockPipe
+PR #168. Installation and gateway lifecycle remain separate platform work; no
+duplicate FreeFlight store package is created.

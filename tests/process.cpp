@@ -17,6 +17,7 @@
 // clang-format on
 #else
 #include <cerrno>
+#include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
@@ -77,10 +78,20 @@ int worker(int argc, char **argv) {
         response["args"] = json::array();
         response["secretInherited"] = std::getenv("FREEFLIGHT_TEST_SECRET") != nullptr;
         response["injectionInherited"] = std::getenv("NODE_OPTIONS") != nullptr;
+        for (const auto *name :
+             {"PATH", "DOTNET_CLI_TELEMETRY_OPTOUT", "DOTNET_EnableDiagnostics"}) {
+            const auto *value = std::getenv(name);
+            response[name] = value ? json(value) : json(nullptr);
+        }
         for (int i = 3; i < argc; ++i)
             response["args"].push_back(argv[i]);
 #ifndef _WIN32
         response["pid"] = getpid();
+        if (mode == "descriptor") {
+            errno = 0;
+            response["descriptorClosed"] =
+                fcntl(std::stoi(argv[3]), F_GETFD) == -1 && errno == EBADF;
+        }
         if (mode == "close-input")
             close(STDIN_FILENO);
 #endif
@@ -123,6 +134,10 @@ int run_tests(int argc, char **argv) {
             require(!response["secretInherited"].get<bool>(), "worker inherited unrelated secret");
             require(!response["injectionInherited"].get<bool>(),
                     "worker inherited runtime injection");
+            const auto *path = std::getenv("PATH");
+            require(response["PATH"] == (path ? json(path) : json(nullptr)), "worker PATH changed");
+            require(response["DOTNET_CLI_TELEMETRY_OPTOUT"] == "1", "telemetry opt-out missing");
+            require(response["DOTNET_EnableDiagnostics"] == "0", "diagnostic isolation missing");
         }
         const json message = {{"id", 42}, {"method", "test"}, {"value", "Unicode: λ and 日本語"}};
         fails([] { Process process({"relative-worker"}); }, "absolute path");
@@ -194,6 +209,12 @@ int run_tests(int argc, char **argv) {
             require(first == "one invocation" && second.empty(), "crashed request was retried");
         }
         fs::remove(marker);
+        {
+            // Recovery is an explicit new instance; a crashed request is never replayed.
+            Process replacement({executable, "--worker", "echo"});
+            require(replacement.request(message)["echo"] == message,
+                    "fresh worker recovery failed");
+        }
         for (const auto &mode : {"hang", "no-read"}) {
             Process process({executable, "--worker", mode});
             std::stop_source cancel;
@@ -217,6 +238,33 @@ int run_tests(int argc, char **argv) {
             fails([&] { process.request(message, cancel.get_token()); }, "cancelled");
         }
 #ifndef _WIN32
+        {
+            // Intentionally inheritable and high enough not to be reused by worker stdio.
+            const int descriptor = fcntl(STDERR_FILENO, F_DUPFD, 128);
+            require(descriptor >= 128, "cannot create descriptor isolation fixture");
+            try {
+                Process process({executable, "--worker", "descriptor", std::to_string(descriptor)});
+                require(process.request(message)["descriptorClosed"].get<bool>(),
+                        "unrelated parent descriptor leaked into worker");
+            } catch (...) {
+                close(descriptor);
+                throw;
+            }
+            close(descriptor);
+        }
+        {
+            const auto count_descriptors = [] {
+                int count = 0;
+                for (int fd = 0; fd < 256; ++fd)
+                    if (fcntl(fd, F_GETFD) != -1)
+                        ++count;
+                return count;
+            };
+            const int before = count_descriptors();
+            for (int i = 0; i < 32; ++i)
+                fails([&] { Process process({executable + ".missing"}); }, "launch worker");
+            require(count_descriptors() == before, "failed launches leaked descriptors");
+        }
         {
             Process process({executable, "--worker", "close-input"});
             const auto pid = process.request(message)["pid"].get<pid_t>();

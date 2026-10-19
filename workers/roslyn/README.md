@@ -25,7 +25,9 @@ UTF-8 newline-delimited JSON on stdin/stdout: `{id,method,params}` and
 `{id,result}` or `{id,error:{message}}`. Positions are zero-based UTF-16.
 Call `capabilities`, then `open` with an absolute authorized `root`.
 Supported operations are `symbols`, `definition`, `references`, `hover`,
-`diagnostics`, and `rename`. All take `file`; positional operations also take
+`diagnostics`, `rename`, `implementations`, `typeInfo`, `signatureHelp`,
+`workspaceSymbols`, `callHierarchy`, and `typeHierarchy`. All except
+`workspaceSymbols` take `file`; positional operations also take
 `line` and `character`; rename takes `newName`. Locations contain an absolute
 `file` and `{start,end}` range. Symbols include name, kind and display detail.
 `cancel` with `{id}` cancels an outstanding request without a response;
@@ -48,8 +50,8 @@ Safe-source results are semantic Roslyn results for this source view, not necess
 repository's real build. Multiple projects are combined; dependency assemblies,
 project defines, generated code, language-version settings and implicit usings
 are not inferred. Duplicate types or unresolved dependencies can produce extra
-diagnostics. Analyzer diagnostics, code actions, import organization, workspace
-symbols and hierarchies are not advertised. The parser uses C# 12.
+diagnostics. Analyzer diagnostics, code actions and import organization are not advertised.
+The safe-source parser uses C# 12.
 
 Each request rescans the bounded workspace, reuses unchanged Roslyn documents,
 and applies changed text incrementally. This detects added/deleted files but is
@@ -115,3 +117,38 @@ explicitly restores a locally authored pair of dependency-free SDK projects unde
 `bin/.local`, then checks a conditional project define, exact cross-project definition
 and reference locations, clean diagnostics, changed-file type errors, and root/mode
 rejections. This verifies a small SDK project graph, not universal solution fidelity.
+
+## Additional semantic queries
+
+- `workspaceSymbols` takes `query` (1–256 characters) and performs a case-insensitive
+  substring search over Roslyn source declarations. Results have name, kind,
+  display and source locations. Queries exceeding 1,000 symbols return an error;
+  no incomplete result is silently returned.
+- `implementations` uses Roslyn implementation, override and derived-class APIs.
+  Interface member results include overrides of the implementing member.
+- `typeInfo` returns the semantic type, converted type when available, nullable
+  annotation and fully qualified type. Literal and declaration positions work;
+  positions remain UTF-16, including after supplementary Unicode characters.
+- `signatureHelp` supports ordinary invocation expressions. It returns overloads,
+  Roslyn's selected overload, parameter names/types/optionality and the syntactic
+  argument index/count. Constructors, indexers and attribute signatures are not
+  implemented; their empty result must not be interpreted as absence of overloads.
+- `typeHierarchy` returns immediate class/interface supertypes and immediate source
+  subtypes, with symbol details and source locations. Metadata parents can have no
+  source locations. Structs, enums and other symbol kinds return an empty result.
+- `callHierarchy` applies to method symbols, with incoming callers from Roslyn and
+  outgoing statically bound invocations and object construction from Roslyn's
+  operation tree. Incoming edges retain `isDirect`; related-symbol/override callers
+  are marked false and are not proof of runtime dispatch. Outgoing edges do not
+  include implicit property/event access, operators, dynamic dispatch or reflection.
+  Nested lambda/local-function bodies belong to separate callers. One response has
+  at most 500 incoming edges/locations and 500 outgoing edges; excess returns an
+  error. This is static semantic navigation, not a whole-program runtime call graph.
+
+The extended fixture verifies interface implementations plus override positions,
+integer versus string overload selection, active argument index, exact workspace
+symbol location, direct type relationships, direct and indirect incoming calls,
+constructor/method outgoing calls, nested callable ownership, UTF-16 positions,
+and symbol/edge limits with recovery. The shared per-request cancellation token
+flows into Roslyn query APIs and operation traversal. These queries use the selected
+safe-source or trusted project model and inherit its fidelity limitations.

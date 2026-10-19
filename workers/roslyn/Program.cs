@@ -114,7 +114,7 @@ internal sealed class SourceEngine : IDisposable
         if (method == "capabilities") return new
         {
             languages = new[] { "csharp" },
-            operations = new[] { "symbols", "definition", "references", "hover", "diagnostics", "rename" },
+            operations = new[] { "symbols", "definition", "references", "hover", "diagnostics", "rename", "implementations", "typeInfo", "signatureHelp", "workspaceSymbols", "callHierarchy", "typeHierarchy" },
             mode = Mode,
             fidelity = Mode,
             projectEvaluation = trustedMsbuild,
@@ -172,9 +172,12 @@ internal sealed class SourceEngine : IDisposable
             return new { root, mode = "safe-source", files = documents.Count, limitations = "One source compilation; project settings, dependencies, generated sources and analyzers are not evaluated." };
         }
         if (root is null || projectId is null) throw new InvalidOperationException("Open a workspace first");
-        if (method is not ("symbols" or "definition" or "references" or "hover" or "diagnostics" or "rename"))
+        if (method is not ("symbols" or "definition" or "references" or "hover" or "diagnostics" or "rename" or "implementations" or "typeInfo" or "signatureHelp" or "workspaceSymbols" or "callHierarchy" or "typeHierarchy"))
             throw new ArgumentException($"Unsupported operation: {method}");
         await Refresh(token);
+        if (method == "workspaceSymbols")
+            return await SemanticQueries.WorkspaceSymbols(workspace.CurrentSolution,
+                args.GetProperty("query").GetString() ?? "", token);
         var file = CheckPath(args.GetProperty("file").GetString() ?? throw new ArgumentException("file is required"));
         if (!documents.TryGetValue(file, out var documentId)) throw new ArgumentException("File is not in the C# workspace");
         var document = workspace.CurrentSolution.GetDocument(documentId)!;
@@ -208,9 +211,16 @@ internal sealed class SourceEngine : IDisposable
         if (line < 0 || line >= text.Lines.Count || character < 0 || character > text.Lines[line].Span.Length) throw new ArgumentException("Position is outside document");
         var position = text.Lines[line].Start + character;
         var symbolAt = await SymbolFinder.FindSymbolAtPositionAsync(document, position, token);
+        if (method == "typeInfo") return SemanticQueries.TypeInfo(model, syntax, position, symbolAt, token);
+        if (method == "signatureHelp") return SemanticQueries.SignatureHelp(model, syntax, position, token);
         if (symbolAt is null) return method == "hover" ? new { contents = "" } : Array.Empty<object>();
         switch (method)
         {
+            case "implementations": return await SemanticQueries.Implementations(symbolAt, workspace.CurrentSolution, token);
+            case "typeHierarchy": return await SemanticQueries.TypeHierarchy(symbolAt, workspace.CurrentSolution, token);
+            case "callHierarchy":
+                var sourceMethod = await SymbolFinder.FindSourceDefinitionAsync(symbolAt, workspace.CurrentSolution, token) ?? symbolAt;
+                return await SemanticQueries.CallHierarchy(sourceMethod, workspace.CurrentSolution, token);
             case "hover": return new { contents = symbolAt.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat), kind = symbolAt.Kind.ToString(), documentation = symbolAt.GetDocumentationCommentXml(cancellationToken: token) };
             case "definition":
                 var sourceDefinition = await SymbolFinder.FindSourceDefinitionAsync(symbolAt, workspace.CurrentSolution, token) ?? symbolAt;

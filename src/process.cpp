@@ -5,6 +5,7 @@
 #endif
 #include "freeflight/process.hpp"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdlib>
@@ -242,9 +243,17 @@ Process::Process(std::vector<std::string> argv) : impl_(std::make_unique<Impl>()
                                                     &limits, sizeof(limits)))
             throw std::runtime_error("cannot create worker job");
         PROCESS_INFORMATION info{};
+        std::vector<std::wstring> entries;
+        for (const auto &item : worker_environment())
+            entries.push_back(wide(item));
+        // CreateProcess requires a case-insensitive ordinally sorted environment block.
+        std::sort(entries.begin(), entries.end(), [](const auto &left, const auto &right) {
+            return CompareStringOrdinal(left.c_str(), -1, right.c_str(), -1, TRUE) ==
+                   CSTR_LESS_THAN;
+        });
         std::wstring environment;
-        for (const auto &item : worker_environment()) {
-            environment += wide(item);
+        for (const auto &item : entries) {
+            environment += item;
             environment.push_back(L'\0');
         }
         environment.push_back(L'\0');
@@ -266,6 +275,17 @@ Process::Process(std::vector<std::string> argv) : impl_(std::make_unique<Impl>()
         throw;
     }
 #else
+    // Finish allocation-bearing preparation before acquiring raw launch resources.
+    const auto directory = std::filesystem::path(argv.front()).parent_path().string();
+    std::vector<char *> args;
+    for (auto &arg : argv)
+        args.push_back(arg.data());
+    args.push_back(nullptr);
+    auto environment = worker_environment();
+    std::vector<char *> env;
+    for (auto &value : environment)
+        env.push_back(value.data());
+    env.push_back(nullptr);
     std::array<int, 2> input{-1, -1}, output{-1, -1};
     auto cleanup = [&] {
         for (auto &fd : input)
@@ -308,7 +328,6 @@ Process::Process(std::vector<std::string> argv) : impl_(std::make_unique<Impl>()
     for (int fd : {input[0], input[1], output[0], output[1]})
         if (fd != STDIN_FILENO && fd != STDOUT_FILENO)
             error |= posix_spawn_file_actions_addclose(&actions, fd);
-    const auto directory = std::filesystem::path(argv.front()).parent_path().string();
 #if defined(__APPLE__) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 260000
     error |= posix_spawn_file_actions_addchdir(&actions, directory.c_str());
 #else
@@ -321,15 +340,6 @@ Process::Process(std::vector<std::string> argv) : impl_(std::make_unique<Impl>()
     error |= posix_spawnattr_setflags(&attrs, POSIX_SPAWN_SETPGROUP);
 #endif
     error |= posix_spawnattr_setpgroup(&attrs, 0);
-    std::vector<char *> args;
-    for (auto &arg : argv)
-        args.push_back(arg.data());
-    args.push_back(nullptr);
-    auto environment = worker_environment();
-    std::vector<char *> env;
-    for (auto &value : environment)
-        env.push_back(value.data());
-    env.push_back(nullptr);
     if (!error)
         error =
             posix_spawn(&impl_->pid, argv[0].c_str(), &actions, &attrs, args.data(), env.data());

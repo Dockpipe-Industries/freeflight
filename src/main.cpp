@@ -174,6 +174,13 @@ int runMain(const std::vector<std::string> &argv) {
                         job = queue.front();
                         queue.pop_front();
                     }
+                    // Dispatch is serialized with cancellation acceptance. A job
+                    // cancelled while queued must never reach lifecycle mutations,
+                    // client-roots updates, or worker construction.
+                    if (job->stop.stop_requested()) {
+                        pending.erase(job->id.dump());
+                        continue;
+                    }
                 }
                 Json response;
                 try {
@@ -295,6 +302,13 @@ int runMain(const std::vector<std::string> &argv) {
                 if (meta[versionKey] != version) {
                     error(id, -32022, "Unsupported protocol version",
                           {{"supported", {version}}, {"requested", meta[versionKey]}});
+                    continue;
+                }
+            }
+            {
+                std::lock_guard guard(queueMutex);
+                if (pending.contains(id.dump())) {
+                    error(id, -32600, "Duplicate in-flight id");
                     continue;
                 }
             }

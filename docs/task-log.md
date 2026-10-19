@@ -233,3 +233,27 @@ Full local DockPipe package.native qualification passed: six MCPB tests, five
 PE policy tests, installed protocol and worker/semantic checks, and fresh bundle
 extraction. Evidence: bin/.local/package-native-attributes.log. repo.check now
 requires the attributes file. Windows hosted qualification remains pending.
+
+Candidate 27985882677e61c14269df413ef18f5579b9a0d0 passed all four native
+platforms and both Qt site browser/container/audit jobs in push run 39334371543
+and PR run 39334378171. CodeQL analysis workflows completed, but the separate
+CodeQL alert check failed on tests/process.cpp:106 (alert #4, user-supplied crash
+marker path). PR #2 was marked ready; its merge was rejected with HTTP 405 and
+remains unmerged. No protection bypass or alert dismissal was attempted. Fixing
+the test helper and rerunning qualification is required before promotion.
+
+Protection readback for master/staging/dev confirms strict/up-to-date checks for
+four native jobs, both Qt jobs, cpp and CodeQL; administrator enforcement and
+conversation resolution enabled; zero required approving reviews; force pushes
+and deletions disabled. DockPipe PR #168 also passed its Flatpak job, completing
+its currently observed CI set. Registry publisher authentication is absent locally;
+site deployment still needs the existing operator host/profile/transfer contract.
+
+The crash helper now accepts only a fully parsed unsigned integer token. The
+parent atomically reserves a unique private temporary directory; the worker
+derives a fixed marker name and rejects symlinks. Seven invalid/missing/path-like
+token cases preserve a sentinel, while the exact one-invocation and explicit
+recovery assertions remain. Local DockPipe core.build, core.test (2/2), lint and
+repo.check passed. The alert is not dismissed; hosted reanalysis must clear it.
+Acceptance milestones now distinguish implemented/tested work from publication,
+gateway lifecycle and broad language/project fidelity still pending.

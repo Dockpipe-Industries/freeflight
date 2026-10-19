@@ -1,8 +1,8 @@
 # Language capabilities and evidence
 
 The capabilities below have semantic fixture evidence. Hosted candidate qualification
-has also passed Linux x64/ARM64 and macOS ARM64; Windows qualification remains a
-release gate. See [distribution evidence](distribution.md) and [current CI](https://github.com/Dockpipe-Industries/freeflight/actions/workflows/ci.yml)
+passed Linux x64/ARM64, Windows x64 and macOS ARM64 at candidate 2798588.
+Every changed candidate must be requalified before release. See [distribution evidence](distribution.md) and [current CI](https://github.com/Dockpipe-Industries/freeflight/actions/workflows/ci.yml)
 for candidate-specific results. This matrix does not announce a production release. The
 C++ endpoint exposes `workspace.discover`, `engine.capabilities` and
 `semantic.query`. Clients must inspect the selected engine's advertised operations.

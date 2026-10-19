@@ -9,6 +9,7 @@ import subprocess
 import hashlib
 import zipfile
 import ast
+import tarfile
 
 REPO = 'Dockpipe-Industries/freeflight'
 PLATFORMS = {'native-ubuntu-24.04': 'linux-x64', 'native-ubuntu-24.04-arm': 'linux-arm64',
@@ -56,6 +57,31 @@ def check_promotion(source, master, pulls, ancestor, tree):
 
 def git(*args):
     return subprocess.check_output(['git', *args], text=True).strip()
+
+
+def verify_runtime_notices(bundle, toolchain, hashes):
+    require({'emscripten-runtime-notices.tar.gz', 'runtime-notice-checksums.json'} <= set(hashes),
+            'Missing Emscripten runtime redistribution notices')
+    expected = {'emscriptenVersion': toolchain['emsdk'], 'sourceCommit': toolchain['emscriptenSourceCommit'],
+                'files': toolchain['runtimeNotices']}
+    require(bundle.getinfo('runtime-notice-checksums.json').file_size <= 1024 * 1024,
+            'Oversized runtime notice checksum receipt')
+    require(json.loads(bundle.read('runtime-notice-checksums.json')) == expected, 'Runtime notice pin mismatch')
+    require(bundle.getinfo('NOTICES.txt').file_size <= 16 * 1024 ** 2, 'Oversized combined notices')
+    combined = bundle.read('NOTICES.txt')
+    found = set()
+    with bundle.open('emscripten-runtime-notices.tar.gz') as stream, tarfile.open(fileobj=stream, mode='r|gz') as archive:
+        for member in archive:
+            prefix = 'emscripten/'
+            require(member.isfile() and member.name.startswith(prefix) and member.size <= 2 * 1024 ** 2,
+                    'Invalid runtime notice archive member')
+            name = member.name[len(prefix):]
+            require(name in expected['files'] and name not in found, 'Unexpected runtime notice archive member')
+            text = archive.extractfile(member).read()
+            require(hashlib.sha256(text).hexdigest() == expected['files'][name], 'Runtime notice content hash mismatch')
+            require(text in combined, 'Combined redistribution notices omit original runtime text')
+            found.add(name)
+    require(found == set(expected['files']), 'Incomplete runtime notice archive')
 
 
 def verify_extra(path, name, source, tree):
@@ -115,6 +141,7 @@ def verify_extra(path, name, source, tree):
             require(json.loads(bundle.read('source-checksums.json')) == pins, 'Corresponding source pins differ from project')
             for module, expected in pins.items():
                 require(hashes.get(module + '-everywhere-src-' + qt + '.tar.xz') == expected, 'Missing or obsolete Qt module source')
+            verify_runtime_notices(bundle, toolchain, hashes)
         return receipt
 
 

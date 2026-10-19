@@ -8,13 +8,13 @@ Broad acceptance items below remain unchecked where any required portion is pend
 
 | Scope | Verified evidence | Still pending |
 | --- | --- | --- |
-| C++ core | macOS ARM64 DockPipe build; protocol/process CTest 2/2; independent official MCP SDK client | Exact-head hosted requalification; full client matrix |
+| C++ core | macOS ARM64 DockPipe build; protocol/process CTest 2/2; independent official MCP SDK client | Windows actual-project failure; next-head requalification; broader clients |
 | TS/JS | 17 worker tests; real-worker definitions/references/diagnostics and incremental changes | Large real repositories and broad configuration fidelity |
 | C# | Safe-source semantics/security/cancellation; explicit trusted two-project SDK fixture and actual Roslyn project through C++ MCP, exact cross-project results | Broad solutions/multi-targeting; analyzers unsupported |
-| Standalone | macOS ARM64 native/MCPB extraction, hashes and semantic tests | Clean exact-head multi-platform qualification and publication |
+| Standalone | macOS ARM64 native/MCPB extraction, hashes and semantic tests | Linux x64/ARM64 and macOS hosted passed at d30f780; Windows and publication pending |
 | DockPipe | Draft DockPipe PR #168, registry search/version/history and config contract tests plus live discovery | Installation/lifecycle/gateway integration |
-| Security audit | npm 0 vulnerabilities; NuGet no findings; 11 fail-closed audit-policy tests | Hosted scan completion and ongoing dependency monitoring |
-| Branch policy | Implementation moved to js/dev; PR #2 promotes to dev; master remains default | Protection applied/read back; promotion gates pending |
+| Security audit | npm 0 vulnerabilities; NuGet no findings; 11 fail-closed audit-policy tests | Windows scan pending after project-load failure; ongoing monitoring |
+| Branch policy | Implementation moved to js/dev; PR #2 promotes to dev; master remains default | Protection applied/read back; promotion gates still pending |
 
 No production release, registry listing or website deployment has been performed.
 

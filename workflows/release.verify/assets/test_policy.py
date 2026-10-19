@@ -6,7 +6,9 @@ import json
 from pathlib import Path
 import tempfile
 import zipfile
-from policy import REPO, check_promotion, check_run, verify_extra, check_extra_links
+import io
+import tarfile
+from policy import REPO, check_promotion, check_run, verify_extra, check_extra_links, verify_runtime_notices
 
 
 class ReleasePolicy(unittest.TestCase):
@@ -149,6 +151,34 @@ class ReleasePolicy(unittest.TestCase):
                 else:
                     with self.assertRaises(ValueError):
                         verify_extra(path, 'qt-site-audit-production', self.source, 'e' * 40)
+
+
+    def test_runtime_notice_originals_and_receipt(self):
+        text = b'Original runtime license text\n'
+        toolchain = {'emsdk': '5.0.5', 'emscriptenSourceCommit': 'b' * 40,
+                     'runtimeNotices': {'LICENSE': hashlib.sha256(text).hexdigest()}}
+        receipt = {'emscriptenVersion': '5.0.5', 'sourceCommit': 'b' * 40, 'files': toolchain['runtimeNotices']}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'notices.zip'
+            for content, combined, valid in [(text, text, True), (b'altered', text, False), (text, b'omitted', False)]:
+                archive_bytes = io.BytesIO()
+                with tarfile.open(fileobj=archive_bytes, mode='w:gz') as archive:
+                    item = tarfile.TarInfo('emscripten/LICENSE')
+                    item.size = len(content)
+                    archive.addfile(item, io.BytesIO(content))
+                with zipfile.ZipFile(path, 'w') as bundle:
+                    bundle.writestr('emscripten-runtime-notices.tar.gz', archive_bytes.getvalue())
+                    bundle.writestr('runtime-notice-checksums.json', json.dumps(receipt))
+                    bundle.writestr('NOTICES.txt', combined)
+                with zipfile.ZipFile(path) as bundle:
+                    hashes = {'emscripten-runtime-notices.tar.gz': '', 'runtime-notice-checksums.json': ''}
+                    if valid:
+                        verify_runtime_notices(bundle, toolchain, hashes)
+                    else:
+                        with self.assertRaises(ValueError):
+                            verify_runtime_notices(bundle, toolchain, hashes)
+                    with self.assertRaises(ValueError):
+                        verify_runtime_notices(bundle, toolchain, {})
 
 
 if __name__ == '__main__':

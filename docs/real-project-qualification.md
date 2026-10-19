@@ -35,3 +35,19 @@ were added. Read-only inspection found no matching localhost certificate in the
 default login keychain; actual creation was not confirmed. No certificate trust or
 cleanup command was run. Command and output excerpts are preserved in the generated
 `bin/.local/reports/real-project-initial-run.txt` evidence file.
+
+## Windows lockfile environment regression
+
+Hosted Windows qualification found `Value cannot be null (Parameter 'path1')` while
+reading the restored `obj/project.assets.json`. NuGet's official
+[JSON package-spec reader](https://github.com/NuGet/NuGet.Client/blob/dev/src/NuGet.Core/NuGet.ProjectModel/JsonPackageSpecReader.Utf8JsonStreamReader.cs)
+unconditionally resolves `UserSettingsDirectory` in `ReadRestoreMetadata`.
+Its CoreCLR [environment implementation](https://github.com/NuGet/NuGet.Client/blob/dev/src/NuGet.Core/NuGet.Common/PathUtil/NuGetEnvironment.cs)
+reads Windows `APPDATA` directly, then combines it with `NuGet`. An omitted
+`APPDATA` therefore matches the observed null `path1` failure.
+
+The core now preserves only `APPDATA` additionally on Windows. The process test
+uses a directory containing spaces and verifies exact forwarding, while .NET
+startup hooks, NuGet package-source credentials and unrelated secrets remain
+excluded. The real-project semantic assertions are unchanged. Local macOS build
+and process tests pass; Windows confirmation requires the next hosted run.

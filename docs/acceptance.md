@@ -3,8 +3,8 @@
 Evidence snapshot: 2026-10-19. Candidate 1ecf18d passed all four native targets,
 both website environments and CodeQL. Its Ubuntu 24.04 x64 preview was published
 and anonymously downloaded with matching checksums. That core requires glibc 2.38
-and cannot run on stock Ubuntu 22.04; a separately qualified Jammy candidate is
-pending. PR #12 remains draft after automatic approval review rejected the
+and cannot run on stock Ubuntu 22.04; a separate Jammy preview at b22a53a passed native/clean-container tests and
+was published with verified anonymous downloads. Pop!_OS itself is not tested. PR #12 remains draft after automatic approval review rejected the
 ready-for-review transition; production promotion awaits explicit approval.
 For subsequent status, consult the linked GitHub Actions and Releases records.
 

@@ -31,3 +31,24 @@ Only success emits `bin/.local/jammy-compatibility.json`; CI retains it beside t
 archives in `preview-ubuntu-22.04-linux-x64`. Existing `native-ubuntu-24.04` output
 and production release requirements are unchanged. No package is published by
 this workflow. Its offline policy tests also run through `release.policy`.
+
+## Fedora runtime compatibility
+
+The same archive is also tested with the same isolated SDK invocation in Fedora 44.
+The [official release metadata](https://fedoraproject.org/releases.json) listed 44
+as the newest non-beta release on 2026-10-19 (45 was beta). The image digest is the
+linux/amd64 manifest from the official
+[registry](https://registry.fedoraproject.org/v2/fedora/manifests/44), pinned in the
+helper. Fedora's runtime packages are `ca-certificates`, `glibc`, `libgcc`,
+`krb5-libs`, `libicu`, `openssl-libs`, `libstdc++`, `tzdata` and `zlib-ng-compat`.
+They follow [Microsoft's Fedora dependencies](https://learn.microsoft.com/en-us/dotnet/core/install/linux-fedora#dependencies),
+with Fedora's [binary-compatible zlib provider](https://packages.fedoraproject.org/pkgs/zlib-ng/zlib-ng-compat/).
+DNF installs no SDK/Node and disables weak dependencies. Exact RPM versions are
+recorded separately; repository package resolution is not claimed reproducible.
+
+`fedoraRuntime` in the existing compatibility receipt identifies its pinned image,
+exact tar hash/source, semantic test result and package inventory. The original
+Ubuntu receipt fields remain unchanged. Both runtime tests must pass before the
+workflow emits a receipt. This does not qualify previously published bytes,
+Bazzite's immutable host, its sandbox integration, or any particular MCP desktop
+client. Bazzite execution remains explicitly untested.

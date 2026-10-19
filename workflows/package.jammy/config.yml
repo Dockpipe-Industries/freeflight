@@ -1,5 +1,5 @@
 name: package.jammy
-description: Verify already qualified native archives against Ubuntu 22.04 ABI limits and a clean runtime container; never publish.
+description: Verify native archives against Ubuntu 22.04 ABI limits and clean Ubuntu 22.04 and Fedora 44 runtimes; never publish.
 vault: none
 docker_preflight: false
 steps:

@@ -17,10 +17,24 @@ LIMITS = {'GLIBC': (2, 35), 'GLIBCXX': (3, 4, 30), 'CXXABI': (1, 3, 13)}
 IMAGE = 'ubuntu:22.04@sha256:98510ac07bb4545e389be502a8918b385c018bfe4ceeb5ac7e0375c782268b04'
 PACKAGES = ['ca-certificates', 'libc6', 'libgcc-s1', 'libgssapi-krb5-2', 'libicu70',
             'libssl3', 'libstdc++6', 'tzdata', 'zlib1g']
+FEDORA_IMAGE = 'registry.fedoraproject.org/fedora:44@sha256:0db60e5a404cb9913c396b0651ed269656554da1cd0a13a92d41409b12d7ecb0'
+FEDORA_PACKAGES = ['ca-certificates', 'glibc', 'libgcc', 'krb5-libs', 'libicu',
+                   'openssl-libs', 'libstdc++', 'tzdata', 'zlib-ng-compat']
 
 
-def clean_runtime(archive):
+def clean_runtime(archive, profile='ubuntu22'):
     """Test extracted payload with bundled Node, no host runtimes or network."""
+    if profile == 'ubuntu22':
+        image, packages = IMAGE, PACKAGES
+        install = ('apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends '
+                   + ' '.join(packages) + ' && rm -rf /var/lib/apt/lists/*')
+        query = ['/usr/bin/dpkg-query', '-W', '-f=${Package}=${Version}\\n', *packages]
+    elif profile == 'fedora44':
+        image, packages = FEDORA_IMAGE, FEDORA_PACKAGES
+        install = 'dnf -y --setopt=install_weak_deps=False install ' + ' '.join(packages) + ' && dnf clean all'
+        query = ['/usr/bin/rpm', '-q', '--queryformat', '%{NAME}=%{VERSION}-%{RELEASE}.%{ARCH}\\n', *packages]
+    else:
+        raise ValueError('Unknown clean runtime profile')
     tag = 'freeflight-jammy-test:' + uuid.uuid4().hex
     container = 'freeflight-jammy-' + uuid.uuid4().hex
     with tempfile.TemporaryDirectory(prefix='jammy-runtime-', dir=ROOT / 'bin/.local') as temporary:
@@ -40,9 +54,8 @@ def clean_runtime(archive):
                 destination.chmod(member.mode & 0o777)
         shutil.copytree(ROOT / 'bin/.local/client', context / 'client')
         (context / 'Dockerfile').write_text(
-            'FROM ' + IMAGE + '\n'
-            'RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends '
-            + ' '.join(PACKAGES) + ' && rm -rf /var/lib/apt/lists/*\n'
+            'FROM ' + image + '\n'
+            'RUN ' + install + '\n'
             'COPY freeflight-linux-x64 /opt/freeflight\n'
             'COPY client /opt/client\n')
         try:
@@ -61,9 +74,8 @@ def clean_runtime(archive):
             required = 'Official MCP SDK verified packaged TS definition/references/diagnostics, JS symbol, C# diagnostics/symbol and engine capabilities'
             if required not in result.stdout:
                 raise ValueError('Missing clean-container official SDK semantic result')
-            versions = subprocess.check_output(common + ['--entrypoint', '/usr/bin/dpkg-query', tag,
-                '-W', '-f=${Package}=${Version}\\n', *PACKAGES], text=True, timeout=30)
-            return {'baseImage': IMAGE, 'packages': versions.splitlines(), 'network': 'none',
+            versions = subprocess.check_output(common + ['--entrypoint', query[0], tag, *query[1:]], text=True, timeout=30)
+            return {'baseImage': image, 'packages': versions.splitlines(), 'network': 'none',
                     'user': '65532:65532', 'hostRuntimeMounted': False, 'stdout': result.stdout}
         finally:
             subprocess.run(['docker', 'rm', '--force', container], check=False,
@@ -132,10 +144,16 @@ def main():
     if not all('freeflight-linux-x64/' + name in results for name in required):
         raise ValueError('Required native runtime ELF missing')
     runtime = clean_runtime(archive)
+    fedora = clean_runtime(archive, 'fedora44')
     receipt = {'status': 'qualified-on-ubuntu-22.04', 'artifact': archive.name, 'sha256': report['sha256'],
                'sourceCommit': report['verification']['sourceCommit'], 'sourceTree': report['verification']['sourceTree'],
                'limits': {key: '.'.join(map(str, value)) for key, value in LIMITS.items()}, 'elfVersionNeeds': results,
-               'cleanRuntime': runtime, 'popOsRuntimeTested': False, 'productionPublication': False}
+               'cleanRuntime': runtime, 'popOsRuntimeTested': False, 'productionPublication': False,
+               'fedoraRuntime': {**fedora, 'status': 'qualified-on-fedora-44',
+                                 'artifact': archive.name, 'sha256': report['sha256'],
+                                 'sourceCommit': report['verification']['sourceCommit'],
+                                 'sourceTree': report['verification']['sourceTree'],
+                                 'bazziteRuntimeTested': False}}
     output = ROOT / 'bin/.local/jammy-compatibility.json'
     output.write_text(json.dumps(receipt, indent=2) + '\n')
     print('Verified Ubuntu 22.04 ABI requirements for ' + str(len(results)) + ' bundled ELF files')

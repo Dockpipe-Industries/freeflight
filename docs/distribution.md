@@ -22,17 +22,59 @@ with stock Ubuntu 22.04 / Pop!_OS 22.04: ELF version requirements include
 `GLIBC_2.38` and `GLIBCXX_3.4.32`, above Jammy's glibc 2.35 baseline. Bundled Node
 requires at most glibc 2.28 and bundled Roslyn components at most 2.27; the core
 is the limiting component. Do not replace system glibc to run that archive.
-A separately labelled Ubuntu 22.04 candidate requires native semantic qualification,
-ELF version checks and execution in a clean Ubuntu 22.04 runtime before download
-availability or compatibility can be claimed. Pop!_OS itself is not directly tested.
+The separately labelled [Ubuntu 22.04 x64 preview](https://github.com/Dockpipe-Industries/freeflight/releases/tag/v0.1.0-preview.20261019.jammy.b22a53a) passed
+native semantic qualification, checks on all 18 bundled ELF files, and official MCP
+SDK semantic tests in a clean Ubuntu 22.04 container. All public assets were
+anonymously downloaded and checksum-verified. The new core requires GLIBC_2.34
+and GLIBCXX_3.4.30. Its archive SHA-256 is
+`7253390795ee026cec2581f6a7184a4d0912fb0e65fcd3adec982462d1826668`.
+Pop!_OS 22.04 shares the relevant Ubuntu baseline but was not directly tested.
+
+The Ubuntu 22.04 bundle needs supported distro packages `ca-certificates`, `libc6`,
+`libgcc-s1`, `libgssapi-krb5-2`, `libicu70`, `libssl3`, `libstdc++6`, `tzdata`
+and `zlib1g`. It needs no Node, .NET runtime or DockPipe installation. The release
+includes a compatibility receipt with exact tested package versions.
 
 
-The Linux preview targets Ubuntu 24.04 x64. Bundled runtimes still use operating
+The earlier Linux preview targets Ubuntu 24.04 x64. Bundled runtimes still use operating
 system libraries: `ca-certificates`, `libc6`, `libgcc-s1`, `libgssapi-krb5-2`,
 `libicu74`, `libssl3t64`, `libstdc++6`, `tzdata` and `zlib1g`. See Microsoft's
 [Ubuntu 24.04 self-contained application dependencies](https://learn.microsoft.com/en-us/dotnet/core/install/linux-ubuntu-install#dependencies).
 No separate Node, .NET runtime or DockPipe installation is required for default
 safe-source analysis. Older distributions and Alpine/musl are not qualified.
+
+## Platform scope and immutable distributions
+
+| Environment | Evidence and limits |
+| --- | --- |
+| Ubuntu 22.04 x64 | Separate published preview; native and clean-container semantic tests passed. |
+| Ubuntu 24.04 x64 / ARM64 | Hosted bundle qualification passed; the earlier public x64 preview targets this baseline. |
+| Windows x64 | Hosted Windows Server 2022 qualification; no claim of every desktop-client combination. |
+| macOS ARM64 | Hosted macOS 15 and local bundle qualification. |
+| macOS Intel / Windows ARM64 | No qualified release target yet. |
+| Fedora / Bazzite | Runtime and MCP-client interoperability qualification pending. |
+| Alpine / musl | Not qualified; current payload uses glibc. |
+
+FreeFlight is a headless stdio process; its Linux executable dependencies do not
+include X11, Wayland or Qt. The Qt website is separate. Desktop display protocols
+do not need separate server binaries, but distro/runtime and MCP-client sandbox
+boundaries still need testing.
+
+For immutable systems such as Bazzite, the intended route is the same relocatable
+payload in a user-local directory, without host-image changes or package layering.
+[Bazzite's software guidance](https://docs.bazzite.gg/Installing_and_Managing_Software/software-intro/)
+describes portable applications and container alternatives. This is a proposed
+route, not a Bazzite support claim. A native MCP client and a Flatpak MCP client
+are separate interoperability targets: filesystem permission alone does not make
+host binaries compatible with a Flatpak runtime. Do not automatically add broad
+host-execution or filesystem overrides. A preconfigured Distrobox route would
+also need stdio, cancellation, lifecycle and path-mapping tests.
+
+Native bundles remain the payload; MCPB wraps the same application for clients
+that support that format. The official MCP Registry supplies discovery metadata,
+not a universal installer. APT/RPM/Homebrew/WinGet wrappers are future distribution
+options, not prerequisites. No Flatpak or system package installation is required
+for the standalone preview.
 
 ## Native packaging through DockPipe
 

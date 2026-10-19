@@ -81,6 +81,14 @@ Other clients supporting `mcpServers` can use:
 {"mcpServers":{"freeflight":{"command":"/absolute/freeflight/bin/freeflight","args":["--workspace","/absolute/project"]}}}
 ```
 
+The preview accepts one `--workspace` directory (not a repeatable flag). It
+serves every supported language and may query narrower project directories within
+that authorized root. A common parent avoids per-project client edits but grants
+access to all descendants. Advanced `--config` supports 1–32 roots and explicit
+engine paths. There is no runtime root grant, workspace open/close API or automatic
+MCP client-roots integration yet. Authorization changes require restart. See
+[platform-specific preview instructions](distribution.md).
+
 ## Engine contract
 
 Workers exchange bounded newline JSON objects `{id,method,params}` and reply with

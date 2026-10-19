@@ -21,7 +21,7 @@ jobs:
           python-version: '3.13'
       - run: python -m pip install --disable-pip-version-check cmake==3.31.6
       - uses: ./.github/actions/setup-dockpipe
-      - uses: github/codeql-action/init@ce5e7eeac396d720fe2d802714996c8ce561e311 # v3
+      - uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           languages: c-cpp
           build-mode: manual

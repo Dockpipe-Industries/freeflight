@@ -370,3 +370,13 @@ state and release request IDs. Windows CI at78a6f46 also exposed locale decoding
 in the synthetic Python worker; its IPC is now explicitly UTF-8 and the exact
 Unicode assertion is unchanged. Local 17 protocol tests, process tests, lint and
 official MCP SDK compatibility pass; the correction still requires hosted CI.
+
+## 2026-10-19 — Dependabot integration-branch correction
+
+The user requested all FreeFlight Dependabot ecosystems target `dev`. Updated
+GitHub Actions, npm and NuGet configuration on `js/dev`; promotion remains through
+the existing reviewed branch sequence. No dependency versions were changed and
+no dependency PR was merged. Existing PRs #4–#11 are under individual review for
+base-change contamination, compatibility and exact-head CI before disposition.
+The separately qualified workspace UX remains commit `a617399`; this configuration
+change must not be confused with an already published artifact.

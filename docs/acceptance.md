@@ -1,9 +1,11 @@
 # Release acceptance checklist
 
-Evidence snapshot: 2026-10-19 22:48 UTC. Candidate 2c29369 passed native, website
-and CodeQL gates and reached master through all three promotion PRs. The first
-read-only release verification found an artifact-download header error; publication
-was skipped. The collector fix must pass fresh qualification before publication.
+Evidence snapshot: 2026-10-19. Candidate 1ecf18d passed all four native targets,
+both website environments and CodeQL. Its Ubuntu 24.04 x64 preview was published
+and anonymously downloaded with matching checksums. That core requires glibc 2.38
+and cannot run on stock Ubuntu 22.04; a separately qualified Jammy candidate is
+pending. PR #12 remains draft after automatic approval review rejected the
+ready-for-review transition; production promotion awaits explicit approval.
 For subsequent status, consult the linked GitHub Actions and Releases records.
 
 ## Verified milestones (2026-10-19)
@@ -12,13 +14,13 @@ Broad acceptance items below remain unchecked where any required portion is pend
 
 | Scope | Verified evidence | Still pending |
 | --- | --- | --- |
-| C++ core | All four hosted native targets; protocol/process CTest 2/2; independent official MCP SDK client | Collector-fix candidate requalification; broader clients |
+| C++ core | All four hosted native targets; protocol/process CTest 2/2; independent official MCP SDK client | Ubuntu 22.04 qualification; broader clients |
 | TS/JS | 17 worker tests; real-worker definitions/references/diagnostics and incremental changes | Large real repositories and broad configuration fidelity |
 | C# | Safe-source semantics/security/cancellation; explicit trusted two-project SDK fixture and actual Roslyn project through C++ MCP, exact cross-project results | Broad solutions/multi-targeting; analyzers unsupported |
-| Standalone | Linux x64/ARM64, Windows x64 and macOS ARM64 native/MCPB extraction, hashes and semantics at 2c29369 | Publication and next-head qualification |
+| Standalone | Linux x64/ARM64, Windows x64 and macOS ARM64 native/MCPB extraction, hashes and semantics at 1ecf18d; Ubuntu 24.04 x64 public preview | Production publication and Ubuntu 22.04 qualification |
 | DockPipe | Draft DockPipe PR #168, registry search/version/history and config contract tests plus live discovery | Installation/lifecycle/gateway integration |
 | Security audit | Four-platform dependency scans; both site image scans; 11 fail-closed audit-policy tests | Alert #4 fixed without dismissal; ongoing monitoring |
-| Branch policy | Implementation on js/dev; master default; protections applied and read back | PRs #2, #1 and #3 merged; collector fix requires another normal promotion |
+| Branch policy | Implementation on js/dev; master default; protections applied and read back | PRs #2, #1 and #3 merged; PR #12 promotion awaits explicit approval |
 
 CI push run [39335341348](https://github.com/Dockpipe-Industries/freeflight/actions/runs/39335341348)
 and CodeQL [39335341377](https://github.com/Dockpipe-Industries/freeflight/actions/runs/39335341377)

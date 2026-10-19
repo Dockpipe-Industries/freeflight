@@ -17,6 +17,16 @@ advertised release platforms until their own installed-bundle checks pass.
 
 ## Linux system prerequisites
 
+The published `v0.1.0-preview.20261019.1ecf18d` Linux x64 archive is incompatible
+with stock Ubuntu 22.04 / Pop!_OS 22.04: ELF version requirements include
+`GLIBC_2.38` and `GLIBCXX_3.4.32`, above Jammy's glibc 2.35 baseline. Bundled Node
+requires at most glibc 2.28 and bundled Roslyn components at most 2.27; the core
+is the limiting component. Do not replace system glibc to run that archive.
+A separately labelled Ubuntu 22.04 candidate requires native semantic qualification,
+ELF version checks and execution in a clean Ubuntu 22.04 runtime before download
+availability or compatibility can be claimed. Pop!_OS itself is not directly tested.
+
+
 The Linux preview targets Ubuntu 24.04 x64. Bundled runtimes still use operating
 system libraries: `ca-certificates`, `libc6`, `libgcc-s1`, `libgssapi-krb5-2`,
 `libicu74`, `libssl3t64`, `libstdc++6`, `tzdata` and `zlib1g`. See Microsoft's

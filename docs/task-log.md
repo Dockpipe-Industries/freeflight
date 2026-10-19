@@ -296,3 +296,22 @@ repository/timestamp validation and bounded pagination. DockPipe release.policy
 passes 46 tests. A read-only rehearsal verified all 11 source artifacts, 8 native
 archives, 7 supplementary artifacts and promotion chain #2 -> #1 -> #3. No tag,
 release, permissions or promotion gates changed.
+
+
+Linux x64 preview v0.1.0-preview.20261019.1ecf18d was published from clean source
+1ecf18d. Push CI 39338684956 and PR CI 39338692303 passed all native/site targets;
+CodeQL passed. All three published assets were anonymously downloaded and hashes
+verified. Native archive SHA256 is
+b144080a4488925ccb562fccf4712c4672b01302212dd7429865f5d913b92f2f.
+
+Follow-up ELF inspection proves this Ubuntu24.04-built core needs GLIBC_2.38 and
+GLIBCXX_3.4.32, incompatible with stock Ubuntu22.04's glibc2.35. A separately
+qualified22.04 candidate is pending. The local Docker daemon is unavailable and
+was not started; runtime execution must use isolated hostedCI. Branch-protection
+readback confirms strict checks, admin enforcement, resolved conversations, no
+force/deletion on master/staging/dev; zero approving reviews required. js/dev has
+no branch protection.
+
+Automatic approval review denied marking PR12 ready, treating draft-to-ready as
+an external workflow commitment needing explicit approval. No bypass or retry
+performed. Production promotion remains paused pending that approval.

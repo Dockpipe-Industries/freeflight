@@ -19,3 +19,7 @@ steps:
     kind: host
     cwd: repo
     cmd: python3 -B workflows/release.policy/assets/test_github_api.py
+  - id: jammy-runtime
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/package.jammy/assets/test_check.py

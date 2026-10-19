@@ -49,6 +49,7 @@ jobs:
       NUGET_PACKAGES: ${{ github.workspace }}/bin/.local/nuget
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
       DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1'
+      DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
     defaults:
       run:
         shell: bash
@@ -77,6 +78,10 @@ jobs:
       - uses: ./.github/actions/setup-dockpipe
       - name: Repository health
         run: dockpipe --workflow repo.check
+      - name: Development lifecycle policy
+        run: dockpipe --workflow development.test
+      - name: Release and publication policy
+        run: dockpipe --workflow release.policy
       - name: C++23 build
         run: dockpipe --workflow core.build
       - name: Formatting
@@ -89,18 +94,19 @@ jobs:
         run: dockpipe --workflow workers.roslyn
       - name: Cross-engine MCP integration
         run: dockpipe --workflow integration.test
+      - name: Real repository semantics
+        run: dockpipe --workflow integration.real
       - name: Independent official MCP client
         run: dockpipe --workflow mcp.compatibility
       - name: Dependency vulnerability checks
         run: dockpipe --workflow dependency.audit
       - name: Official MCP Registry metadata
         run: dockpipe --workflow registry.check
-      - name: Website
-        run: dockpipe --workflow site.build
       - uses: ./.github/actions/setup-native-inputs
       - name: Complete native bundle and installed semantic verification
         run: dockpipe --workflow package.native
       - name: Retain qualified native bundles
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: native-${{ matrix.os }}
@@ -113,5 +119,81 @@ jobs:
           name: qualification-${{ matrix.os }}
           path: |
             bin/.local/build/Testing/Temporary/LastTest.log
+          if-no-files-found: warn
+          retention-days: 14
+  site:
+    needs: promotion-policy
+    name: Qt WebAssembly site (${{ matrix.environment }})
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [staging, production]
+    env:
+      FREEFLIGHT_SITE_ENV: ${{ matrix.environment }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24.22.0'
+      - name: Provision build frontend
+        run: python -m pip install --disable-pip-version-check cmake==3.31.6 PyYAML==6.0.2
+      - uses: ./.github/actions/setup-dockpipe
+      - name: Provision pinned public Qt and Emscripten SDKs
+        run: dockpipe --workflow site.toolchain
+      - name: Collect corresponding Qt sources and notices
+        run: dockpipe --workflow site.sources
+      - name: Build actual Qt renderer and documentation
+        run: dockpipe --workflow site.build
+      - name: Browser runtime and responsive rendering
+        run: dockpipe --workflow site.test
+      - name: Build and smoke-test the serving container
+        run: dockpipe --workflow site.container
+      - name: Audit exact serving image
+        run: dockpipe --workflow site.audit
+      - name: Retain qualified website assets
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: qt-wasm-site-${{ matrix.environment }}
+          path: bin/.local/site/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain browser verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: qt-wasm-browser-evidence-${{ matrix.environment }}
+          path: bin/.local/site-test/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Retain tested serving container
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: qt-site-container-${{ matrix.environment }}
+          path: bin/.local/site-container/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain corresponding Qt sources and relink materials
+        if: matrix.environment == 'staging' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: qt-corresponding-sources
+          path: bin/.local/site-sources/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain container vulnerability evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: qt-site-audit-${{ matrix.environment }}
+          path: |
+            bin/.local/site-audit/vulnerabilities.json
+            bin/.local/site-audit/verification.json
           if-no-files-found: warn
           retention-days: 14

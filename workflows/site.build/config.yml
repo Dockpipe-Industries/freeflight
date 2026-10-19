@@ -1,13 +1,9 @@
 name: site.build
-description: FreeFlight site.build operation.
+description: Build the independent Qt Quick/WebAssembly product site and its accessible HTML fallback.
 vault: none
 docker_preflight: false
 steps:
-  - id: directory
+  - id: qt-site
     kind: host
     cwd: repo
-    cmd: cmake -E make_directory bin/.local/site
-  - id: stage
-    kind: host
-    cwd: repo
-    cmd: cmake -E copy_directory site bin/.local/site
+    cmd: python3 -B workflows/site.build/assets/build.py

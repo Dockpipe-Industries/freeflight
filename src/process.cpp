@@ -43,6 +43,8 @@ std::vector<std::string> worker_environment() {
     }
     values.emplace_back("DOTNET_CLI_TELEMETRY_OPTOUT=1");
     values.emplace_back("DOTNET_EnableDiagnostics=0");
+    values.emplace_back("DOTNET_GENERATE_ASPNET_CERTIFICATE=false");
+    values.emplace_back("DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1");
     return values;
 }
 using Clock = std::chrono::steady_clock;
@@ -334,6 +336,8 @@ Process::Process(std::vector<std::string> argv) : impl_(std::make_unique<Impl>()
     error |= posix_spawn_file_actions_addchdir_np(&actions, directory.c_str());
 #endif
 #ifdef __APPLE__
+    // CLOEXEC_DEFAULT also closes standard descriptors unless explicitly inherited.
+    error |= posix_spawn_file_actions_addinherit_np(&actions, STDERR_FILENO);
     error |= posix_spawnattr_setflags(&attrs, POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT);
 #else
     error |= posix_spawn_file_actions_addclosefrom_np(&actions, STDERR_FILENO + 1);
@@ -432,7 +436,16 @@ nlohmann::json Process::request(const nlohmann::json &message, std::stop_token t
             check(token, deadline);
             const auto newline = impl_->buffered.find('\n');
             if (newline != std::string::npos) {
-                auto result = nlohmann::json::parse(impl_->buffered.substr(0, newline));
+                // Abort before constructing a deeply recursive worker response.
+                auto result = nlohmann::json::parse(
+                    impl_->buffered.substr(0, newline),
+                    [](int depth, nlohmann::json::parse_event_t event, nlohmann::json &) {
+                        using Event = nlohmann::json::parse_event_t;
+                        if (depth >= 128 &&
+                            (event == Event::object_start || event == Event::array_start))
+                            throw std::runtime_error("worker JSON nesting exceeds 128 containers");
+                        return true;
+                    });
                 impl_->buffered.erase(0, newline + 1);
                 if (!result.is_object() || !result.contains("id") || result["id"] != message["id"])
                     throw std::runtime_error("worker response id mismatch");

@@ -1,0 +1,9 @@
+name: development.test
+description: Verify development startup and cleanup policy using disposable fixtures.
+vault: none
+docker_preflight: false
+steps:
+  - id: policy
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/clean/assets/test_policy.py

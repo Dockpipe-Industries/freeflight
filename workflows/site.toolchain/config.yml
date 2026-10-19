@@ -1,0 +1,9 @@
+name: site.toolchain
+description: Provision the task-local official Qt and matching Emscripten pinned in site/toolchain.json site toolchains without changing system installations.
+vault: none
+docker_preflight: false
+steps:
+  - id: provision
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/site.toolchain/assets/provision.py

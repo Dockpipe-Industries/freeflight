@@ -1,0 +1,11 @@
+{
+  "qt": "6.12.0",
+  "emsdk": "5.0.5",
+  "emsdkCommit": "c9ef2c9d6000341d667a32a807ba47ca489d1e1b",
+  "aqt": "3.3.0",
+  "qtSources": {
+    "qtbase": "a951bd163c7b80fc6b8c88d7668fb56abf91c152373e13c10666763238131307",
+    "qtdeclarative": "311f3a2603e1973bb59baef9dfa740a376de713157d4782ee043681e889c9260",
+    "qtsvg": "e4ab39534ec97987b1b9b60ef7f4d3253d5912a69f8c713a01753174a4029331"
+  }
+}

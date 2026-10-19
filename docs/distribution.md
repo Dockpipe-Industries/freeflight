@@ -92,26 +92,13 @@ does not publish anything. No domain, hosting credential or new registry is used
 
 ## MCPB from the same native application
 
-The workflow also produces an MCP Bundle using the official
-[`@anthropic-ai/mcpb` tooling](https://github.com/modelcontextprotocol/mcpb), pinned
-to 2.1.2 in the workflow-local npm lockfile. Tool installation uses `npm ci
---ignore-scripts` under `bin/.local/mcpb-tools`; these are build-time tools, never
-application dependencies. The official Node distribution must retain its npm CLI
-for this packaging step. Native CLI users still do not need npm.
+The workflow also produces an MCP Bundle in the [official ZIP-based format](https://github.com/anthropics/mcpb/blob/2a788100a60db19a6b1c018fb1cf84ae85de9537/README.md). It uses Python's standard-library `zipfile` and validates manifest 0.3 against the unmodified official schema pinned by source commit and SHA-256 under `workflows/package.native/assets/schema/`. The schema and upstream validation fixtures retain their MIT license. The development environment needs the existing pinned `jsonschema` 4.25.1 dependency; no npm packaging tool is installed or shipped.
 
-The [official manifest specification](https://github.com/modelcontextprotocol/mcpb/blob/main/MANIFEST.md)
-provides `server.type: binary`, `${__dirname}` installation paths and a required
-workspace directory picker. FreeFlight uses manifest version 0.3 and the same
-`bin/freeflight --workspace` command. The original native file layout and licenses
-are preserved; this is an alternate archive format of one product.
+The [official manifest specification](https://github.com/anthropics/mcpb/blob/2a788100a60db19a6b1c018fb1cf84ae85de9537/MANIFEST.md) provides `server.type: binary`, `${__dirname}` installation paths and a required workspace directory picker. FreeFlight uses the same `bin/freeflight --workspace` command and native file layout. This is an alternate archive of one product, not a custom distribution format.
 
-The official CLI validates and packs the manifest. A workflow-generated `.mcpbignore` explicitly includes TypeScript `.d.ts` files, which the official packer otherwise excludes despite their being runtime semantic input. The workflow then verifies
-that every archived file matches the native bundle byte for byte, extracts it into
-a fresh directory, checks executable permissions and reruns the installed semantic
-checks. Missing/excluded files or changed hashes fail qualification. The bundle
-is unsigned; no signing keys or credentials are generated. Official Registry
-publication remains a separate authenticated action, permitted only with verified
-artifact URLs and matching checksums.
+The workflow tests the vendored official valid/invalid examples, then writes all bundle files including TypeScript `.d.ts` semantic inputs. ZIP entries preserve Unix executable modes. Every archived file must match its staged original byte for byte, and a fresh extraction must pass the installed semantic checks using its own binaries and runtimes. No archive is retained if these checks fail. The bundle is unsigned. Public Registry submission still requires separately verified asset URLs and publisher authorization.
+
+The build-only official MCPB CLI dependency was removed because the latest reviewed CLI 2.1.2 includes unpatched `node-forge` high-severity vulnerability [GHSA-86w9-cpqp-85rv](https://github.com/advisories/GHSA-86w9-cpqp-85rv). This removes the unused dependency graph rather than suppressing its audit. The high audit threshold remains unchanged; historical CLI-based receipts below describe earlier artifacts only.
 
 MCPB 0.3 declares operating systems but has no dedicated CPU architecture field.
 The artifact filename and description state the exact RID; release discovery and
@@ -138,3 +125,25 @@ Local artifacts, not published releases:
 
 These artifacts predate this qualification note and the trusted-MSBuild dependency update. They do not represent the current worker snapshot. Other platform artifacts, desktop
 host installation, signing and public Registry submission remain unverified.
+
+## Current local server qualification — 2026-10-19
+
+The expanded 12-operation Roslyn worker, optional trusted-MSBuild loader and core
+discovery fix passed `package.native` with checksum-verified official Node 24.22.0.
+Evidence: `bin/.local/package-native-final.log`. Eight installed core protocol tests,
+expanded native Roslyn safe-source suite, SDK-backed native trusted-project suite,
+exact installed C#/TS/JS assertions and official MCPB validation passed. All 610
+MCPB files matched the native bundle; fresh extraction preserved executable modes
+and passed semantic checks. The TypeScript suite separately passed 17/17 under
+Node 24.22.0 (`bin/.local/package-typescript-node24.22.log`).
+
+- `freeflight-osx-arm64-d1bec6d953f07329.tar.gz`: SHA-256 `d0d00ed5ba7514c22c62630436f4e831f1c17ac16880aba5d55b9307c2d7afbe`
+- `freeflight-osx-arm64-aee01a80832a71aa.mcpb`: SHA-256 `aee01a80832a71aa011f5f8803dcf1e723ccc5cd9c5f509b30ebdf32f64e612f`
+
+The official Node archive checksum was
+`6a9724d9b50a5f22b4816cded441b5a8d9ddae546191a5e5b7efa5a5e2ee26d5`
+for `node-v24.22.0-darwin-arm64.tar.gz`, verified before extraction against the
+vendor's versioned `SHASUMS256.txt`. Trusted native testing used an explicitly
+installed SDK; the bundled default remains safe-source and SDK-independent.
+These are local unsigned server artifacts, not a production release or deployed
+website. They predate this note and the Qt website adaptation.

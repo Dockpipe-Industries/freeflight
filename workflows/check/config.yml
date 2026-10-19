@@ -11,3 +11,15 @@ steps:
     kind: host
     cwd: repo
     cmd: dockpipe --workflow test
+  - id: lint
+    kind: host
+    cwd: repo
+    cmd: dockpipe --workflow lint
+  - id: dependency.audit
+    kind: host
+    cwd: repo
+    cmd: dockpipe --workflow dependency.audit
+  - id: registry.check
+    kind: host
+    cwd: repo
+    cmd: dockpipe --workflow registry.check

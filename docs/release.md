@@ -14,8 +14,11 @@ Linux x64/ARM64, Windows x64 and macOS ARM64. These are configured targets; host
 results, not the presence of YAML, establish support. GitHub-hosted compiler and
 OS image revisions remain runner-managed; this is not a bit-reproducibility claim.
 
-The manual **Release verification** workflow reuses CI. It has read-only repository
-permissions and cannot create a GitHub Release. CodeQL uses the same `core.build`
+The manual **Qualified release** workflow validates exact successful hosted CI and
+CodeQL evidence, promotion ancestry and complete prebuilt artifacts. Default mode
+is read-only; explicitly selected publication has scoped ephemeral write permission.
+See [release-automation.md](release-automation.md) for gates and external status.
+CodeQL uses the same `core.build`
 DockPipe task under manual C++ tracing. Dependabot tracks Actions, npm and NuGet
 updates into `js/dev`; it does not replace vulnerability scanning.
 
@@ -78,7 +81,8 @@ complete native server and worker runtimes; test installation and launch; then a
 transport to server.json. The URL must contain `mcp` (the `.mcpb` extension does).
 
 Publisher authentication and namespace ownership must be verified through the
-official publisher flow when the artifact exists. CI currently has no publishing
-permission, token, login action or secret. General DockPipe discovery/configuration contracts are reviewable in DockPipe
+official publisher flow when the artifact exists. CI has no Registry publishing
+token, login action or secret. Manual GitHub Release publication uses only the
+existing ephemeral GitHub token. General DockPipe discovery/configuration contracts are reviewable in DockPipe
 PR #168. Installation and gateway lifecycle remain separate platform work; no
 duplicate FreeFlight store package is created.

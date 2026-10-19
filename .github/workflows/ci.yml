@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-2022, macos-15, ubuntu-24.04-arm]
+        os: [ubuntu-24.04, windows-2022, macos-15, ubuntu-24.04-arm, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     env:
@@ -83,7 +83,7 @@ jobs:
       - name: Release and publication policy
         run: dockpipe --workflow release.policy
       - name: C++23 build
-        run: dockpipe --workflow core.build
+        run: dockpipe --workflow ${{ matrix.os == 'ubuntu-22.04' && 'core.jammy' || 'core.build' }}
       - name: Formatting
         run: dockpipe --workflow lint
       - name: Core protocol and process tests
@@ -105,12 +105,17 @@ jobs:
       - uses: ./.github/actions/setup-native-inputs
       - name: Complete native bundle and installed semantic verification
         run: dockpipe --workflow package.native
+      - name: Clean Ubuntu 22.04 runtime qualification
+        if: matrix.os == 'ubuntu-22.04'
+        run: dockpipe --workflow package.jammy
       - name: Retain qualified native bundles
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: native-${{ matrix.os }}
-          path: bin/.local/packages/
+          name: ${{ matrix.os == 'ubuntu-22.04' && 'preview-ubuntu-22.04-linux-x64' || format('native-{0}', matrix.os) }}
+          path: |
+            bin/.local/packages/
+            bin/.local/jammy-compatibility.json
           if-no-files-found: error
           retention-days: 14
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

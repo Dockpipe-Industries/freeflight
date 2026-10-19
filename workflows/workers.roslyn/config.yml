@@ -19,3 +19,7 @@ steps:
     kind: host
     cwd: repo
     cmd: python3 -B workers/roslyn/test_worker.py dotnet bin/.local/roslyn/bin/FreeFlight.Roslyn/debug/FreeFlight.Roslyn.dll
+  - id: trusted-project-test
+    kind: host
+    cwd: repo
+    cmd: python3 -B workers/roslyn/test_trusted.py dotnet bin/.local/roslyn/bin/FreeFlight.Roslyn/debug/FreeFlight.Roslyn.dll

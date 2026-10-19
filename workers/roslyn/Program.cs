@@ -15,9 +15,14 @@ internal static class Program
 {
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
-    public static async Task Main()
+    public static async Task Main(string[] commandLine)
     {
-        using var engine = new SourceEngine();
+        if (commandLine.Any(argument => argument != "--trusted-msbuild"))
+            throw new ArgumentException("Only --trusted-msbuild is accepted");
+        var trustedMsbuild = commandLine.Contains("--trusted-msbuild", StringComparer.Ordinal);
+        if (trustedMsbuild)
+            Console.Error.WriteLine("WARNING: trusted MSBuild mode can execute repository code during project evaluation. This process is not a sandbox. No restore or production build is requested.");
+        using var engine = new SourceEngine(trustedMsbuild);
         using var gate = new SemaphoreSlim(1);
         var active = new ConcurrentDictionary<string, CancellationTokenSource>();
         var jobs = new List<Task>();
@@ -96,6 +101,9 @@ internal sealed class SourceEngine : IDisposable
     private readonly AdhocWorkspace workspace = new();
     private readonly Dictionary<string, DocumentId> documents = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> fingerprints = new(StringComparer.Ordinal);
+    private readonly bool trustedMsbuild;
+    private string Mode => trustedMsbuild ? "trusted-msbuild" : "safe-source";
+    public SourceEngine(bool trustedMsbuild) => this.trustedMsbuild = trustedMsbuild;
     private ProjectId? projectId;
     private string? root;
     private static readonly HashSet<string> Excluded = new(StringComparer.OrdinalIgnoreCase) { ".git", ".hg", "node_modules", "bin", "obj", ".freeflight" };
@@ -107,18 +115,50 @@ internal sealed class SourceEngine : IDisposable
         {
             languages = new[] { "csharp" },
             operations = new[] { "symbols", "definition", "references", "hover", "diagnostics", "rename" },
-            mode = "safe-source", projectEvaluation = false, edits = "preview-only"
+            mode = Mode,
+            fidelity = Mode,
+            projectEvaluation = trustedMsbuild,
+            edits = "preview-only"
         };
         if (method == "open")
         {
             var requested = Path.GetFullPath(args.GetProperty("root").GetString() ?? throw new ArgumentException("root is required"));
             if (!Directory.Exists(requested)) throw new DirectoryNotFoundException(requested);
-            if (args.TryGetProperty("mode", out var mode) && mode.GetString() != "safe-source")
-                throw new ArgumentException("Only safe-source mode is supported; MSBuild evaluation is disabled");
+            if (args.TryGetProperty("mode", out var mode) && mode.GetString() != Mode)
+                throw new ArgumentException("Workspace mode must match the operator-owned startup mode; requests cannot change trust");
             root = ResolveRoot(requested);
             workspace.ClearSolution();
             documents.Clear();
             fingerprints.Clear();
+            projectId = null;
+            if (trustedMsbuild)
+            {
+                var selectedProject = args.TryGetProperty("project", out var selected) ? selected.GetString() : null;
+                var graph = await TrustedProjectLoader.Load(root, selectedProject, CheckPath, token);
+                workspace.AddSolution(graph);
+                var loadedDocuments = new Dictionary<string, DocumentId>(StringComparer.Ordinal);
+                foreach (var project in workspace.CurrentSolution.Projects)
+                {
+                    foreach (var loadedDocument in project.Documents)
+                    {
+                        var path = CheckPath(loadedDocument.FilePath!);
+                        if (!loadedDocuments.TryAdd(path, loadedDocument.Id))
+                            throw new InvalidOperationException("Linked documents across projects require explicit project selection and are not supported yet");
+                    }
+                }
+                foreach (var entry in loadedDocuments) documents.Add(entry.Key, entry.Value);
+                projectId = workspace.CurrentSolution.ProjectIds[0];
+                await Refresh(token);
+                return new
+                {
+                    root,
+                    mode = Mode,
+                    fidelity = Mode,
+                    projects = workspace.CurrentSolution.ProjectIds.Count,
+                    files = documents.Count,
+                    limitations = "Trusted design-time project evaluation; no analyzers or generators. Restore must already be completed by the operator. Reopen after project graph changes."
+                };
+            }
             projectId = ProjectId.CreateNewId();
             // Only trusted platform assemblies from the worker's own runtime are references.
             var trusted = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") ?? typeof(object).Assembly.Location)
@@ -157,8 +197,11 @@ internal sealed class SourceEngine : IDisposable
         }
         if (method == "diagnostics") return model.GetDiagnostics(cancellationToken: token).Select(d => new
         {
-            code = d.Id, severity = d.Severity.ToString().ToLowerInvariant(), message = d.GetMessage(System.Globalization.CultureInfo.InvariantCulture),
-            location = d.Location.IsInSource ? Location(d.Location) : null, source = "roslyn-safe-source"
+            code = d.Id,
+            severity = d.Severity.ToString().ToLowerInvariant(),
+            message = d.GetMessage(System.Globalization.CultureInfo.InvariantCulture),
+            location = d.Location.IsInSource ? Location(d.Location) : null,
+            source = "roslyn-" + Mode
         }).ToArray();
         var line = args.GetProperty("line").GetInt32();
         var character = args.GetProperty("character").GetInt32();
@@ -169,7 +212,9 @@ internal sealed class SourceEngine : IDisposable
         switch (method)
         {
             case "hover": return new { contents = symbolAt.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat), kind = symbolAt.Kind.ToString(), documentation = symbolAt.GetDocumentationCommentXml(cancellationToken: token) };
-            case "definition": return symbolAt.Locations.Where(l => l.IsInSource).Select(Location).ToArray();
+            case "definition":
+                var sourceDefinition = await SymbolFinder.FindSourceDefinitionAsync(symbolAt, workspace.CurrentSolution, token) ?? symbolAt;
+                return sourceDefinition.Locations.Where(l => l.IsInSource).Select(Location).ToArray();
             case "references":
                 var references = await SymbolFinder.FindReferencesAsync(symbolAt, workspace.CurrentSolution, token);
                 return references.SelectMany(r => r.Locations).Select(r => Location(r.Location)).OrderBy(l => JsonSerializer.Serialize(l), StringComparer.Ordinal).ToArray();
@@ -187,8 +232,12 @@ internal sealed class SourceEngine : IDisposable
                     var oldText = await oldDocument.GetTextAsync(token);
                     var oldFile = CheckPath(oldDocument.FilePath!);
                     var changes = await newDocument.GetTextChangesAsync(oldDocument, token);
-                    edits.Add(new { file = oldFile, expectedSha256 = fingerprints[oldFile],
-                        edits = changes.Select(change => new { range = Range(oldText.Lines.GetLinePositionSpan(change.Span)), newText = change.NewText ?? "" }).ToArray() });
+                    edits.Add(new
+                    {
+                        file = oldFile,
+                        expectedSha256 = fingerprints[oldFile],
+                        edits = changes.Select(change => new { range = Range(oldText.Lines.GetLinePositionSpan(change.Span)), newText = change.NewText ?? "" }).ToArray()
+                    });
                 }
                 return new { preview = true, edits };
             default: throw new ArgumentException($"Unsupported operation: {method}");
@@ -199,7 +248,8 @@ internal sealed class SourceEngine : IDisposable
     {
         var files = new List<string>();
         var pending = new Stack<string>();
-        pending.Push(root!);
+        if (!trustedMsbuild) pending.Push(root!);
+        else files.AddRange(documents.Keys);
         long bytes = 0;
         var entries = 0;
         while (pending.TryPop(out var directory))
@@ -224,6 +274,7 @@ internal sealed class SourceEngine : IDisposable
                 files.Add(path);
             }
         }
+        if (files.Count > MaximumFiles) throw new InvalidOperationException("Workspace exceeds file count limit");
         files.Sort(StringComparer.Ordinal);
         var solution = workspace.CurrentSolution;
         var nextDocuments = new Dictionary<string, DocumentId>(documents, StringComparer.Ordinal);
@@ -251,6 +302,8 @@ internal sealed class SourceEngine : IDisposable
             }
             memory.Position = 0;
             nextFingerprints[file] = Convert.ToHexString(SHA256.HashData(memory.ToArray())).ToLowerInvariant();
+            bytes += trustedMsbuild ? memory.Length : 0;
+            if (bytes > MaximumWorkspaceBytes) throw new InvalidOperationException("Workspace exceeds source size limit");
             var source = SourceText.From(memory, encoding: Encoding.UTF8);
             if (!documents.TryGetValue(file, out var id))
             {

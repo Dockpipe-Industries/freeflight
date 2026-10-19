@@ -1,0 +1,9 @@
+# Dependency audit
+
+Run `dockpipe --workflow dependency.audit` after worker provisioning. npm checks the staged production graph. The NuGet adapter checks the existing Roslyn assets under `bin/.local/roslyn`, including transitive dependencies. It disables automatic restore and does not modify the Roslyn project or lockfile.
+
+Policy matches npm's existing `--audit-level=high`: high and critical vulnerabilities fail; low and moderate findings remain visible in the report. Any command failure, timeout, diagnostic warning/error, missing graph, malformed response, unknown severity or unexpected report schema fails closed. Clean NuGet version-1 results legitimately omit `frameworks`; this case is tested. This scan reports the configured feeds' current knowledge, not a guarantee of absence of vulnerabilities.
+
+The Python standard-library asset is necessary because `dotnet list package --vulnerable` can exit successfully while reporting vulnerabilities. DockPipe YAML and NuGet's command exit status alone cannot enforce the severity policy. The asset only translates this one command's structured result into an exit code (0 passed, 1 actionable findings, 2 audit failure) and writes `bin/.local/reports/nuget-audit.json`. It is invoked by DockPipe, not an additional task runner. Tests run first within the same workflow. No third-party Python package is required.
+
+NuGet JSON output is pinned with `--output-version 1`, following the [official command documentation](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-package-list). An explicit `MSBuildProjectExtensionsPath` points inspection at the artifacts already restored by `workers.roslyn`; this avoids source-tree build output. Run this workflow only on FreeFlight's own reviewed project, not arbitrary workspaces: MSBuild project evaluation remains part of the .NET development toolchain.

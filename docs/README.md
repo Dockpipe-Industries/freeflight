@@ -21,9 +21,12 @@ MCP revisions implemented are 2026-07-28 and legacy 2025-11-25/2025-06-18.
 Modern requests use per-request metadata and `server/discover`; legacy clients
 use `initialize` then `notifications/initialized`. Streamable HTTP is pending.
 
-Roslyn 4.14.0 (MIT) runs inside .NET 10, currently with AdhocWorkspace safe-source
-loading. TypeScript 5.9.3 (Apache-2.0) runs inside Node. Neither worker runs project
-plugins, custom generators or analyzers. See their README files for restrictions.
+Roslyn 4.14.0 (MIT) runs inside .NET 10 with default AdhocWorkspace safe-source
+loading. Explicit startup-only `--trusted-msbuild` enables MSBuildWorkspace project
+evaluation, which can execute repository targets/imports and requires a compatible
+.NET SDK. It must only be used for trusted projects. TypeScript 5.9.3 (Apache-2.0)
+runs inside Node. Semantic compilation excludes repository plugins, custom
+generators and analyzers. See SECURITY.md and worker READMEs for boundaries.
 
 ## Developer setup
 
@@ -87,8 +90,9 @@ Pipelang API, SDK, LSP support or additional language support is claimed today.
 
 ## Known limitations
 
-- C# source-only analysis does not reproduce MSBuild references, project settings,
-  generated files or multi-targeting. Trusted MSBuildWorkspace remains unimplemented.
+- Default C# source-only analysis does not reproduce MSBuild references or project
+  settings. Explicit trusted MSBuildWorkspace mode passes a controlled two-project
+  SDK fixture; broad solution/multi-targeting/generated-source fidelity is pending.
 - Worker root authorization is not an OS sandbox; filesystem races remain possible
   against a hostile concurrent local writer. No source mutation is supported.
 - Discovery scans at most 50,000 entries; worker/project/file limits are documented.

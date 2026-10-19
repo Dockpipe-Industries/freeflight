@@ -2,7 +2,22 @@ name: dependency.audit
 description: Query official dependency vulnerability feeds for the locked worker graphs.
 vault: none
 docker_preflight: false
+dependencies:
+  host:
+    - id: python3
+      command: python3
+      description: Standard-library NuGet audit policy adapter and tests.
+    - id: dotnet
+      command: dotnet
+      description: Query the restored Roslyn dependency graph.
+    - id: npm
+      command: npm
+      description: Audit the staged TypeScript dependency graph.
 steps:
+  - id: policy-test
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/dependency.audit/assets/test_nuget_audit.py
   - id: npm
     kind: host
     cwd: repo
@@ -10,4 +25,4 @@ steps:
   - id: nuget
     kind: host
     cwd: repo
-    cmd: dotnet list workers/roslyn/FreeFlight.Roslyn.csproj package --vulnerable --include-transitive --format json
+    cmd: python3 -B workflows/dependency.audit/assets/nuget_audit.py

@@ -1,0 +1,21 @@
+name: test
+description: Compose FreeFlight test workflows.
+vault: none
+docker_preflight: false
+steps:
+  - id: core.test
+    kind: host
+    cwd: repo
+    cmd: dockpipe --workflow core.test
+  - id: workers.typescript
+    kind: host
+    cwd: repo
+    cmd: dockpipe --workflow workers.typescript
+  - id: workers.roslyn
+    kind: host
+    cwd: repo
+    cmd: dockpipe --workflow workers.roslyn
+  - id: integration.test
+    kind: host
+    cwd: repo
+    cmd: dockpipe --workflow integration.test

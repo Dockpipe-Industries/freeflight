@@ -1,0 +1,13 @@
+name: site.build
+description: FreeFlight site.build operation.
+vault: none
+docker_preflight: false
+steps:
+  - id: directory
+    kind: host
+    cwd: repo
+    cmd: cmake -E make_directory bin/.local/site
+  - id: stage
+    kind: host
+    cwd: repo
+    cmd: cmake -E copy_directory site bin/.local/site

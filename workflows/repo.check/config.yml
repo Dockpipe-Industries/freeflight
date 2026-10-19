@@ -1,0 +1,18 @@
+name: repo.check
+description: FreeFlight repo.check operation.
+vault: none
+docker_preflight: false
+dependencies:
+  host:
+    - id: python3
+      command: python3
+      description: Python with PyYAML validates the existing agent-router schemas.
+steps:
+  - id: diff
+    kind: host
+    cwd: repo
+    cmd: git diff --check
+  - id: layout
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/repo.check/assets/check.py

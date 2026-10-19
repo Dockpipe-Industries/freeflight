@@ -1,0 +1,9 @@
+name: package.native
+description: Assemble and verify a complete native FreeFlight bundle using explicitly provisioned runtime inputs.
+vault: none
+docker_preflight: false
+steps:
+  - id: package
+    kind: host
+    cwd: repo
+    cmd: python3 workflows/package.native/assets/package.py

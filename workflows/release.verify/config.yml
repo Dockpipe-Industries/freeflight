@@ -1,0 +1,13 @@
+name: release.verify
+description: Verify core tests and core-only CPack archive; does not qualify a complete standalone release.
+vault: none
+docker_preflight: false
+steps:
+  - id: test
+    kind: host
+    cwd: repo
+    cmd: ctest --test-dir bin/.local/build -C Release --output-on-failure
+  - id: package
+    kind: host
+    cwd: repo
+    cmd: cpack --config bin/.local/build/CPackConfig.cmake -B bin/.local/packages

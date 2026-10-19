@@ -1,0 +1,13 @@
+name: check
+description: Compose FreeFlight check workflows.
+vault: none
+docker_preflight: false
+steps:
+  - id: repo.check
+    kind: host
+    cwd: repo
+    cmd: dockpipe --workflow repo.check
+  - id: test
+    kind: host
+    cwd: repo
+    cmd: dockpipe --workflow test

@@ -1,0 +1,10 @@
+name: Release verification
+# No publication job exists until complete runtime bundles and store/hosting
+# destinations are verified. This intentionally cannot publish production artifacts.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qualification:
+    uses: ./.github/workflows/ci.yml

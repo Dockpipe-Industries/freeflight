@@ -15,3 +15,7 @@ steps:
     kind: host
     cwd: repo
     cmd: python3 -B workflows/registry.publish/assets/test_publish.py
+  - id: github-api
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/release.policy/assets/test_github_api.py

@@ -1,0 +1,9 @@
+name: site.container
+description: Build a dedicated static-serving container from qualified Qt WebAssembly site output; never deploy it.
+vault: none
+docker_preflight: false
+steps:
+  - id: image
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/site.container/assets/build.py

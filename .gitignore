@@ -1,0 +1,9 @@
+/bin/
+/build/
+/workers/**/obj/
+/workers/**/bin/
+node_modules/
+.DS_Store
+.env
+*.user
+__pycache__/

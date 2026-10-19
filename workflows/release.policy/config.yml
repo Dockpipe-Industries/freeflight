@@ -1,0 +1,17 @@
+name: release.policy
+description: Test release preparation and registry publication safeguards with disposable fixtures; never publish.
+vault: none
+docker_preflight: false
+steps:
+  - id: promotion-and-source
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/release.verify/assets/test_policy.py
+  - id: prepare
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/release.prepare/assets/test_prepare.py
+  - id: registry
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/registry.publish/assets/test_publish.py

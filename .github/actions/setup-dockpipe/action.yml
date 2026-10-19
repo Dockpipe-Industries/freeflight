@@ -1,0 +1,64 @@
+name: Pinned DockPipe
+description: Acquire the official checksum-pinned CLI and core for isolated CI jobs.
+runs:
+  using: composite
+  steps:
+    - name: Acquire verified DockPipe release assets
+      shell: python
+      run: |
+        import hashlib
+        import os
+        import pathlib
+        import platform
+        import tarfile
+        import urllib.request
+        import zipfile
+
+        assets = {
+            ('Linux', 'x86_64'): ('dockpipe_0.6.20_linux_amd64.tar.gz', '3c8f64d3e2679daa405711b2db3737fcf04058a57b383eb075a009866df4c1a9'),
+            ('Linux', 'aarch64'): ('dockpipe_0.6.20_linux_arm64.tar.gz', '72d801d17b9c255a14cee26ddc5ab7b93e4323e173f44bda02305ac291fbe7b2'),
+            ('Darwin', 'arm64'): ('dockpipe_0.6.20_darwin_arm64.tar.gz', '3dd04f078bf32077e0d98a1a0736806298db5141be48976ede5f11ef3eef88a0'),
+            ('Darwin', 'x86_64'): ('dockpipe_0.6.20_darwin_amd64.tar.gz', '55fef582d56f9d3d4de9e9ae387069c4d8dae714ccda80c8b379fc9c90fecac5'),
+            ('Windows', 'AMD64'): ('dockpipe_0.6.20_windows_amd64.zip', '7f72bb513f31293d16afd27f4a4526e48f518ddc59c1c531fc9728e811152e5a'),
+        }
+        root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'freeflight-dockpipe-0.6.20'
+        binary = root / 'bin'
+        templates = root / 'templates'
+        binary.mkdir(parents=True)
+        templates.mkdir()
+        base = 'https://github.com/Dockpipe-Industries/dockpipe/releases/download/v0.6.20-staging.39285769512.1.0399bb37bb7d/'
+
+        def acquire(name, digest, destination):
+            archive = root / name
+            urllib.request.urlretrieve(base + name, archive)
+            actual = hashlib.sha256(archive.read_bytes()).hexdigest()
+            if actual != digest:
+                raise RuntimeError(f'Checksum mismatch for {name}')
+            if name.endswith('.zip'):
+                with zipfile.ZipFile(archive) as bundle:
+                    for member in bundle.namelist():
+                        target = (destination / member).resolve()
+                        if not target.is_relative_to(destination.resolve()):
+                            raise RuntimeError('Unsafe archive path')
+                    bundle.extractall(destination)
+            else:
+                with tarfile.open(archive) as bundle:
+                    bundle.extractall(destination, filter='data')
+
+        name, digest = assets[(platform.system(), platform.machine())]
+        acquire(name, digest, binary)
+        acquire('dockpipe-core-0.6.20.tar.gz', 'f4ed4d89dc2202ac5f9638bd534a2e238df901dfe0c1b8e963796adf73fe7b33', templates)
+        executable = 'dockpipe.exe' if os.name == 'nt' else 'dockpipe'
+        matches = list(binary.rglob(executable))
+        if len(matches) != 1:
+            raise RuntimeError('Expected one DockPipe executable')
+        with open(os.environ['GITHUB_PATH'], 'a', encoding='utf-8') as output:
+            output.write(str(matches[0].parent) + '\n')
+        with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+            output.write(f'DOCKPIPE_GLOBAL_ROOT={root}\n')
+            output.write('DOCKPIPE_COMPILE_DEPS=0\n')
+    - name: Verify CLI and compile project workflows
+      shell: bash
+      run: |
+        dockpipe --version
+        dockpipe package compile workflows --from workflows

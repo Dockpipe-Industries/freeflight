@@ -1,0 +1,9 @@
+name: dev
+description: Start the built stdio server with an explicitly selected development configuration.
+vault: none
+docker_preflight: false
+steps:
+  - id: server
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/dev/assets/start.py

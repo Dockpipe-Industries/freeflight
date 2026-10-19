@@ -1,0 +1,9 @@
+name: format
+description: Format authored C++ using the pinned clang-format toolchain.
+vault: none
+docker_preflight: false
+steps:
+  - id: cpp
+    kind: host
+    cwd: repo
+    cmd: clang-format -i src/main.cpp src/server.cpp src/process.cpp include/freeflight/server.hpp include/freeflight/process.hpp include/freeflight/path.hpp tests/process.cpp

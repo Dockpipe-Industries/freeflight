@@ -1,0 +1,9 @@
+name: registry.check
+description: Validate draft MCP Registry metadata against the pinned official schema; does not publish.
+vault: none
+docker_preflight: false
+steps:
+  - id: metadata
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/registry.check/assets/validate.py

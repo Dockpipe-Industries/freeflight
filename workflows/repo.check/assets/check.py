@@ -5,7 +5,7 @@ import re
 import yaml
 
 root = Path(__file__).resolve().parents[3]
-required = ["AGENTS.md", "LICENSE", "README.md", "VERSION", "CMakeLists.txt",
+required = [".gitattributes", "AGENTS.md", "LICENSE", "README.md", "VERSION", "CMakeLists.txt",
             "dockpipe.config.json", "docs/acceptance.md", "docs/task-log.md",
             "src/main.cpp", "site/index.html", "workflows/core.build/config.yml"]
 required += ["docs/agents/index.yaml", "docs/agents/task-index.yaml", "docs/agents/README.md",

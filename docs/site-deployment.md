@@ -1,5 +1,59 @@
 # Dedicated site container: operator handoff
 
+## Staging and production preparation
+
+`dockpipe --workflow site.deploy.prepare` validates local delivery inputs and emits
+an isolated Compose project plus a preparation receipt under `bin/.local/site-delivery`.
+Set `FREEFLIGHT_DEPLOY_INPUT` to an operator-owned JSON file containing:
+
+```json
+{
+  "environment": "staging",
+  "sourceCommit": "<40-character-qualified-source-commit>",
+  "loopbackPort": 18080,
+  "containerReceipt": "/absolute/container/verification.json",
+  "containerArchive": "/absolute/container/freeflight-site-image.tar.gz",
+  "containerArchiveSha256": "<independently-obtained-sha256>",
+  "auditReceipt": "/absolute/audit/verification.json",
+  "auditReport": "/absolute/audit/vulnerabilities.json",
+  "correspondingSources": "/absolute/qt-corresponding-sources.zip",
+  "correspondingSourcesSha256": "<independently-obtained-sha256>"
+}
+```
+
+Refresh remote refs through the existing approved Git connection first. The workflow
+checks local promotion ancestry/tree identity, container environment and hostname,
+archive and audit binding, and the source archive digest. It does not authenticate
+hosted receipts or replace hosted qualification. Hashes must come from the exact
+successful source run, not from an untrusted artifact supplier. A prepared receipt
+is explicitly not deployment authorization or a remote-preflight pass.
+
+For `production`, it additionally requires a stable numeric VERSION, a matching
+`vVERSION` tag, and identical qualified source/tag/master trees. RC2 preview inputs
+are rejected. Use the production site's separately qualified image; staging and
+production images are not interchangeable. Production preparation does not publish
+a release, promote master, activate content, or configure DNS.
+
+Generated Compose projects are `freeflight-staging` or `freeflight-production`,
+with the exact image ID and a loopback-only port. The candidate port 18080 is not a
+reservation: check it and host capacity before activation. Preserve read-only
+filesystem, UID 101, dropped capabilities and resource limits. No remote command,
+image loading, service startup or credential access occurs in this workflow.
+
+Staging activation has owner approval, including its exact hostname route.
+Operator access and trusted host identity remain prerequisites. Production-specific
+DNS, certificate, strict SNI/Host routing and backend changes require separate
+approval; never relax authenticated origin TLS or replace another site's receiver.
+Use the existing infrastructure owner's change path. Keep private infrastructure
+addresses, vault references and deployment state outside this public repository.
+
+Before any activation, verify fresh hosted CI/CodeQL evidence, the remote artifact
+hash/image ID, corresponding-source availability, host/runtime/port readiness and
+an environment-specific rollback plan. After activation, verify exact HTTPS source
+identity, served hashes, browser/Wasm behavior and unchanged existing site behavior.
+
+## Infrastructure contract
+
 This note is a proposed handoff, not an installed deployment workflow or evidence
 of hosted readiness. No remote command, credential access, pairing, host change,
 DNS update or deployment was performed for this assessment.

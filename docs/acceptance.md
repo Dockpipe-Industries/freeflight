@@ -204,3 +204,13 @@ UX is a separate, unreleased change and does not claim private-solution qualific
 - [ ] Hosted Linux baseline reproduction and corrected cross-platform qualification.
 - [ ] Operator verifies the original Linux solution/test project and navigation control.
 - [ ] Separate promotion/publication approval and normal protected promotion.
+
+## Consolidated dependency review (2026-10-20)
+
+TypeScript 6.0.3: 34/34 worker tests passed on macOS ARM64 / Node 24.22.0,
+including resource boundaries, resolution refresh, exact semantic results and
+read-only previews. Baseline includes external compiler-input repair a446d37.
+Combined native and hosted qualification is pending. TypeScript 7.0.2 and StringTools
+18.11.0 remain held for API and net10.0 incompatibility respectively; see task log.
+Setup-python v7.0.0 has exact-head green bot CI; consolidated workflow publication
+is pending existing workflow-write permissions. This is not merge/release approval.

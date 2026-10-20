@@ -705,3 +705,28 @@ The initial development push was rejected because the existing GitHub credential
 cannot update workflow YAML. It did not update the remote branch. The unpublished
 commit was amended to leave CI YAML unchanged and invoke the baseline from existing
 DockPipe package.native composition instead. No credential scope was expanded.
+
+## 2026-10-20 — Consolidated dependency compatibility review
+
+The user requested an isolated consolidated draft PR. The review branch starts at
+`a446d375906134ad88ff38fad0720d21bae5e9ba`, preserving the qualified external compiler
+input repair. TypeScript 6.0.3 retains the classic JavaScript Language Service API
+and passes all 34 current worker tests on macOS ARM64 with Node 24.22.0 through
+`dockpipe --workflow workers.typescript`. The pinned manifest and lockfile use the
+official registry tarball and SHA-512 integrity. Combined qualification is pending.
+
+PR #6 (`0b9be272f755910fb793c1a0b9e16c59232abf7f`) remains held: TypeScript 7.0.2
+exports version metadata at its root and separate unstable native APIs, not the
+classic Language Service consumed by this worker. No backend migration is included.
+PR #18 (`f2e4c0e2ebd64a0483da79e276d2529dd42509e3`) remains held: the official
+StringTools 18.11.0 buildTransitive target explicitly warns that net10.0 is unsupported
+and requests net11.0. Job 118403733498 confirms build/basic worker tests pass but
+`integration.real` rejects that unsupported framework warning during trusted loading.
+Retain StringTools 17.14.28 with the aligned Microsoft.Build 17.14.28 references,
+ExcludeAssets=runtime and PrivateAssets=all; no warning suppression or target bump.
+
+PR #19 (`5297978a530e56933cb214cb608ffb9003b2e25d`) has ten successful checks. Its
+five setup-python replacements use the verified v7.0.0 commit
+`5fda3b95a4ea91299a34e894583c3862153e4b97`. Those changes are prepared locally for
+combined testing but publication is pending the existing workflow-write permission
+boundary. No credential or permission change, merge, closure or release is authorized.

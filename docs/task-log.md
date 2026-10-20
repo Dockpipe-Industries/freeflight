@@ -456,3 +456,12 @@ verified Linux tar freeflight-linux-x64-64b8711f25d8ceae.tar.gz has SHA-256
 43030e2d097924f35e018489d7ebf707fd22575735edd33ccdc97ffd15db067a and matches
 the native/MCPB source receipts and clean Ubuntu/Fedora tests. It is not published.
 DockPipe Flatpak run 39342951155 completed successfully at 15eafc8.
+
+## 2026-10-20 — Real Dependabot branch-prefix regression
+
+Post-publication comparison with actual PR #6 exposed that npm's Dependabot branch
+prefix is npm_and_yarn, while the package ecosystem key is npm. Added an explicit
+branch-to-ecosystem mapping and tests using the real npm/nuget branch shapes; fake
+npm-prefixed branches remain rejected. This workflow-only correction does not
+change the published ba0c4ce runtime. It follows the ordinary protected promotion
+chain with fresh checks; no permission or branch-protection exception was added.

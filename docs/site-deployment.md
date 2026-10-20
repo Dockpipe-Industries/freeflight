@@ -1,5 +1,15 @@
 # Dedicated site container: operator handoff
 
+## Architecture review hold
+
+The owner requested the actual DockPipe Cloud provisioning and delivery pattern.
+The manual receiver/key/listener setup described below is withdrawn as an operator
+procedure. Do not install it or enable the deployment job. PR #35 remains draft;
+its privileged container activation implementation is a tested prototype, not the
+accepted deployment architecture. See [the source-based alignment plan](site-deployment-alignment.md).
+Release publication qualification remains independently useful. No infrastructure
+or production change is authorized by this document.
+
 ## Pipeline publication and activation
 
 `.github/workflows/staging.yml` runs automatically on canonical staging pushes.

@@ -257,3 +257,10 @@ preparation is separate from activation: no hosted FreeFlight website or new RC2
 prerelease is established by prepared files or local validation.
 The preceding .NET 10 head 3a8ff3f passed all ten hosted checks, including all five
 platforms, both sites and CodeQL. A fresh hosted run must qualify this RC2 revision.
+
+PR #35 implementation 77e00b5 passed all ten hosted checks (CI 39454236338,
+CodeQL 39454236572) and 78 local policy tests. It remains draft and unmerged.
+The subsequent Cloud architecture comparison places deployment on hold: its
+manual privileged receiver setup is withdrawn pending alignment with Cloud's
+state-owned identities and unprivileged static delivery. Test success is not
+evidence of deployment readiness, infrastructure setup or publication.

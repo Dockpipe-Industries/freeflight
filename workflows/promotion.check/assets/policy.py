@@ -10,6 +10,7 @@ from pathlib import Path
 BOT_ID = 49699333
 BOT = 'dependabot[bot]'
 PROMOTIONS = {'dev': 'js/dev', 'staging': 'dev', 'master': 'staging'}
+BRANCH_ECOSYSTEMS = {'npm_and_yarn': 'npm', 'nuget': 'nuget', 'github_actions': 'github_actions'}
 PATHS = {
     'npm': {'workers/typescript/package.json', 'workers/typescript/package-lock.json'},
     'nuget': {'workers/roslyn/FreeFlight.Roslyn.csproj', 'workers/roslyn/packages.lock.json'},
@@ -92,9 +93,9 @@ def validate(event_name, event, repository, actor, actor_id, changes=None):
     user = pr['user']
     require(user.get('login') == BOT and user.get('id') == BOT_ID and user.get('type') == 'Bot', 'PR author is not authentic Dependabot')
     parts = head['ref'].split('/')
-    require(len(parts) >= 3 and parts[0] == 'dependabot' and parts[1] in PATHS, 'Unexpected Dependabot branch')
+    require(len(parts) >= 3 and parts[0] == 'dependabot' and parts[1] in BRANCH_ECOSYSTEMS, 'Unexpected Dependabot branch')
     require(changes is not None, 'Dependency diff is required')
-    dependency_changes(parts[1], changes)
+    dependency_changes(BRANCH_ECOSYSTEMS[parts[1]], changes)
     return 'Authentic dependency-only Dependabot proposal to dev; all qualification checks still required'
 
 

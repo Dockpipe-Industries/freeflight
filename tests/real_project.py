@@ -107,13 +107,9 @@ with tempfile.TemporaryDirectory(prefix='real-roslyn-', dir=generated) as direct
         for path in inputs:
             if path.suffix == '.cs':
                 diagnostics = query('diagnostics', file=str(root / path.name))
-                if path.name == 'TrustedProjectLoader.cs':
-                    # Roslyn reports the real project's existing unused namespace import.
-                    assert len(diagnostics) == 1 and diagnostics[0]['code'] == 'CS8019' and diagnostics[0]['severity'] == 'hidden', diagnostics
-                    original = path.read_text(encoding='utf-8')
-                    assert diagnostics[0]['location']['range']['start'] == position(original, original.index('using Microsoft.CodeAnalysis.Text;')), diagnostics
-                else:
-                    assert diagnostics == [], (path.name, diagnostics)
+                # The trusted loader now uses Microsoft.CodeAnalysis.Text for its
+                # bounded initial snapshot; that import is no longer unused.
+                assert diagnostics == [], (path.name, diagnostics)
         # Modify only the disposable copy and verify exact live compiler error location.
         broken = semantic + '\ninternal sealed class RealProjectDiagnosticProbe { public int Value => "invalid"; }\n'
         (root / 'SemanticQueries.cs').write_text(broken, encoding='utf-8')

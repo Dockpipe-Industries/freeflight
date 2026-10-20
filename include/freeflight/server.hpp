@@ -34,6 +34,11 @@ class Server {
     std::vector<std::filesystem::path> active_;
     Json candidates_ = Json::array();
     Json resources_;
+    bool trustedCsharp_ = false;
+    std::vector<std::filesystem::path> trustedRoots_;
+    bool trusts(const std::filesystem::path &root) const;
+    std::string defaultProject_;
+    std::map<std::filesystem::path, std::string> projects_;
     std::map<std::filesystem::path, std::string> associations_;
     std::map<std::string, std::vector<std::string>> commands_;
     std::map<std::string, Engine> engines_;

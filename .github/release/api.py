@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """GitHub Actions API glue; all reusable release validation is owned by DockPipe."""
 import hashlib
+from datetime import datetime
 import json
 import os
 from pathlib import Path
@@ -82,12 +83,31 @@ def promotion_evidence(pulls):
         event = events[0]
         sha = event.get('commit_id', '')
         require(isinstance(sha, str) and re.fullmatch('[a-f0-9]{40}', sha)
-                and event.get('created_at') == pull['merged_at']
                 and event.get('commit_url') == API + '/commits/' + sha,
-                'Merge event commit, repository or timestamp mismatch')
+                'Merge event commit or repository mismatch')
+        # GitHub records the timeline event separately from merging the PR.
+        # Retain a conservative audit bound, not exact-second identity.
+        try:
+            merged_at = datetime.strptime(pull['merged_at'], '%Y-%m-%dT%H:%M:%SZ')
+            recorded_at = datetime.strptime(event['created_at'], '%Y-%m-%dT%H:%M:%SZ')
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError('Invalid promotion timestamp') from error
+        require(0 <= (recorded_at - merged_at).total_seconds() <= 60,
+                'Merge event recording delay exceeds audit bound')
+        commit = request('/commits/' + sha)
+        require(isinstance(commit, dict), 'Invalid promotion commit response')
+        parents = commit.get('parents', [])
+        require(commit.get('sha') == sha and commit.get('url') == API + '/commits/' + sha
+                and isinstance(parents, list) and len(parents) == 2
+                and all(isinstance(parent, dict) and isinstance(parent.get('sha'), str)
+                        and re.fullmatch('[a-f0-9]{40}', parent['sha'])
+                        and parent.get('url') == API + '/commits/' + parent['sha'] for parent in parents)
+                and parents[1]['sha'] == head.get('sha') and parents[0]['sha'] != parents[1]['sha'],
+                'Promotion merge commit does not corroborate the exact PR head')
         # 2026-03-10 removed merge_commit_sha from every PR response. Keep the
         # policy's internal normalized field plus its authoritative source evidence.
-        result.append({**pull, 'merge_commit_sha': sha, 'merge_event': event})
+        result.append({**pull, 'merge_commit_sha': sha, 'merge_event': event,
+                       'merge_commit_evidence': {'sha': sha, 'url': commit['url'], 'parents': parents}})
     return result
 
 

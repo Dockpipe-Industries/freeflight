@@ -80,3 +80,12 @@ other directories, normalized collisions and special files are rejected before a
 files are extracted; existing outputs are never overwritten. The release-policy
 suite covers this layout contract. Hosted verification 39374125749 exposed the
 previous mismatch before publication; a successful later run must establish repair.
+
+Promotion timeline timestamps are audit metadata, not commit identity: PR #28's
+single merge event was recorded one second after `merged_at`. The collector permits
+0–60 seconds of recording delay, then independently fetches the canonical commit
+and requires its exact SHA/repository URL and two-parent merge with the PR's exact
+head as second parent. The 60-second limit is a conservative review boundary, not
+an asserted GitHub guarantee. Invalid/backwards/larger delays, foreign URLs, wrong
+commits, non-merge commits and wrong parent identities fail closed. Existing source
+ancestry, identical-tree and unique-event gates continue to apply.

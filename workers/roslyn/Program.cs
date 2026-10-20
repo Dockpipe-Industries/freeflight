@@ -77,6 +77,7 @@ internal static class Program
                         finally { gate.Release(); }
                     }
                     catch (OperationCanceledException) { Reply(new { id, error = new { message = "Request cancelled" } }); }
+                    catch (ProjectLoadException ex) { Reply(new { id, error = ex.Detail }); }
                     catch (ResourceLimitException ex) { Reply(new { id, error = ex.Detail }); }
                     catch (Exception ex) { Reply(new { id, error = new { message = ex.Message } }); }
                     finally { active.TryRemove(key, out _); cts.Dispose(); }
@@ -156,6 +157,8 @@ internal sealed class SourceEngine : IDisposable
     private readonly bool trustedMsbuild;
     private string Mode => trustedMsbuild ? "trusted-msbuild" : "safe-source";
     public SourceEngine(bool trustedMsbuild) => this.trustedMsbuild = trustedMsbuild;
+    private string? selectedProject;
+    private List<LoadWarning> loadWarnings = [];
     private ProjectId? projectId;
     private string? root;
     private static readonly HashSet<string> Excluded = new(StringComparer.OrdinalIgnoreCase) { ".git", ".hg", "node_modules", "bin", "obj", ".freeflight" };
@@ -163,6 +166,8 @@ internal sealed class SourceEngine : IDisposable
 
     public async Task<object> Invoke(string method, JsonElement args, CancellationToken token)
     {
+        if (method != "open" && new[] { "mode", "project", "trustedMsbuild", "trusted-msbuild", "csharp" }.Any(name => args.TryGetProperty(name, out _)))
+            throw new ArgumentException("Project selection and trust cannot be changed by semantic requests");
         if (method != "open" && args.TryGetProperty("resources", out _))
             throw new ArgumentException("Resource settings may only be supplied by the core when opening a workspace");
         if (method == "capabilities") return new
@@ -172,6 +177,9 @@ internal sealed class SourceEngine : IDisposable
             mode = Mode,
             fidelity = Mode,
             projectEvaluation = trustedMsbuild,
+            selectedProject,
+            loadWarnings,
+            degradedFidelity = !trustedMsbuild || loadWarnings.Count > 0,
             edits = "preview-only",
             refreshStats = new { bytesRead, reusedSnapshots, invalidationGeneration }
         };
@@ -189,11 +197,15 @@ internal sealed class SourceEngine : IDisposable
             documents.Clear();
             fingerprints.Clear();
             projectId = null;
+            selectedProject = null;
+            loadWarnings = [];
             if (trustedMsbuild)
             {
-                var selectedProject = args.TryGetProperty("project", out var selected) ? selected.GetString() : null;
-                var graph = await TrustedProjectLoader.Load(root, selectedProject, CheckPath, resources, token);
-                workspace.AddSolution(graph);
+                var requestedProject = args.TryGetProperty("project", out var selected) ? selected.GetString() : null;
+                var graph = await TrustedProjectLoader.Load(root, requestedProject, CheckPath, resources, token);
+                workspace.AddSolution(graph.Solution);
+                selectedProject = graph.SelectedProject;
+                loadWarnings = graph.Warnings;
                 var loadedDocuments = new Dictionary<string, DocumentId>(StringComparer.Ordinal);
                 foreach (var project in workspace.CurrentSolution.Projects)
                 {
@@ -207,11 +219,24 @@ internal sealed class SourceEngine : IDisposable
                 foreach (var entry in loadedDocuments) documents.Add(entry.Key, entry.Value);
                 projectId = workspace.CurrentSolution.ProjectIds[0];
                 await Refresh(token);
+                // Compilation is now safe to inspect: all source text came through
+                // the bounded snapshot reader, and analyzer/generator references
+                // were removed. A partial graph without core types is not usable.
+                foreach (var project in workspace.CurrentSolution.Projects)
+                {
+                    var compilation = await project.GetCompilationAsync(token);
+                    if (compilation is null || compilation.GetSpecialType(SpecialType.System_Object).TypeKind == TypeKind.Error)
+                        throw new ProjectLoadException("project_load_failed", "Project graph cannot resolve System.Object: " + project.Name,
+                            selectedProject, "Inspect the installed targeting packs and required references; the partial graph is not usable.");
+                }
                 return new
                 {
                     root,
                     mode = Mode,
                     fidelity = Mode,
+                    selectedProject,
+                    loadWarnings,
+                    degradedFidelity = loadWarnings.Count > 0,
                     projects = workspace.CurrentSolution.ProjectIds.Count,
                     files = documents.Count,
                     limitations = "Trusted design-time project evaluation; no analyzers or generators. Restore must already be completed by the operator. Reopen after project graph changes."
@@ -227,7 +252,7 @@ internal sealed class SourceEngine : IDisposable
                 compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary),
                 parseOptions: new CSharpParseOptions(LanguageVersion.CSharp12), metadataReferences: trusted));
             await Refresh(token);
-            return new { root, mode = "safe-source", files = documents.Count, limitations = "One source compilation; project settings, dependencies, generated sources and analyzers are not evaluated." };
+            return new { root, mode = "safe-source", fidelity = Mode, selectedProject, loadWarnings, degradedFidelity = true, files = documents.Count, limitations = "One source compilation; project settings, dependencies, generated sources and analyzers are not evaluated." };
         }
         if (root is null || projectId is null) throw new InvalidOperationException("Open a workspace first");
         if (method is not ("symbols" or "definition" or "references" or "hover" or "diagnostics" or "rename" or "implementations" or "typeInfo" or "signatureHelp" or "workspaceSymbols" or "callHierarchy" or "typeHierarchy"))
@@ -252,7 +277,11 @@ internal sealed class SourceEngine : IDisposable
                 if (node is not (MemberDeclarationSyntax or VariableDeclaratorSyntax)) continue;
                 var symbol = model.GetDeclaredSymbol(node, token);
                 if (symbol is null || symbol.IsImplicitlyDeclared) continue;
-                var location = symbol.Locations.FirstOrDefault(l => l.IsInSource);
+                // Namespace and partial-type symbols merge declarations across files.
+                // An outline location belongs to this declaration, not whichever
+                // location happens to be first on the shared semantic symbol.
+                var location = symbol.Locations.FirstOrDefault(l => l.IsInSource &&
+                    l.SourceTree == node.SyntaxTree && node.Span.Contains(l.SourceSpan));
                 if (location is not null) found.Add(new { name = symbol.Name, kind = symbol.Kind.ToString(), detail = symbol.ToDisplayString(), location = Location(location) });
             }
             return found;

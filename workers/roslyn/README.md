@@ -94,7 +94,9 @@ Large real solution fidelity and performance remain release blockers.
 
 ## Explicitly trusted project mode
 
-The operator can add `--trusted-msbuild` to the configured absolute worker argv.
+The preferred operator interface is top-level `trustedRoots: ["/absolute/trusted/root"]`
+with bundled workers; see [workspace configuration](../../docs/workspaces.md#explicit-trusted-c-configuration-development-repair).
+Advanced explicit worker configurations can still add `--trusted-msbuild` to their argv.
 This is startup authorization for every root that worker opens. No request can
 turn it on or switch modes; normal bundled `--workspace` startup remains safe-source.
 Capabilities report `fidelity` and `mode` as `safe-source` or `trusted-msbuild`.
@@ -112,13 +114,14 @@ MSBuild host; process supervision remains the final timeout boundary.
 Trusted mode uses Microsoft.CodeAnalysis.Workspaces.MSBuild 5.9.0 and
 Microsoft.Build.Locator 1.11.2. MSBuild references are pinned to 17.14.28 with runtime
 assets excluded; Locator selects the operator's installed SDK. Explicit crypto
-10.0.13 pins replace vulnerable transitive versions. NuGet vulnerability warnings
-remain errors. The trusted mode requires a compatible .NET SDK and the repository's
+10.0.13 pins replace vulnerable transitive versions. Dependency vulnerability checks on FreeFlight itself remain strict. Trusted
+workspace load warnings are preserved separately as described below. The trusted mode requires a compatible .NET SDK and the repository's
 necessary targeting packs/workloads. The standalone bundle remains SDK-free for
 safe-source mode; it does not contain a complete SDK for trusted evaluation.
 
 `open` accepts an optional root-relative `project` ending in `.csproj` or `.sln`.
-Without it, the root must contain exactly one solution, or exactly one C# project.
+Without it, bounded recursive discovery requires one solution, or one C# project
+when no solutions exist. Ambiguity returns candidate paths and selection guidance.
 The worker never requests restore or a production build. Restore dependencies
 explicitly before opening. Design-time settings disable compiler/analyzer execution
 and NET analyzers; all analyzer/generator references are removed before semantic
@@ -130,7 +133,7 @@ symlinks. Limits also include 256 projects. Unsupported/missing files fail loadi
 linked documents shared between projects currently fail rather than picking a
 project silently. Multi-targeted projects, generated sources, arbitrary custom SDKs,
 VB projects and large real solutions are not qualified. Content edits refresh;
-changes to project configuration or the project graph require reopening. No analyzer
+changes to project configuration or the project graph require explicit reload or reopening. No analyzer
 diagnostics or source-generator output are provided.
 
 `dockpipe --workflow workers.roslyn` runs both suites. The trusted test creates and
@@ -221,3 +224,18 @@ MSBuild](https://learn.microsoft.com/en-us/visualstudio/msbuild/find-and-use-msb
 The [.NET Framework developer guide](https://learn.microsoft.com/en-us/dotnet/framework/install/guide-for-developers)
 explains the separate targeting/developer packs; installing only a later runtime
 does not supply every older target's reference assemblies.
+
+## Warning classification repair
+
+Roslyn's public workspace diagnostic can lose the underlying MSBuild warning
+severity ([upstream issue 75182](https://github.com/dotnet/roslyn/issues/75182)).
+An isolated restored fixture with NU1603/NU1903/NU1701 Warning entries reproduces
+this on the pinned 5.9.0 worker. Recovery requires the exact diagnostic message and
+project path to match a bounded, project-bound assets-file Warning record
+for one of those three codes. No substring-based blanket Failure suppression is
+used. Restore Error records and unmatched workspace failures reject loading. Supported
+binary-logger replay also rejects real MSBuild errors (including promoted warnings)
+and missing evaluated assets; no log is uploaded or intentionally retained.
+`selectedProject`, `loadWarnings`, `degradedFidelity` and limitations are returned
+by open/capabilities. Vulnerability warnings retain their full actionable message.
+This is graph loading tolerance, not a dependency security override or remediation.

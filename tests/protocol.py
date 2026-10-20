@@ -56,6 +56,75 @@ class ProtocolTests(unittest.TestCase):
         self.assertTrue(tools[0]["annotations"]["readOnlyHint"])
         self.assertFalse(tools[2]["annotations"]["readOnlyHint"])
 
+    def test_csharp_operator_policy_validation(self):
+        for policy in ([], None, {"mode": True}, {"mode": "trust-me"},
+                       {"unknown": "value"}, {"project": "App.csproj"},
+                       {"mode": "trusted-msbuild", "project": "../App.csproj"},
+                       {"mode": "trusted-msbuild", "project": "/App.csproj"},
+                       {"mode": "trusted-msbuild", "project": "x.json"}):
+            config = self.root / "invalid-csharp.json"
+            config.write_text(json.dumps({"roots": [str(self.root)], "engines": {}, "csharp": policy}))
+            result = subprocess.run([BINARY, "--config", str(config)], input="",
+                                    capture_output=True, text=True, timeout=5)
+            self.assertNotEqual(result.returncode, 0, policy)
+        self.assertTrue(self.tool("workspace.open", {"root": str(self.root),
+            "project": "App.csproj"})["isError"])
+        for name in ("mode", "trustedMsbuild", "csharp"):
+            self.assertTrue(self.tool("workspace.open", {"root": str(self.root),
+                name: "trusted-msbuild"})["isError"])
+
+    def test_trust_is_per_root_and_startup_only(self):
+        trusted, readonly = self.root / "trusted", self.root / "readonly"
+        trusted.mkdir(); readonly.mkdir()
+        worker = self.root / "trust.py"
+        worker.write_text("import json,sys\nfor line in sys.stdin:\n"
+            " r=json.loads(line)\n"
+            " v={'operations':[]} if r['method']=='capabilities' else {'trusted':'--trusted-msbuild' in sys.argv}\n"
+            " print(json.dumps({'id':r['id'],'result':v}),flush=True)\n")
+        self.config.write_text(json.dumps({"roots": [str(self.root)], "trustedRoots": [str(trusted)],
+            "engines": {"csharp": [sys.executable, str(worker)]}}))
+        self.restart(["--config", str(self.config)])
+        for root, expected in ((self.root, False), (trusted, True), (readonly, False)):
+            self.assertFalse(self.tool("workspace.open", {"root": str(root)})["isError"])
+            result = self.tool("engine.capabilities", {"root": str(root), "language": "csharp"})
+            self.assertEqual(result["structuredContent"]["analysis"]["trusted"], expected)
+        for policy in ([str(self.root.parent)], ["relative"], "all", [False]):
+            config = self.root / "invalid-trust.json"
+            config.write_text(json.dumps({"roots": [str(self.root)], "trustedRoots": policy, "engines": {}}))
+            result = subprocess.run([BINARY, "--config", str(config)], input="", capture_output=True, text=True, timeout=5)
+            self.assertNotEqual(result.returncode, 0)
+
+    def test_csharp_selection_reload_and_status(self):
+        worker = self.root / "policy.py"
+        worker.write_text("import json,sys,os\nfor line in sys.stdin:\n"
+            " r=json.loads(line)\n"
+            " v={'operations':['identity']} if r['method']=='capabilities' else "
+            "{'pid':os.getpid(),'params':r['params'],'argv':sys.argv}\n"
+            " print(json.dumps({'id':r['id'],'result':v}),flush=True)\n")
+        (self.root / "source").mkdir()
+        (self.root / "source/Architecture.sln").write_text("fixture")
+        (self.root / "Other.csproj").write_text("fixture")
+        self.config.write_text(json.dumps({"roots": [str(self.root)],
+            "trustedRoots": [str(self.root)], "csharp": {"project": "source/Architecture.sln"},
+            "engines": {"csharp": [sys.executable, str(worker)]}}))
+        self.restart(["--config", str(self.config)])
+        args = {"root": str(self.root), "language": "csharp"}
+        first = self.tool("engine.capabilities", args)["structuredContent"]["analysis"]
+        self.assertEqual(first["params"]["project"], "source/Architecture.sln")
+        self.assertEqual(first["argv"][-1], "--trusted-msbuild")
+        self.assertTrue(self.tool("workspace.open", {"root": str(self.root), "project": "Other.csproj"})["isError"])
+        self.assertFalse(self.tool("workspace.open", {"root": str(self.root), "project": "Other.csproj", "reload": True})["isError"])
+        second = self.tool("engine.capabilities", args)["structuredContent"]["analysis"]
+        self.assertNotEqual(first["pid"], second["pid"])
+        self.assertEqual(second["params"]["project"], "Other.csproj")
+        status = self.tool("workspace.list")["structuredContent"]["workspaces"][0]
+        self.assertEqual(status["csharp"], {"mode": "trusted-msbuild", "project": "Other.csproj"})
+        self.assertEqual(status["engines"]["csharp"]["analysis"], second)
+        for project in ("../outside.csproj", "/outside.csproj", "source", "missing.csproj"):
+            self.assertTrue(self.tool("workspace.open", {"root": str(self.root), "project": project, "reload": True})["isError"])
+        for key in ("mode", "trustedMsbuild", "project", "csharp"):
+            self.assertTrue(self.tool("semantic.query", dict(args, operation="identity", arguments={key: "trusted-msbuild"}))["isError"])
+
     def test_resource_configuration_validation(self):
         for policy in ([], None, {"maxFileBytes": 0}, {"maxFileBytes": True},
                        {"maxFileBytes": 1.5}, {"maxFileBytes": "32"},
@@ -130,7 +199,7 @@ for line in sys.stdin:
         (self.root / "freeflight.json").write_text('{broken untrusted config')
         self.restart([], cwd=self.root)
         listed = self.tool("workspace.list")["structuredContent"]
-        self.assertEqual(listed, {"allowedRoots": [], "workspaces": [], "candidates": [],
+        self.assertEqual(listed, {"allowedRoots": [], "trustedRoots": [], "workspaces": [], "candidates": [],
                                  "authorization": "startup-only", "dormant": True})
         self.assertEqual(self.tool("workspace.discover")["structuredContent"], {"workspaces": []})
         for root in (self.root, self.root / "missing-private-path"):
@@ -194,7 +263,7 @@ for line in sys.stdin:
         self.assertFalse(opened["isError"])
         self.roots([])
         listed = self.tool("workspace.list")["structuredContent"]
-        self.assertEqual(listed["workspaces"], [{"root": str(self.root)}])
+        self.assertEqual(listed["workspaces"], [{"root": str(self.root), "csharp": {"mode": "safe-source", "project": ""}, "engines": {}}])
         self.assertTrue(self.tool("engine.capabilities", {"root": str(child), "language": "fixture"})["isError"])
         self.assertFalse(self.tool("workspace.open", {"root": str(child)})["isError"])
         self.roots([])
@@ -244,7 +313,7 @@ for line in sys.stdin:
         send({"jsonrpc": "2.0", "id": stale["id"], "result": {"roots": [{"uri": child.as_uri()}]}})
         listed = self.tool("workspace.list")["structuredContent"]
         self.assertEqual(listed["candidates"], [])
-        self.assertEqual(listed["workspaces"], [{"root": str(self.root)}])
+        self.assertEqual(listed["workspaces"], [{"root": str(self.root), "csharp": {"mode": "safe-source", "project": ""}, "engines": {}}])
 
     def test_unresponsive_legacy_roots_never_block_or_retain_associations(self):
         child = self.root / "candidate"
@@ -264,7 +333,7 @@ for line in sys.stdin:
         refresh = json.loads(self.process.stdout.readline())
         listed = self.tool("workspace.list")["structuredContent"]
         self.assertEqual(listed["candidates"], [])
-        self.assertEqual(listed["workspaces"], [{"root": str(self.root)}])
+        self.assertEqual(listed["workspaces"], [{"root": str(self.root), "csharp": {"mode": "safe-source", "project": ""}, "engines": {}}])
         send({"jsonrpc": "2.0", "id": refresh["id"], "result": {"roots": "malformed"}})
         self.assertEqual(self.tool("workspace.list")["structuredContent"]["candidates"], [])
         send({"jsonrpc": "2.0", "method": "notifications/roots/list_changed"})
@@ -419,7 +488,12 @@ for line in sys.stdin:
         self.assertIn("result", self.call("ping"))
         release.write_text("release")
         self.assertEqual(json.loads(self.process.stdout.readline())["id"], "blocker")
-        self.assertEqual(self.tool("workspace.list")["structuredContent"], before)
+        after = self.tool("workspace.list")["structuredContent"]
+        # The uncancelled blocker legitimately initialized one engine. Lifecycle
+        # state must otherwise remain byte-for-byte identical after queued cancels.
+        self.assertEqual(after["workspaces"][0]["engines"]["controlled"]["operations"], [])
+        before["workspaces"][0]["engines"] = after["workspaces"][0]["engines"]
+        self.assertEqual(after, before)
         for identifier, _ in queued:
             # No suppressed response leaked, and the pending-ID slot was erased.
             send({"jsonrpc": "2.0", "id": identifier, "method": "tools/call", "params": {

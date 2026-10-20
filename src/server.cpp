@@ -53,6 +53,53 @@ Server::Server(const Json &configuration) {
             throw std::runtime_error("Engine executable must be an absolute path");
         commands_.emplace(language, std::move(args));
     }
+    const auto csharp = configuration.value("csharp", Json::object());
+    if (!csharp.is_object())
+        throw std::runtime_error("csharp must be an operator startup configuration object");
+    for (const auto &[key, value] : csharp.items()) {
+        if ((key != "mode" && key != "project") || !value.is_string())
+            throw std::runtime_error("Invalid csharp startup setting: " + key);
+    }
+    auto command = commands_.find("csharp");
+    const bool legacyTrust =
+        command != commands_.end() && std::find(command->second.begin(), command->second.end(),
+                                                "--trusted-msbuild") != command->second.end();
+    const auto mode = csharp.value("mode", legacyTrust ? "trusted-msbuild" : "safe-source");
+    if (mode != "trusted-msbuild" && mode != "safe-source")
+        throw std::runtime_error("csharp.mode must be safe-source or trusted-msbuild");
+    trustedCsharp_ = mode == "trusted-msbuild";
+    if (legacyTrust && !trustedCsharp_)
+        throw std::runtime_error(
+            "csharp.mode conflicts with explicitly configured trusted worker arguments");
+    const auto trusted = configuration.value("trustedRoots", Json::array());
+    if (!trusted.is_array() || trusted.size() > 32)
+        throw std::runtime_error(
+            "trustedRoots must contain at most 32 explicitly authorized directories");
+    if (!trusted.empty() && trustedCsharp_)
+        throw std::runtime_error("Use per-root trustedRoots or legacy global C# trust, not both");
+    for (const auto &entry : trusted) {
+        const auto root = authorize(entry.get<std::string>());
+        if (!fs::is_directory(root))
+            throw std::runtime_error("Each trustedRoots entry must be a directory within roots");
+        trustedRoots_.push_back(root);
+    }
+    if (csharp.contains("project")) {
+        defaultProject_ = csharp.at("project").get<std::string>();
+        const auto project = pathFromUtf8(defaultProject_);
+        if ((!trustedCsharp_ && trustedRoots_.empty()) || project.empty() ||
+            project.is_absolute() ||
+            (project.extension() != ".sln" && project.extension() != ".csproj") ||
+            std::any_of(project.begin(), project.end(),
+                        [](const auto &part) { return part == ".."; }))
+            throw std::runtime_error("csharp.project requires trusted-msbuild and an in-root "
+                                     "relative .sln/.csproj path");
+    }
+}
+
+bool Server::trusts(const fs::path &root) const {
+    return trustedCsharp_ ||
+           std::any_of(trustedRoots_.begin(), trustedRoots_.end(),
+                       [&](const auto &trusted) { return within(trusted, root); });
 }
 
 fs::path Server::authorize(const std::string &value) const {
@@ -70,6 +117,7 @@ fs::path Server::authorize(const std::string &value) const {
 
 void Server::close(const fs::path &root) {
     std::erase_if(engines_, [&](const auto &entry) { return within(root, entry.second.root); });
+    std::erase_if(projects_, [&](const auto &entry) { return within(root, entry.first); });
     std::erase_if(active_, [&](const auto &path) { return within(root, path); });
     std::erase_if(associations_, [&](const auto &entry) { return within(root, entry.first); });
 }
@@ -174,6 +222,8 @@ Json Server::tools() const {
                              {"additionalProperties", false}};
     auto openSchema = rootSchema;
     openSchema["properties"]["candidateUri"] = {{"type", "string"}};
+    openSchema["properties"]["project"] = {{"type", "string"}};
+    openSchema["properties"]["reload"] = {{"type", "boolean"}};
     return Json::array(
         {{{"name", "workspace.discover"},
           {"description", "List authorized roots and bounded project discovery."},
@@ -186,7 +236,9 @@ Json Server::tools() const {
           {"annotations", readOnly}},
          {{"name", "workspace.open"},
           {"description", "Activate a directory within startup policy. Optional candidateUri "
-                          "associates its lifecycle with a client candidate; never grants access."},
+                          "associates its lifecycle with a client candidate; never grants access. "
+                          "Trusted C# may select a relative project; reload=true stops this root's "
+                          "workers so the next query reloads the graph. Trust is startup-only."},
           {"inputSchema", openSchema},
           {"annotations", lifecycle}},
          {{"name", "workspace.close"},
@@ -221,19 +273,31 @@ Server::Engine &Server::engine(const fs::path &root, const std::string &language
         return found->second;
     if (engines_.size() >= 8)
         throw std::runtime_error("Worker limit reached; restart with fewer roots");
-    auto process = std::make_unique<Process>(command->second);
+    auto argv = command->second;
+    if (language == "csharp" && trusts(root) &&
+        std::find(argv.begin(), argv.end(), "--trusted-msbuild") == argv.end())
+        argv.push_back("--trusted-msbuild");
+    auto process = std::make_unique<Process>(argv);
     auto response = process->request(
         {{"id", ++sequence_}, {"method", "capabilities"}, {"params", Json::object()}}, stop);
     if (response.contains("error"))
         throw EngineError(response["error"]);
     auto capabilities = response.at("result");
+    Json openParams = {{"root", pathToUtf8(root)}, {"resources", resources_}};
+    if (language == "csharp" && trusts(root)) {
+        const auto selected = projects_.contains(root) ? projects_.at(root) : defaultProject_;
+        if (!selected.empty())
+            openParams["project"] = selected;
+    }
     auto opened =
-        process->request({{"id", ++sequence_},
-                          {"method", "open"},
-                          {"params", {{"root", pathToUtf8(root)}, {"resources", resources_}}}},
-                         stop);
+        process->request({{"id", ++sequence_}, {"method", "open"}, {"params", openParams}}, stop);
     if (opened.contains("error"))
         throw EngineError(opened["error"]);
+    capabilities["analysis"] = opened.at("result");
+    for (const auto *field :
+         {"mode", "fidelity", "selectedProject", "loadWarnings", "degradedFidelity", "limitations"})
+        if (opened.at("result").contains(field))
+            capabilities[field] = opened.at("result").at(field);
     return engines_.emplace(key, Engine{std::move(process), capabilities, root}).first->second;
 }
 
@@ -243,17 +307,30 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
     if (name == "workspace.list" || name == "workspace.clientRoots") {
         if (!arguments.empty())
             throw std::runtime_error(name + " accepts no arguments");
-        Json allowed = Json::array(), active = Json::array();
+        Json allowed = Json::array(), active = Json::array(), trusted = Json::array();
+        for (const auto &root : trustedRoots_)
+            trusted.push_back(pathToUtf8(root));
         for (const auto &root : roots_)
             allowed.push_back(pathToUtf8(root));
         for (const auto &root : active_) {
-            Json item = {{"root", pathToUtf8(root)}};
+            Json item = {{"root", pathToUtf8(root)},
+                         {"csharp",
+                          {{"mode", trusts(root) ? "trusted-msbuild" : "safe-source"},
+                           {"project", trusts(root) ? (projects_.contains(root) ? projects_.at(root)
+                                                                                : defaultProject_)
+                                                    : ""}}},
+                         {"engines", Json::object()}};
+            for (const auto &[key, engine] : engines_) {
+                if (engine.root == root)
+                    item["engines"][key.substr(key.find('\n') + 1)] = engine.capabilities;
+            }
             if (const auto association = associations_.find(root);
                 association != associations_.end())
                 item["candidateUri"] = association->second;
             active.push_back(std::move(item));
         }
         return {{"allowedRoots", allowed},
+                {"trustedRoots", trusted},
                 {"workspaces", active},
                 {"candidates", candidates_},
                 {"authorization", "startup-only"},
@@ -262,7 +339,8 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
     if (name == "workspace.open" || name == "workspace.close") {
         for (const auto &[key, value] : arguments.items()) {
             (void)value;
-            if (key != "root" && !(name == "workspace.open" && key == "candidateUri"))
+            if (key != "root" && !(name == "workspace.open" &&
+                                   (key == "candidateUri" || key == "project" || key == "reload")))
                 throw std::runtime_error("Unknown argument: " + key);
         }
         const auto supplied = arguments.at("root").get<std::string>();
@@ -289,12 +367,48 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
                 throw std::runtime_error(
                     "Pinned startup roots cannot be associated with client candidates");
         }
+        const bool reload = arguments.value("reload", false);
+        std::string selectedProject =
+            projects_.contains(root) ? projects_.at(root) : defaultProject_;
+        if (arguments.contains("project")) {
+            if (!trusts(root))
+                throw std::runtime_error(
+                    "Project selection requires operator startup trustedRoots authorization; "
+                    "requests cannot grant trust");
+            const auto suppliedProject = arguments.at("project").get<std::string>();
+            const auto relative = pathFromUtf8(suppliedProject);
+            if (relative.empty() || relative.is_absolute() ||
+                std::any_of(relative.begin(), relative.end(),
+                            [](const auto &part) { return part == ".."; }) ||
+                (relative.extension() != ".sln" && relative.extension() != ".csproj"))
+                throw std::runtime_error("project must be an in-root relative .sln/.csproj path");
+            const auto selected = authorize(pathToUtf8(root / relative));
+            if (!within(root, selected) || !fs::is_regular_file(selected))
+                throw std::runtime_error("Selected project is outside workspace or not a file");
+            // Reject symlink components, even when their destination remains in-root.
+            auto cursor = root;
+            for (const auto &part : relative) {
+                cursor /= part;
+                if (fs::is_symlink(cursor))
+                    throw std::runtime_error("Selected project cannot traverse symlinks");
+            }
+            const auto normalized = pathToUtf8(selected.lexically_relative(root));
+            if (normalized != selectedProject && !reload &&
+                engines_.contains(pathToUtf8(root) + "\ncsharp"))
+                throw std::runtime_error(
+                    "Project selection changed; invoke workspace.open with reload=true");
+            selectedProject = normalized;
+        }
         if (std::find(active_.begin(), active_.end(), root) == active_.end()) {
             if (active_.size() >= 32)
                 throw std::runtime_error("Active workspace limit reached");
             active_.push_back(root);
             std::sort(active_.begin(), active_.end());
         }
+        if (reload)
+            std::erase_if(engines_, [&](const auto &entry) { return entry.second.root == root; });
+        if (!selectedProject.empty())
+            projects_[root] = selectedProject;
         if (!candidate.empty())
             associations_[root] = candidate;
         else
@@ -366,6 +480,23 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
         throw std::runtime_error("Workspace root is not a directory");
     const auto language = arguments.at("language").get<std::string>();
     const auto key = pathToUtf8(root) + "\n" + language;
+    auto params = arguments.value("arguments", Json::object());
+    if (!params.is_object())
+        throw std::runtime_error("Operation arguments must be an object");
+    if (params.contains("mode") || params.contains("trustedMsbuild") ||
+        params.contains("trusted-msbuild") || params.contains("project") ||
+        params.contains("csharp"))
+        throw std::runtime_error("Trust is startup-only; select projects using workspace.open, not "
+                                 "semantic query arguments");
+    if (params.contains("resources"))
+        throw std::runtime_error("Resource limits are owned by operator startup configuration");
+    if (params.contains("file")) {
+        const auto path = authorize(params["file"].get<std::string>());
+        if (!within(root, path))
+            throw std::runtime_error("Document is outside selected workspace");
+        params["file"] = pathToUtf8(path);
+    }
+    params["root"] = pathToUtf8(root);
     try {
         auto &selected = engine(root, language, stop);
         if (name == "engine.capabilities")
@@ -374,18 +505,6 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
         const auto operations = selected.capabilities.at("operations");
         if (std::find(operations.begin(), operations.end(), operation) == operations.end())
             throw std::runtime_error("Operation is not supported by this engine");
-        auto params = arguments.value("arguments", Json::object());
-        if (!params.is_object())
-            throw std::runtime_error("Operation arguments must be an object");
-        if (params.contains("resources"))
-            throw std::runtime_error("Resource limits are owned by operator startup configuration");
-        if (params.contains("file")) {
-            const auto path = authorize(params["file"].get<std::string>());
-            if (!within(root, path))
-                throw std::runtime_error("Document is outside selected workspace");
-            params["file"] = pathToUtf8(path);
-        }
-        params["root"] = pathToUtf8(root);
         auto response = selected.process->request(
             {{"id", ++sequence_}, {"method", operation}, {"params", params}}, stop);
         if (response.contains("error"))

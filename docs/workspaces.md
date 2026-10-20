@@ -1,8 +1,8 @@
 # Workspace selection and access
 
-The configure-once preview supports this workspace lifecycle. Resource controls
-and incremental refresh improvements below are development changes and require
-a newly qualified distribution; they are not present in the published preview.
+The configure-once workspace lifecycle and scaling controls are available in the
+scaling preview. The trusted-loading configuration and reload changes documented
+below are local development changes and require a new qualified distribution.
 
 FreeFlight separates permission to access a directory from selecting a project
 for analysis. A project path supplied by an AI is a selection, not permission.
@@ -141,3 +141,101 @@ Project-reference graphs are not yet fully supported: configurations declaring
 them fail with `unsupported_project_references` instead of returning apparently
 complete partial results. Ordinary imports within a configured project remain
 supported. This fix does not introduce a solution builder or run repository builds.
+
+## Explicit trusted C# configuration (development repair)
+
+Use the complete bundled application with an operator-owned configuration file;
+no internal executable paths or separate worker installations are required:
+
+```json
+{
+  "roots": ["/absolute/workspace"],
+  "trustedRoots": ["/absolute/workspace"],
+  "csharp": {
+    "project": "source/Architecture.sln"
+  }
+}
+```
+
+For a Linux installation, set the MCP command to
+`/absolute/install/freeflight-linux-x64/bin/freeflight`,
+with arguments `["--config", "/absolute/freeflight-trusted.json"]`.
+These are operator instructions, not configuration applied by the application. The existing
+published `57851e3` binary does **not** implement this new configuration; a rebuilt,
+qualified bundle is required. This repair has not been published.
+
+Omit `engines` to use bundled workers. Reading an authorized `roots` directory
+remains safe-source by default. Adding a directory to `trustedRoots` is the one-time
+operator choice **“Trust projects in this folder.”** Selected workspaces inside
+that directory use project-aware MSBuild loading by default; sibling read-only
+roots remain safe-source. Each trust entry must be an absolute existing directory
+within the independent `roots` boundary. A parent workspace that merely contains
+a trusted descendant remains safe-source: explicitly select the trusted child.
+Use narrow trust entries; every selected descendant inherits execution trust.
+The advanced legacy `csharp.mode: "trusted-msbuild"` or internal trusted worker
+argv authorizes all startup roots, and cannot be mixed with `trustedRoots`. Prefer
+the per-root setting above. A compatible installed .NET SDK, targeting packs, and already-restored
+project dependencies are still needed for trusted evaluation. The bundled runtime
+is sufficient for safe-source mode, but is not an SDK. No automatic restore is run.
+MSBuild imports/targets may execute repository code; this is not a sandbox.
+
+`csharp.project` is an optional root-relative `.sln` or `.csproj` selection. When
+omitted, bounded recursive discovery skips generated/dependency directories and
+symlinks, preferring solutions over individual projects. One unique candidate is
+selected, including a nested `source/Architecture.sln`. Multiple candidates fail
+with explicit selection guidance instead of silently choosing one. With multiple
+startup roots, the default relative project applies independently to each root;
+select per-workspace projects with `workspace.open` when needed.
+
+To change a selection or reload changed project configuration without restarting
+the MCP endpoint:
+
+```json
+{"root":"/absolute/workspace","project":"source/Architecture.sln","reload":true}
+```
+
+Pass this to `workspace.open`. `reload: true` stops only that exact workspace's
+internal workers; the next capability/semantic request reloads them. It retains
+startup authorization, selections and other workspace sessions. A live C# project
+selection change requires this explicit reload. Without reload, repeated open is
+idempotent. Close/reopen also reloads, but close includes descendant workspaces and
+clears runtime selection overrides. Source content refreshes incrementally;
+project graphs, restore results, SDK selection and load-warning status refresh on
+reload. Changing startup roots, trust mode, resource policy, or installed executable
+requires an operator restart of the MCP process. Query arguments and repository
+configuration cannot enable trust.
+
+`engine.capabilities.analysis` reports the active mode, selected project,
+`loadWarnings`, `degradedFidelity`, and limitations after successful opening.
+`workspace.list` reports configured C# mode/selection and initialized engine state.
+An empty engine map means no graph has loaded yet. Startup policy and loaded graph
+status are deliberately distinct. Warnings remain visible until reload; source
+compiler diagnostics remain available through the diagnostics operation.
+
+Roslyn 5.9 can report NuGet warnings as workspace failures. The repair accepts only
+NU1603, NU1701 and NU1903 messages that exactly match Warning records in the same
+project's standard `obj/project.assets.json`. Vulnerability advisories remain
+visible and set degraded fidelity; they are not suppressed or fixed. Unknown
+failures, restore Error records, missing metadata references and empty/unusable
+graphs still fail. Other incorrectly classified warning codes or missing/unmatched evidence fail
+conservatively rather than being guessed harmless. SDK discovery errors,
+concrete missing/malformed restore evidence, and other project-load errors receive
+distinct structured codes and remediation. An ordinary project-load failure alone
+no longer receives generic restore advice.
+
+For trusted loads, FreeFlight uses Roslyn's supported MSBuild binary logger to
+retain genuine error severity and evaluated restore-asset paths. A real error,
+including a warning promoted to an error, remains fatal even if its text matches
+a recorded warning. SDK design-time loading can skip absent assets without raising
+an error, so missing evaluated assets are checked independently. Temporary logs
+use an OS temporary directory (0700 on Unix; inherited temporary-directory ACLs on Windows) with project imports omitted; bounded
+replay follows evaluation and normal/error cleanup deletes the directory. A force
+kill or crash can leave evaluated build metadata behind. Neither logging bounds
+nor source budgets sandbox MSBuild execution or impose a total disk/RSS ceiling.
+
+When MSBuild omits evaluated assets-path evidence, a bounded, DTD-disabled read of
+the project recognizes standard declarative SDK/PackageReference restore needs.
+Missing standard assets then produce `restore_required`. Customized or inherited
+intermediate paths without evaluated evidence fail conservatively with inspection
+guidance; FreeFlight does not implement its own MSBuild evaluator or guess that
+restore will repair every failure. Custom layouts need separate qualification.

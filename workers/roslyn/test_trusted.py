@@ -61,6 +61,119 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
         assert definition[0]["range"]["start"] == dict(line=2, character=33), definition
         references = call("references", file="Lib/Widget.cs", line=2, character=34)["result"]
         assert len(references) == 1 and pathlib.Path(references[0]["file"]).resolve() == (root / "App/Consumer.cs").resolve(), references
+        # Actual NuGet assets logs are surfaced by Roslyn 5.9 as Failure, with
+        # their code/severity stripped from WorkspaceDiagnostic.Message. Preserve
+        # their original Warning evidence without allowing arbitrary failures.
+        assets = root / "App/obj/project.assets.json"
+        original_assets = assets.read_text()
+        warning_logs = [
+            {"code": "NU1603", "level": "Warning", "message": "Fixture depends on Example (>= 1.0.0) but Example 1.0.0 was not found. Example 1.0.1 was resolved instead."},
+            {"code": "NU1903", "level": "Warning", "message": "Package Example 1.0.1 has a known high severity vulnerability, https://example.invalid/advisory"},
+            {"code": "NU1701", "level": "Warning", "message": "Package Example was restored using .NETFramework instead of net10.0. This package may not be fully compatible with your project."},
+        ]
+        def set_logs(logs):
+            data = json.loads(original_assets)
+            data["logs"] = [{**entry, "libraryId": "Example", "targetGraphs": ["net10.0"]} for entry in logs]
+            assets.write_text(json.dumps(data))
+        set_logs(warning_logs)
+        opened = call("open", root=str(root), project="App/App.csproj")["result"]
+        assert opened["selectedProject"].replace("\\", "/") == "App/App.csproj", opened
+        assert opened["degradedFidelity"] is True, opened
+        warnings = opened["loadWarnings"]
+        assert {w["code"] for w in warnings} == {w["code"] for w in warning_logs}, warnings
+        for warning in warnings:
+            expected = next(w for w in warning_logs if w["code"] == warning["code"])
+            assert warning["message"] == expected["message"] and warning["severity"] == "Warning", warning
+            assert warning["reportedKind"] == "Failure", warning
+        assert call("capabilities")["result"]["loadWarnings"] == warnings
+        assert call("diagnostics", file="App/Consumer.cs")["result"] == []
+        definition = call("definition", file="App/Consumer.cs", line=1, character=57)["result"]
+        assert len(definition) == 1 and definition[0]["range"]["start"] == dict(line=2, character=33), definition
+        assert pathlib.Path(definition[0]["file"]).resolve() == root / "Lib/Widget.cs"
+        # NU-shaped text alone is not proof: unsupported warning codes and an
+        # assets file bound to another project cannot downgrade a Failure.
+        set_logs([{**warning_logs[0], "code": "NU1605"}])
+        rejected = call("open", root=str(root), project="App/App.csproj")["error"]
+        assert rejected["code"] == "project_load_failed", rejected
+        set_logs(warning_logs)
+        mismatched = json.loads(assets.read_text())
+        mismatched["project"]["restore"]["projectPath"] = str(root / "Different.csproj")
+        assets.write_text(json.dumps(mismatched))
+        rejected = call("open", root=str(root), project="App/App.csproj")["error"]
+        assert rejected["code"] == "project_load_failed", rejected
+        # The same warning-looking text with Error severity must remain fatal.
+        set_logs([{**warning_logs[0], "level": "Error"}])
+        rejected = call("open", root=str(root), project="App/App.csproj")["error"]
+        assert rejected["code"] == "project_load_failed", rejected
+        assert "NU1603" in json.dumps(rejected) and "Error" in json.dumps(rejected), rejected
+        assets.write_text(original_assets)
+        # A genuine design-time MSBuild error cannot be waved through simply
+        # because project objects were still returned by MSBuildWorkspace.
+        project = root / "App/App.csproj"
+        original_project = project.read_text()
+        project.write_text(original_project.replace("</Project>", '<Target Name="FixtureFailure" BeforeTargets="CoreCompile"><Error Text="Deliberate project-load failure" /></Target></Project>'))
+        rejected = call("open", root=str(root), project="App/App.csproj")["error"]
+        assert rejected["code"] == "project_load_failed" and "Deliberate project-load failure" in json.dumps(rejected), rejected
+        assert "automatically indicated" in rejected["remediation"] and "Explicitly restore" not in rejected["remediation"], rejected
+        project.write_text(original_project)
+        # An actual MSBuild Error with the exact text of a persisted Warning
+        # must not borrow that warning's severity (or be accepted twice).
+        set_logs([warning_logs[1]])
+        project.write_text(original_project.replace("</Project>", '<Target Name="FixtureCollision" BeforeTargets="CoreCompile"><Error Text="' + warning_logs[1]["message"] + '" /></Target></Project>'))
+        rejected = call("open", root=str(root), project="App/App.csproj")["error"]
+        assert rejected["code"] == "project_load_failed", rejected
+        assert warning_logs[1]["message"] in json.dumps(rejected), rejected
+        project.write_text(original_project)
+        assets.write_text(original_assets)
+        # MSBuild can promote a persisted Warning to a genuine Error according
+        # to operator project policy. The original assets severity cannot override it.
+        set_logs([warning_logs[1]])
+        project.write_text(original_project.replace("</PropertyGroup>", "<MSBuildWarningsAsErrors>NU1903</MSBuildWarningsAsErrors></PropertyGroup>"))
+        rejected = call("open", root=str(root), project="App/App.csproj")["error"]
+        assert rejected["code"] == "project_load_failed", rejected
+        assert warning_logs[1]["message"] in json.dumps(rejected), rejected
+        project.write_text(original_project)
+        assets.write_text(original_assets)
+        # Removing real restore evidence justifies restore guidance; no restore
+        # is performed by FreeFlight. Restore it ourselves only by restoring bytes.
+        obj = root / "App/obj"
+        saved_obj = {path.relative_to(obj): path.read_bytes() for path in obj.rglob("*") if path.is_file()}
+        shutil.rmtree(obj)  # Remove design-time caches as well as the JSON assets.
+        rejected = call("open", root=str(root), project="App/App.csproj")["error"]
+        assert rejected["code"] == "restore_required", rejected
+        assert not assets.exists(), "worker must not run dependency restore"
+        for relative, contents in saved_obj.items():
+            restored = obj / relative
+            restored.parent.mkdir(parents=True, exist_ok=True)
+            restored.write_bytes(contents)
+        # Restoring cached target outputs after assets changes would make stale
+        # warning caches appear newer than their inputs. Rebuild disposable caches.
+        for cache in obj.rglob("*.cache"):
+            cache.unlink()
+        # Bounded discovery finds the nested solution and prefers it over projects.
+        nested = root / "source"
+        nested.mkdir()
+        sln = nested / "Architecture.sln"
+        sln.write_text('Microsoft Visual Studio Solution File, Format Version 12.00\n'
+            'Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "App", "../App/App.csproj", "{F99CC167-3E5A-4E4E-8C0E-B43FD3F69B41}"\nEndProject\nGlobal\nEndGlobal\n')
+        response = call("open", root=str(root))
+        assert "result" in response, response
+        opened = response["result"]
+        assert opened["selectedProject"].replace("\\", "/") == "source/Architecture.sln", opened
+        assert opened["loadWarnings"] == [], opened
+        other = root / "Other.sln"
+        other.write_text(sln.read_text().replace("../App/", "App/"))
+        rejected = call("open", root=str(root))["error"]
+        assert rejected["code"] == "project_selection_required", rejected
+        assert "Architecture.sln" in json.dumps(rejected) and "Other.sln" in json.dumps(rejected), rejected
+        assert "result" in call("open", root=str(root), project="source/Architecture.sln")
+        other.unlink()
+        empty_solution = nested / "Empty.sln"
+        empty_solution.write_text("Microsoft Visual Studio Solution File, Format Version 12.00\nGlobal\nEndGlobal\n")
+        rejected = call("open", root=str(root), project="source/Empty.sln")["error"]
+        assert rejected["code"] == "project_load_failed", rejected
+        empty_solution.unlink()
+        assert "result" in call("open", root=str(root), project="source/Architecture.sln")
         (root / "App/Consumer.cs").write_text(source.replace("value.Value", '"invalid"'))
         diagnostics = call("diagnostics", file="App/Consumer.cs")["result"]
         assert any(d["code"] == "CS0029" for d in diagnostics), diagnostics

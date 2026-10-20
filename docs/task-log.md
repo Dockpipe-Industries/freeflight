@@ -499,3 +499,95 @@ Candidate runtime 986b60b passed all five hosted native targets, both site build
 ## 2026-10-20 — Pre-promotion correctness review
 
 Focused review found and fixed retained TypeScript resolution after dependency creation/package metadata changes (also reproducible in the preview), plus an initial trusted Roslyn filesystem loader that could bypass the guarded snapshot read. Roslyn safe/trusted suites and all 34 TS tests passed locally. New assertions cover source add/remove/rename, inherited settings, package metadata, preserved timestamps, retained services and zero-byte C# workspace-symbol queries. docs/scaling-readiness.md distinguishes tested behavior, bounded freshness, limits and un-injected watcher failures. Historical timing observations are unchanged; correctness follow-up timings were not compared. Jamie authorized gated promotion and a fresh Linux preview after exact-head qualification; publication remains pending.
+
+
+## 2026-10-20 — Local trusted-loading repair after 57851e3
+
+This round is local and uncommitted. No push, publication, active client change,
+private project edit, Linux access or user-session restart was performed.
+
+- Reproduced Roslyn 5.9 warning-to-Failure behavior with controlled fixtures.
+  Exact project/message-bound NU1603/NU1701/NU1903 warning evidence now permits
+  useful graphs while preserving warnings. Supported binary-log replay rejects
+  actual errors, same-message error collisions and warnings promoted to errors.
+  Missing standard restore assets remain fatal; ambiguous custom layouts fail
+  conservatively. No automatic restore or repository execution in safe mode.
+- Added operator-owned `trustedRoots`, nested project discovery/selection,
+  structured load errors, truthful loaded capabilities, and explicit workspace
+  reload. Read-only sibling roots and query-time trust escalation remain blocked.
+- Corrected document symbols to select declarations in the requested document,
+  including merged namespaces and partial types.
+- DockPipe core protocol/process, Roslyn worker, mixed-worker integration,
+  lint and repository checks passed locally. The complete macOS ARM64 packaging
+  gate passed 22 protocol tests, official MCP SDK checks, trusted worker tests,
+  and a packaged C++ MCP-to-Roslyn .NET 8 fixture with exact semantic positions,
+  warning status, reload, trust/root boundaries and runtime-only SDK diagnostics.
+  Extracted tar and MCPB smoke checks passed.
+- Qualified local tar: `freeflight-osx-arm64-2181a6b38a40fe55.tar.gz`, SHA-256
+  `a63e9f15abb367b60d22c80bbefbdd19e4b44ac7420c1c21579e1577c7450dd5`.
+  Generated receipt/log: `bin/.local/trusted-repair-package.log`.
+  These dirty-source artifacts are local test outputs, not releases.
+- Four full-bundle paired sessions against a verified same-source Mac rebuild
+  of 57851e3 passed exact semantics, immediate add/remove/freshness and ancestor
+  symlink boundary checks. Per-refresh ancestor-check deduplication reduced
+  pooled medians 34–37%, but p90 regressed; startup improvement is unproven and
+  sampled RSS is effectively unchanged. The slower Refresh mode is unresolved.
+  See [hot-path evidence](hotpath-performance.md); this is not a competitor win
+  or production performance qualification.
+- Windows/Linux and the reported private solution were not tested this round.
+  Hosted CI and release qualification are pending. The existing published
+  preview does not contain these repairs. See [unreleased notes](unreleased.md)
+  for configuration, reload behavior and security/fidelity limitations.
+
+
+## 2026-10-20 — Bounded hot-path disposition and repair requalification
+
+- Retained the original two-session-per-version comparison: 40 correlated warm
+  samples per operation per version. Outline/definition/reference p90 increased
+  2.091/2.211/2.035 ms (31.8%/34.1%/27.2%). Both experimental sessions were slower
+  at p90 than either baseline session, but this small experiment does not establish
+  population significance or a cause. Diagnostic controls did not consistently
+  reproduce the slow Refresh mode; no additional favorable timing run replaces it.
+- With no evidence-backed correction, reverted only the per-refresh ancestor-check
+  optimization. Refresh and CheckPath match 57851e3 exactly. Functional trusted-load,
+  trust/configuration, reload/status and document-outline changes remain intact.
+  Preserved the isolated experiment in `bin/.local/experimental-hotpath-only.patch`.
+- Ran DockPipe package.native once after the revert: passed 22 protocol tests,
+  official MCP SDK checks, bundled safe/trusted Roslyn suites, exact definitions,
+  references/outlines, file add/remove/rename and preserved-metadata refresh,
+  cancellation/recovery, trust/root boundaries and controlled net8.0 project tests.
+  Extracted tar and MCPB verification passed. No post-revert speedup is claimed.
+- New local tar: `freeflight-osx-arm64-4e5ae6a0724f4d09.tar.gz`; MCPB:
+  `freeflight-osx-arm64-feb9fea0aee8279d.mcpb`. Exact hashes and evidence are in
+  `bin/.local/trusted-repair-without-optimization-receipt.json`; package log is
+  `bin/.local/trusted-repair-without-optimization-package.log`.
+  Earlier experimental artifacts remain preserved but are not the retained repair.
+- Read-only inspection found an existing local Colima ARM64 VM, stopped. Its local
+  Docker daemon is unreachable, so cached Linux images/toolchains were not verified.
+  There is no currently usable verified local Linux qualification route. No VM
+  start, installation, provisioning, remote-host access or active config change
+  occurred. ARM64 container availability alone would not establish Linux x64
+  qualification or compatibility with the operator's private solution.
+- Work remains uncommitted/unpublished; Linux/Windows/hosted CI and operator project
+  checks remain pending. No automatic approval denial or uncertain mutation occurred.
+
+
+## 2026-10-20 — Functional repair CI authorization
+
+Jamie authorized committing/pushing the reviewed functional repair on js/dev and
+opening a draft PR to dev for exact-head Linux/Windows/macOS checks. Protected
+merges, releases, package publication and credential/client changes remain on hold.
+The unfinished NuGet/npm proof and local diagnostic benchmark tooling are excluded
+from the repair commit. Rejected experimental runtime changes remain reverted.
+
+
+## 2026-10-20 — Windows project-path CI correction
+
+Repair 5d74198 was pushed to js/dev and draft PR #23 opened to dev. Exact-head
+Windows CI exposed two protocol failures: `/App.csproj` is rooted but not absolute
+on Windows, and missing project paths in a Unicode workspace could terminate the
+server while reporting a native filesystem error. Startup and request selections
+now reject any root component (including drive-relative paths); canonicalization
+uses an error code and a controlled UTF-8 message. Tests cover Windows drive,
+root-directory and UNC forms and retain missing-file/recovery checks. This narrow
+fix follows the authorized repair/CI scope; packaging experiments stay excluded.

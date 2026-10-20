@@ -14,6 +14,8 @@ Use [current CI](https://github.com/Dockpipe-Industries/freeflight/actions/workf
 [platform and artifact evidence](docs/distribution.md), and the
 [acceptance checklist](docs/acceptance.md) to check a checkout's qualification status.
 Install using the published artifact's checksum and platform record.
+An [Ubuntu 22.04 x64 preview](https://github.com/Dockpipe-Industries/freeflight/releases/tag/v0.1.0-preview.20261019.jammy.b22a53a) is available;
+Pop!_OS itself, Fedora and Bazzite remain untested.
 
 ## Development
 
@@ -44,8 +46,8 @@ Development builds use `--config /absolute/freeflight.json` to select explicitly
 trusted worker executables. Only roots authorized at startup can be opened.
 Do not treat a configured worker as sandboxed: it runs with the user's OS identity.
 
-No public release or registry listing is claimed until its artifact is published
-and verified. DockPipe Registry integration is separate work; there is no duplicate
+Published Linux previews are verified; production release and Registry publication
+remain pending. DockPipe Registry integration is separate work; there is no duplicate
 FreeFlight-specific package-store distribution.
 
 ## Capabilities
@@ -67,6 +69,11 @@ consult the [capability matrix](docs/capabilities.md) for exact scope. Optional
 trusted MSBuild mode can execute repository code and requires explicit startup
 authorization. Analyzer execution and large-repository scale are not qualified.
 Code signing and notarization are not currently provided.
+
+The development branch adds runtime project selection inside an explicit startup
+access boundary. See [workspace setup](docs/workspaces.md) for configure-once use,
+dormant no-argument startup and optional client-root compatibility. Published
+previews retain their documented interface until a replacement is qualified.
 
 Read [security](SECURITY.md), [contributing](CONTRIBUTING.md), and
 [release gates](docs/acceptance.md) before extending or distributing FreeFlight.

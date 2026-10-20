@@ -1,11 +1,15 @@
 # Language capabilities and evidence
 
 The capabilities below have semantic fixture evidence. Hosted candidate qualification
-passed Linux x64/ARM64, Windows x64 and macOS ARM64 at candidate 2798588.
+passed Linux x64/ARM64, Windows x64 and macOS ARM64 at candidate 2c29369.
 Every changed candidate must be requalified before release. See [distribution evidence](distribution.md) and [current CI](https://github.com/Dockpipe-Industries/freeflight/actions/workflows/ci.yml)
 for candidate-specific results. This matrix does not announce a production release. The
 C++ endpoint exposes `workspace.discover`, `engine.capabilities` and
 `semantic.query`. Clients must inspect the selected engine's advertised operations.
+The development branch also provides `workspace.list`, `workspace.open`,
+`workspace.close` and optional `workspace.clientRoots` compatibility. See
+[workspace lifecycle](workspaces.md); these additions are not in the published
+Ubuntu 22.04 preview.
 
 | Operation | TypeScript | JavaScript | C# / Roslyn |
 | --- | --- | --- | --- |

@@ -79,6 +79,29 @@ try:
         assert not (root / "executed").exists()
         symbols = call("symbols", file="Sample.cs")["result"]
         assert {s["name"] for s in symbols} >= {"Counter", "Value", "Increment", "Consumer", "Read"}
+        # Merged namespace/partial symbols must keep document-local declaration
+        # locations. Different line offsets expose accidental first-file reuse.
+        outlines = {
+            "OutlineA.cs": "namespace Shared.Area;\npublic partial class Merged { }\n",
+            "OutlineB.cs": "// second\n// offset\nnamespace Shared.Area;\npublic partial class Merged { public int Local => 1; }\n",
+            "OutlineC.cs": "namespace Shared.Area { public class Third { } }\n\nnamespace Shared.Area { public enum Choice { One } }\n",
+        }
+        try:
+            for name, content in outlines.items():
+                (root / name).write_text(content)
+            for name, starts in (("OutlineA.cs", [dict(line=0, character=17)]),
+                                 ("OutlineB.cs", [dict(line=2, character=17)]),
+                                 ("OutlineC.cs", [dict(line=0, character=17), dict(line=2, character=17)])):
+                outline = call("symbols", file=name)["result"]
+                namespaces = [item for item in outline if item["kind"] == "Namespace"]
+                assert [item["location"]["range"]["start"] for item in namespaces] == starts, outline
+                assert all(pathlib.Path(item["location"]["file"]).resolve() == root / name for item in outline), outline
+            merged = next(item for item in call("symbols", file="OutlineB.cs")["result"] if item["name"] == "Merged")
+            assert merged["location"]["range"]["start"] == dict(line=3, character=21), merged
+        finally:
+            for name in outlines:
+                (root / name).unlink()
+        print("Document-local file-scoped/block namespace and partial-type outline locations passed")
         definition = call("definition", file="Sample.cs", line=8, character=51)["result"]
         assert definition[0]["range"]["start"] == {"line": 3, "character": 15}, definition
         references = call("references", file="Sample.cs", line=3, character=16)["result"]

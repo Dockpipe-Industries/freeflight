@@ -194,3 +194,13 @@ The previous trusted-loading repair was qualified and published as
 `v0.1.0-preview.20261020.trusted.1997d38`; its historical pending entries above
 are superseded by the publication evidence in the task log. This new source-folder
 UX is a separate, unreleased change and does not claim private-solution qualification.
+
+### External compiler-input regression (2026-10-20, unreleased)
+
+- [x] Old native preview reproduces boundary failure locally with Test SDK 16.0.1/17.8.0.
+- [x] Exact external sources retained in trusted analysis without directory/query grants.
+- [x] Rename refuses external edits; shared contexts refresh; symlink/FIFO tests pass locally.
+- [x] Complete local native bundle and official-client regression qualification pass.
+- [ ] Hosted Linux baseline reproduction and corrected cross-platform qualification.
+- [ ] Operator verifies the original Linux solution/test project and navigation control.
+- [ ] Separate promotion/publication approval and normal protected promotion.

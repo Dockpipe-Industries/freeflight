@@ -1,0 +1,9 @@
+name: integration.external.baseline
+description: Reproduce the external Test SDK Compile boundary failure in the checksum-pinned Linux preview.
+vault: none
+docker_preflight: false
+steps:
+  - id: reproduce
+    kind: host
+    cwd: repo
+    cmd: python3 -B tests/external_inputs.py --baseline-release

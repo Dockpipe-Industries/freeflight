@@ -664,3 +664,44 @@ streams as UTF-8, matching existing worker fixtures. The exact path assertion re
 unchanged. This correction changes no server/worker implementation. Local DockPipe
 core.test passes; fresh hosted Windows qualification is required. Original CodeQL
 run 39381056453 passed. No promotion/publication is authorized by this test correction.
+
+### Read-only external compiler inputs (2026-10-20, unreleased)
+
+The reported Linux preview failure remained applicable after source-folder routing:
+trusted graph construction applied the workspace path check to every compiler source.
+An authored nested-solution fixture reproduces the old bundle's Path escapes workspace
+failure with Test SDK 16.0.1 and 17.8.0; ordinary sibling-reference controls load.
+Independent MSBuild Compile-item evaluation identifies each SDK Program source as
+its sole external input. The old error itself does not report the rejected path;
+the receipt preserves this distinction instead of overstating the evidence.
+
+Trusted graph loading now catalogues exact external compiler sources for bounded
+read-only analysis. Query roots and editable paths remain unchanged. Shared external
+sources retain/update all compilation contexts. Rename that would touch an external
+source refuses the complete preview. Symlinks/reparse components are rejected;
+Unix nonblocking/no-follow opens reject nonseekable inputs without waiting on a FIFO.
+Structured rejection details include operation and path without source contents.
+
+DockPipe workers.roslyn and complete native package qualification pass locally on
+macOS ARM64, including both real Test SDK versions, automatic trustedRoots routing,
+explicit nested selection/reload, legacy startup project, exact generated-source
+navigation, semantic refresh in two contexts, external rename/query refusal,
+symlink/FIFO tests, existing safe-source/trusted tests and official SDK compatibility.
+Artifacts: freeflight-osx-arm64-9115485187654f4f.tar.gz and
+freeflight-osx-arm64-fe6471cd983e100e.mcpb (local only). Logs/receipts remain under
+bin/.local/external-*.log and bin/.local/reports/external-input-*.json.
+
+Local Linux container execution was unavailable because the existing Docker daemon
+was not running; no daemon/infrastructure reconfiguration was attempted. Ubuntu22 CI
+runs the existing package.native workflow, which now invokes DockPipe
+integration.external.baseline on Linux x64 against the checksum-pinned public
+1997d38 preview before testing the corrected fixture. Other native matrices run the
+corrected fixture through the same package.native operation. Hosted evidence is pending at
+this commit. No private project, dependency, MCP config or active session changed;
+no promotion/publication is included in this fix. Operator verification against the
+original Linux solution and failing test project remains an acceptance step.
+
+The initial development push was rejected because the existing GitHub credential
+cannot update workflow YAML. It did not update the remote branch. The unpublished
+commit was amended to leave CI YAML unchanged and invoke the baseline from existing
+DockPipe package.native composition instead. No credential scope was expanded.

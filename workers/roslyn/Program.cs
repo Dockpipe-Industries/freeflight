@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -154,6 +156,8 @@ internal sealed class SourceEngine : IDisposable
     private readonly AdhocWorkspace workspace = new();
     private readonly Dictionary<string, DocumentId> documents = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> fingerprints = new(StringComparer.Ordinal);
+    private readonly HashSet<string> externalCompilerInputs = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<DocumentId>> externalDocuments = new(StringComparer.Ordinal);
     private readonly bool trustedMsbuild;
     private string Mode => trustedMsbuild ? "trusted-msbuild" : "safe-source";
     public SourceEngine(bool trustedMsbuild) => this.trustedMsbuild = trustedMsbuild;
@@ -198,11 +202,13 @@ internal sealed class SourceEngine : IDisposable
             fingerprints.Clear();
             projectId = null;
             selectedProject = null;
+            externalCompilerInputs.Clear();
+            externalDocuments.Clear();
             loadWarnings = [];
             if (trustedMsbuild)
             {
                 var requestedProject = args.TryGetProperty("project", out var selected) ? selected.GetString() : null;
-                var graph = await TrustedProjectLoader.Load(root, requestedProject, CheckPath, resources, token);
+                var graph = await TrustedProjectLoader.Load(root, requestedProject, CheckPath, RegisterCompilerInput, resources, token);
                 workspace.AddSolution(graph.Solution);
                 selectedProject = graph.SelectedProject;
                 loadWarnings = graph.Warnings;
@@ -211,7 +217,15 @@ internal sealed class SourceEngine : IDisposable
                 {
                     foreach (var loadedDocument in project.Documents)
                     {
-                        var path = CheckPath(loadedDocument.FilePath!);
+                        var path = CheckCompilerInput(loadedDocument.FilePath!);
+                        if (externalCompilerInputs.Contains(path))
+                        {
+                            if (!externalDocuments.TryGetValue(path, out var contexts))
+                                externalDocuments[path] = contexts = [];
+                            contexts.Add(loadedDocument.Id);
+                            loadedDocuments.TryAdd(path, loadedDocument.Id);
+                            continue;
+                        }
                         if (!loadedDocuments.TryAdd(path, loadedDocument.Id))
                             throw new ProjectLoadException("project_selection_required",
                                 "Document belongs to multiple compilation contexts: " + Path.GetRelativePath(root, path),
@@ -244,6 +258,9 @@ internal sealed class SourceEngine : IDisposable
                     degradedFidelity = loadWarnings.Count > 0,
                     projects = workspace.CurrentSolution.ProjectIds.Count,
                     files = documents.Count,
+                    externalCompilerInputCount = externalCompilerInputs.Count,
+                    externalCompilerInputs = externalCompilerInputs.Order(StringComparer.Ordinal).Take(32).ToArray(),
+                    externalCompilerInputsReadOnly = true,
                     limitations = "Trusted design-time project evaluation; no analyzers or generators. Restore must already be completed by the operator. Reopen after project graph changes."
                 };
             }
@@ -325,6 +342,8 @@ internal sealed class SourceEngine : IDisposable
                 var name = args.GetProperty("newName").GetString() ?? throw new ArgumentException("newName is required");
                 if (!SyntaxFacts.IsValidIdentifier(name)) throw new ArgumentException("newName must be a valid C# identifier");
                 if (!symbolAt.Locations.Any(l => l.IsInSource)) throw new ArgumentException("Cannot rename a metadata symbol");
+                foreach (var location in symbolAt.Locations.Where(location => location.IsInSource))
+                    CheckEditableInput(location.SourceTree!.FilePath);
                 var before = workspace.CurrentSolution;
                 var after = await Renamer.RenameSymbolAsync(before, symbolAt, new SymbolRenameOptions(), name, token);
                 var edits = new List<object>();
@@ -333,7 +352,7 @@ internal sealed class SourceEngine : IDisposable
                     var oldDocument = before.GetDocument(changed)!;
                     var newDocument = after.GetDocument(changed)!;
                     var oldText = await oldDocument.GetTextAsync(token);
-                    var oldFile = CheckPath(oldDocument.FilePath!);
+                    var oldFile = CheckEditableInput(oldDocument.FilePath!);
                     var changes = await newDocument.GetTextChangesAsync(oldDocument, token);
                     edits.Add(new
                     {
@@ -396,7 +415,7 @@ internal sealed class SourceEngine : IDisposable
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
-            CheckPath(file);
+            CheckCompilerInput(file);
             var info = new FileInfo(file);
             var length = info.Length;
             var modified = info.LastWriteTimeUtc.Ticks;
@@ -415,7 +434,7 @@ internal sealed class SourceEngine : IDisposable
                 continue;
             }
             // Bounded read even when the file grows after enumeration.
-            using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var stream = OpenCompilerInput(file);
             using var memory = new MemoryStream();
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             var buffer = new byte[8192];
@@ -441,7 +460,11 @@ internal sealed class SourceEngine : IDisposable
             }
             else if (!fingerprints.ContainsKey(file) ||
                 !(await solution.GetDocument(id)!.GetTextAsync(token)).ContentEquals(source))
-                solution = solution.WithDocumentText(id, source);
+                if (externalDocuments.TryGetValue(file, out var contexts))
+                    foreach (var context in contexts)
+                        solution = solution.WithDocumentText(context, source);
+                else
+                    solution = solution.WithDocumentText(id, source);
         }
         if (!workspace.TryApplyChanges(solution)) throw new InvalidOperationException("Could not update workspace");
         snapshots.Clear();
@@ -450,6 +473,84 @@ internal sealed class SourceEngine : IDisposable
         foreach (var entry in nextDocuments) documents.Add(entry.Key, entry.Value);
         fingerprints.Clear();
         foreach (var entry in nextFingerprints) fingerprints.Add(entry.Key, entry.Value);
+    }
+
+    // Only documents returned by the explicitly trusted MSBuild graph may enter
+    // this exact-file catalogue. Queries cannot register paths or directory grants.
+    private string RegisterCompilerInput(string path, string project)
+    {
+        var full = Path.GetFullPath(path);
+        var relative = Path.GetRelativePath(root!, full);
+        if (relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar, PathComparison) && !Path.IsPathRooted(relative))
+            return CheckPath(full);
+        try
+        {
+            if (!trustedMsbuild || !Path.IsPathRooted(path)) throw new UnauthorizedAccessException();
+            ValidateExternalInput(full);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            throw new ProjectLoadException("external_compiler_input_rejected", "External compiler input cannot be read safely", selectedProject,
+                "Inspect the evaluated Compile item and its path components; symlinks, missing files and directories are rejected. Workspace trust has not been expanded.",
+                [new { operation = "register_compiler_input", file = full, project }]);
+        }
+        externalCompilerInputs.Add(full);
+        return full;
+    }
+
+    private static void ValidateExternalInput(string path)
+    {
+        var cursor = Path.GetPathRoot(path)!;
+        foreach (var part in path[cursor.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            cursor = Path.Combine(cursor, part);
+            if ((File.GetAttributes(cursor) & FileAttributes.ReparsePoint) != 0)
+                throw new UnauthorizedAccessException("External compiler inputs cannot traverse symlinks/reparse points");
+        }
+        if ((File.GetAttributes(path) & (FileAttributes.Directory | FileAttributes.Device)) != 0)
+            throw new UnauthorizedAccessException("Compiler input is not a regular file");
+    }
+
+    private string CheckCompilerInput(string path)
+    {
+        var full = Path.GetFullPath(path);
+        if (!externalCompilerInputs.Contains(full)) return CheckPath(full);
+        ValidateExternalInput(full);
+        return full;
+    }
+
+    [DllImport("libc", EntryPoint = "open", SetLastError = true)]
+    private static extern int OpenNonBlocking([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int flags);
+
+    private FileStream OpenCompilerInput(string path)
+    {
+        if (!externalCompilerInputs.Contains(path) || OperatingSystem.IsWindows())
+            return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        // A declared FIFO must not block open before cancellation can be observed.
+        // Use platform POSIX flags; descriptors are owned by SafeFileHandle.
+        var flags = OperatingSystem.IsMacOS() ? 0x0004 | 0x0100 | 0x1000000 : 0x0800 | 0x20000 | 0x80000;
+        var descriptor = OpenNonBlocking(path, flags); // O_RDONLY | NONBLOCK | NOFOLLOW | CLOEXEC
+        if (descriptor < 0) throw new IOException("Cannot open external compiler input");
+        var handle = new SafeFileHandle((IntPtr)descriptor, ownsHandle: true);
+        try
+        {
+            var stream = new FileStream(handle, FileAccess.Read);
+            if (stream.CanSeek) return stream;
+            stream.Dispose();
+            throw new ProjectLoadException("external_compiler_input_rejected", "External compiler input is not seekable", selectedProject,
+                "Use a source file, not a pipe or stream device.", [new { operation = "read_compiler_input", file = path }]);
+        }
+        catch { handle.Dispose(); throw; }
+    }
+
+    private string CheckEditableInput(string path)
+    {
+        var full = Path.GetFullPath(path);
+        if (externalCompilerInputs.Contains(full))
+            throw new ProjectLoadException("external_input_read_only", "Rename would modify an external compiler input", selectedProject,
+                "External compiler inputs are analysis-only. No partial edit preview is returned.",
+                [new { operation = "rename", file = full }]);
+        return CheckPath(full);
     }
 
     private string CheckPath(string path)

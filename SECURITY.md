@@ -35,8 +35,14 @@ Rename/import edits are previews. Original hashes help callers detect stale edit
 FreeFlight never silently applies them. Arbitrary repository configuration must not
 be promoted into executable commands.
 
-The bundled application accepts explicit startup-only `trustedRoots`
-within operator-authorized roots. Read-only roots remain safe-source by default. The internal worker also retains its advanced
+In the development branch, a startup-only `trustedRoots` array is the normal
+bundled configuration. Every entry grants both filesystem access and trusted
+C# project loading for descendant repositories, including future projects.
+No separate `roots` array is required. This source-folder interface is unreleased;
+published preview `v0.1.0-preview.20261020.trusted.1997d38` requires both arrays.
+Legacy configurations with explicit `roots` retain safe-source access unless a
+contained directory is separately trusted; `--workspace` remains safe-source.
+Tool calls cannot add trust. The internal worker also retains its advanced
 `--trusted-msbuild` argument. It uses MSBuildWorkspace design-time evaluation, which can execute
 repository targets and imports with the worker's OS privileges. Do not enable it
 for untrusted repositories. Opening a normal workspace cannot enable this mode.
@@ -59,3 +65,21 @@ checked after evaluation; this is not a hard disk/RSS quota on repository code.
 Normal/error completion deletes temporary logs; forced termination or a crash can
 leave evaluated project metadata. Logs are never uploaded. Error events remain
 fatal even when their text matches a recorded NuGet warning.
+
+Trusted MSBuild graphs may declare source inputs outside the selected workspace
+(for example Microsoft.NET.Test.Sdk's generated Program source in the NuGet cache).
+Only exact source paths returned by that explicitly trusted evaluation enter a
+session-local compiler-input catalogue. This is not a directory grant: direct MCP
+file queries, workspace selection and editable paths retain the workspace boundary.
+External declarations and references participate in semantic analysis; a rename
+that would touch any external input fails without returning a partial edit preview.
+Shared external files retain each project's separate compilation context.
+
+All external inputs retain file/aggregate resource limits and strict UTF-8 reads.
+Symlink/reparse components are rejected at registration and refresh. Unix opens
+are nonblocking/no-follow; nonseekable sources such as FIFOs are rejected before
+reading, and seekable inputs remain byte-bounded. This is not a race-free filesystem
+sandbox: concurrent hostile directory replacement and trusted MSBuild execution
+retain the limitations described above. The catalogue does not independently prove
+that a package is benign: the operator has already authorized the project's design-
+time evaluation and its declared compiler inputs. No analyzers/generators are enabled.

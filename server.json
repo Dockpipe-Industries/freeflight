@@ -7,7 +7,7 @@
     "url": "https://github.com/Dockpipe-Industries/freeflight",
     "source": "github"
   },
-  "version": "0.1.0",
+  "version": "0.1.0-preview.20261020.rc2",
   "_meta": {
     "io.modelcontextprotocol.registry/publisher-provided": {
       "publicationStatus": "draft",

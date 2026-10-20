@@ -1,0 +1,9 @@
+name: integration.external
+description: Verify read-only external compiler inputs using FREEFLIGHT_TEST_BINARY in a complete native bundle.
+vault: none
+docker_preflight: false
+steps:
+  - id: verify
+    kind: host
+    cwd: repo
+    cmd: python3 -B tests/external_inputs.py

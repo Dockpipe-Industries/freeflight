@@ -123,3 +123,6 @@ Pipelang API, SDK, LSP support or additional language support is claimed today.
 See [acceptance](acceptance.md), [comparison](comparison.md), and [release](release.md).
 
 Additional evidence: [real project](real-project-qualification.md), [LSP evaluation](lsp-evaluation.md), [release preparation](release-preparation.md), and [Registry publication](registry-publication.md).
+
+Unreleased trusted-loading configuration, warnings, reload guidance and outline fixes
+are documented in [next-release notes](unreleased.md). They are not in published `57851e3`.

@@ -35,8 +35,9 @@ Rename/import edits are previews. Original hashes help callers detect stale edit
 FreeFlight never silently applies them. Arbitrary repository configuration must not
 be promoted into executable commands.
 
-The Roslyn worker has an explicit startup-only `--trusted-msbuild` mode for trusted
-projects. It uses MSBuildWorkspace design-time evaluation, which can execute
+The bundled application accepts explicit startup-only `trustedRoots`
+within operator-authorized roots. Read-only roots remain safe-source by default. The internal worker also retains its advanced
+`--trusted-msbuild` argument. It uses MSBuildWorkspace design-time evaluation, which can execute
 repository targets and imports with the worker's OS privileges. Do not enable it
 for untrusted repositories. Opening a normal workspace cannot enable this mode.
 No restore or ordinary build is requested; that does not prevent design-time code
@@ -45,3 +46,16 @@ undo side effects or sandbox imports. Analyzer and generator references are remo
 before semantic compilation. Trusted mode requires a compatible installed .NET SDK;
 default safe-source mode remains self-contained. See workers/roslyn/README.md for
 the explicit configuration, tested project scope and remaining fidelity limitations.
+
+Trusted project warning recovery is narrow: NU1603/NU1701/NU1903 require exact,
+project-bound Warning evidence from restore assets; warnings, including vulnerability
+advisories, remain visible with degraded fidelity. Unknown load failures remain
+fatal. Restore assets are untrusted data and are size/depth bounded; reading them
+does not grant execution authority. See docs/workspaces.md for policy and reload.
+
+Trusted design-time logging uses Roslyn's supported MSBuild BinaryLogger with
+project imports omitted, in an temporary directory (0700 on Unix; inherited temporary-directory ACLs on Windows). Replay limits are
+checked after evaluation; this is not a hard disk/RSS quota on repository code.
+Normal/error completion deletes temporary logs; forced termination or a crash can
+leave evaluated project metadata. Logs are never uploaded. Error events remain
+fatal even when their text matches a recorded NuGet warning.

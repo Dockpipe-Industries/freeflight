@@ -2,6 +2,7 @@
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import tarfile
 import tempfile
@@ -15,6 +16,9 @@ class ReceiverTests(unittest.TestCase):
         preflight = patch.object(receive, "host_preflight")
         preflight.start()
         self.addCleanup(preflight.stop)
+        image_check = patch.object(receive, "verify_image_archive")
+        image_check.start()
+        self.addCleanup(image_check.stop)
 
     def fixture(self, root):
         candidate = root / "candidate"
@@ -141,6 +145,48 @@ class ReceiverTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     receive.extract(archive, destination)
                 self.assertEqual(list(destination.iterdir()), [])
+
+
+class DockerArchiveTests(unittest.TestCase):
+    @unittest.skipUnless(os.environ.get("FREEFLIGHT_QUALIFIED_CONTAINER"), "Optional retained CI artifact")
+    def test_retained_qualified_container(self):
+        archive = Path(os.environ["FREEFLIGHT_QUALIFIED_CONTAINER"])
+        receipt = json.loads((archive.parent / "verification.json").read_text())
+        self.assertEqual(receive.digest(archive), receipt["artifacts"][archive.name])
+        receive.verify_image_archive(archive, receipt["imageId"], receipt["siteReleaseSha256"])
+
+    def test_only_exact_freeflight_tag_and_verified_blobs_are_accepted(self):
+        for forbidden in (False, True):
+            with self.subTest(forbidden=forbidden), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                config = b'{"architecture":"amd64","os":"linux"}'
+                image_id = "sha256:" + hashlib.sha256(config).hexdigest()
+                site_hash = "a" * 64
+                oci = json.dumps({"config": {"digest": image_id}, "layers": []}).encode()
+                oci_id = hashlib.sha256(oci).hexdigest()
+                tag = ("other-product:" if forbidden else "freeflight-site:") + site_hash[:16]
+                files = {
+                    "blobs/sha256/" + image_id[7:]: config,
+                    "blobs/sha256/" + oci_id: oci,
+                    "manifest.json": json.dumps([{"Config": "blobs/sha256/" + image_id[7:],
+                                                  "RepoTags": [tag], "Layers": []}]).encode(),
+                    "index.json": json.dumps({"schemaVersion": 2, "manifests": [{
+                        "digest": "sha256:" + oci_id, "annotations": {
+                            "io.containerd.image.name": "docker.io/library/" + tag,
+                            "org.opencontainers.image.ref.name": site_hash[:16]}}]}).encode(),
+                    "oci-layout": b'{"imageLayoutVersion":"1.0.0"}',
+                }
+                path = root / "image.tar.gz"
+                with tarfile.open(path, "w:gz") as archive:
+                    for name, data in files.items():
+                        entry = tarfile.TarInfo(name)
+                        entry.size = len(data)
+                        archive.addfile(entry, io.BytesIO(data))
+                if forbidden:
+                    with self.assertRaisesRegex(ValueError, "unrelated"):
+                        receive.verify_image_archive(path, image_id, site_hash)
+                else:
+                    receive.verify_image_archive(path, image_id, site_hash)
 
 
 if __name__ == "__main__":

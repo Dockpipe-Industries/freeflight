@@ -11,7 +11,7 @@ set -euo pipefail
 [[ "$SITE_DEPLOY_HOST" =~ ^[a-zA-Z0-9.-]+$ && "$SITE_DEPLOY_HOST" != -* ]]
 [[ "$SITE_DEPLOY_SSH_PORT" =~ ^[0-9]+$ ]] && (( SITE_DEPLOY_SSH_PORT > 0 && SITE_DEPLOY_SSH_PORT < 65536 ))
 [[ "${FREEFLIGHT_DEPLOY_ENVIRONMENT:-}" == staging || "${FREEFLIGHT_DEPLOY_ENVIRONMENT:-}" == production ]]
-artifact=bin/.local/site-pipeline/delivery.tar
+artifact=bin/.local/site-pipeline/site.bundle.gz
 [[ -f "$artifact" && ! -L "$artifact" ]]
 digest="$(sha256sum "$artifact")"
 digest="${digest%% *}"
@@ -33,7 +33,7 @@ ssh -F /dev/null -p "$SITE_DEPLOY_SSH_PORT" -o BatchMode=yes \
   -o StrictHostKeyChecking=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
   -o GlobalKnownHostsFile=/dev/null -o UpdateHostKeys=no -o IdentitiesOnly=no \
   -o "UserKnownHostsFile=$trust_directory/known_hosts" \
-  "freeflight-release@$SITE_DEPLOY_HOST" "deploy $FREEFLIGHT_DEPLOY_ENVIRONMENT $digest" \
+  "freeflight-release@$SITE_DEPLOY_HOST" "deploy $digest" \
   < "$artifact" > bin/.local/site-pipeline/activation.log
 python3 - <<'PY'
 import json
@@ -42,7 +42,7 @@ root = Path("bin/.local/site-pipeline")
 expected = json.loads((root / "deployment.json").read_text())
 lines = (root / "activation.log").read_text().splitlines()
 result = json.loads(next(line for line in reversed(lines) if line.startswith('{"schema":')))
-assert result["status"] == "activated" and result["verifiedHttps"] is True
+assert result["status"] == "activated" and result["verifiedLocal"] is True
 assert all(result[key] == expected[key] for key in expected)
 (root / "activation.json").write_text(json.dumps(result, indent=2) + "\n")
 PY

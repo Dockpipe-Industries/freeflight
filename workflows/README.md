@@ -21,9 +21,12 @@ isolated Compose wiring without accessing hosts or credentials. Production input
 must have a stable version and matching qualified source, release-tag and master
 trees. See `docs/site-deployment.md` for remaining activation gates.
 `site.deploy.bundle`, `site.deploy.send` and the host-installed `site.deploy.receive`
-implement published-byte verification, scoped transfer, activation, health checks
-and rollback. Receiver installation/access are separately authorized infrastructure
-steps. `release.policy` tests their rejection and rollback behavior without hosts.
+implement published-byte verification and unprivileged static activation with
+local health checks and rollback. `infra.up` uses the reviewed Cloud extension for
+coordinated, plan-first setup and operator-private HTTPS readiness; it requires
+explicit credentials and execution approval. `release.policy` tests rejection,
+rollback and additive plans without hosts. `infra.alignment.test` tests the isolated
+Cloud extension with fake providers.
 
 To compare a locally built pinned baseline with the current source, set
 `FREEFLIGHT_BENCHMARK_BASELINE` to its absolute checkout/archive directory and run

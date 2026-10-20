@@ -1,192 +1,166 @@
-"""Offline receiver boundary and rollback tests; never contact hosts or Docker."""
-import hashlib
-import io
+"""Offline static delivery boundary, isolation and rollback tests."""
+import base64
+import gzip
 import json
 import os
 from pathlib import Path
-import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
 import receive
 
 
-class ReceiverTests(unittest.TestCase):
+def fixture(environment="staging", version="0.1.0-preview.rc2"):
+    source = "a" * 40
+    files = {name: b"qualified " + name.encode() for name in receive.PUBLIC_FILES if name != "release.json"}
+    if environment == "production":
+        files["sitemap.xml"] = b"sitemap"
+    assets = {name: receive.digest(data) for name, data in files.items()}
+    receipt = {"sourceCommit": source, "sourceTree": "b" * 40, "sourceDirty": False,
+               "environment": environment, "hostname": receive.HOSTS[environment], "assets": assets}
+    files["release.json"] = json.dumps(receipt).encode()
+    tag = "v" + version
+    if environment == "staging":
+        tag += (".staging." if "-" in version else "-staging.") + "42." + source[:12]
+    metadata = {**receipt, "schema": 2, "promotedCommit": "c" * 40,
+                "prerelease": environment == "staging", "version": version, "releaseTag": tag,
+                "releaseUrl": "https://github.com/Dockpipe-Industries/freeflight/releases/tag/" + tag,
+                "siteReleaseSha256": receive.digest(files["release.json"])}
+    return {"format": 2, "product": "freeflight", "mode": "site", "deployment": metadata,
+            "files": {name: {"sha256": receive.digest(data), "content": base64.b64encode(data).decode()}
+                      for name, data in files.items()}}
+
+
+def encode(bundle):
+    data = gzip.compress(json.dumps(bundle).encode())
+    return data, receive.digest(data)
+
+
+class StaticDeliveryTests(unittest.TestCase):
     def setUp(self):
-        preflight = patch.object(receive, "host_preflight")
-        preflight.start()
-        self.addCleanup(preflight.stop)
-        image_check = patch.object(receive, "verify_image_archive")
-        image_check.start()
-        self.addCleanup(image_check.stop)
+        if not hasattr(os, "geteuid"):
+            uid = patch.object(receive.os, "geteuid", return_value=0, create=True)
+            uid.start()
+            self.addCleanup(uid.stop)
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name).resolve()
+        (self.root / "releases").mkdir()
+        self.config = {"environment": "staging", "root": str(self.root), "loopbackPort": 18080}
+        sleeper = patch.object(receive.time, "sleep")
+        sleeper.start()
+        self.addCleanup(sleeper.stop)
 
-    def fixture(self, root):
-        candidate = root / "candidate"
-        candidate.mkdir()
-        image = candidate / "image.tar.gz"
-        image.write_bytes(b"qualified image")
-        report = candidate / "vulnerabilities.json"
-        report.write_text('{"Results":[{"Vulnerabilities":[]}]}')
-        audit = {"status": "passed", "imageArchiveSha256": receive.digest(image),
-                 "ignoreUnfixed": False, "severity": ["HIGH", "CRITICAL"],
-                 "reportSha256": receive.digest(report)}
-        (candidate / "audit.json").write_text(json.dumps(audit))
-        metadata = {"schema": 1, "environment": "staging", "hostname": receive.HOSTS["staging"],
-                    "prerelease": True, "sourceCommit": "a" * 40, "sourceTree": "b" * 40,
-                    "promotedCommit": "c" * 40, "imageId": "sha256:" + "d" * 64,
-                    "imageSha256": receive.digest(image), "siteReleaseSha256": "e" * 64,
-                    "version": "0.1.0-preview.rc2", "releaseTag": "v0.1.0-preview.rc2.staging.42." + "a" * 12,
-                    "assets": {"index.html": "f" * 64}}
-        metadata["releaseUrl"] = "https://github.com/Dockpipe-Industries/freeflight/releases/tag/" + metadata["releaseTag"]
-        (candidate / "deployment.json").write_text(json.dumps(metadata))
-        config = {"environment": "staging", "root": str(root.resolve()), "loopbackPort": 18080}
-        return candidate, metadata, config
+    def activate(self, bundle=None, health=lambda m, base: None):
+        data, digest = encode(bundle or fixture())
+        return receive.activate(self.config, data, digest, health)
 
-    def runner(self, calls, image, existing=""):
-        def run(*args):
-            calls.append(args)
-            if args[1:3] == ("ps", "-aq"):
-                return existing
-            if args[1:3] == ("image", "inspect"):
-                return json.dumps([{"Id": image, "Architecture": "amd64", "Os": "linux"}])
-            return ""
-        return run
+    @unittest.skipIf(os.name == "nt", "POSIX host receiver; filesystem activation runs on Linux/macOS")
+    def test_success_serves_exact_bytes_without_executing_commands(self):
+        probes = []
+        result = self.activate(health=lambda m, base: probes.append(base))
+        self.assertTrue(result["verifiedLocal"])
+        self.assertNotIn("verifiedHttps", result)
+        self.assertEqual(probes, ["http://127.0.0.1:18080"])
+        self.assertEqual((self.root / "current/index.html").read_bytes(), b"qualified index.html")
+        self.assertFalse((self.root / "deploy.lock").exists())
 
-    def test_success_is_scoped_and_requires_both_probes(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary).resolve()
-            candidate, metadata, config = self.fixture(root)
-            calls, probes = [], []
-            result = receive.activate(config, candidate, self.runner(calls, metadata["imageId"]),
-                                      lambda m, url: probes.append(url))
-            self.assertTrue(result["verifiedHttps"])
-            self.assertEqual(probes, ["http://127.0.0.1:18080", "https://freeflight.staging.dockpipe.com"])
-            self.assertEqual(json.loads((root / "current.json").read_text())["imageId"], metadata["imageId"])
-            compose = (root / "compose.yaml").read_text()
-            self.assertIn("127.0.0.1:18080:8080", compose)
-            self.assertIn("cap_drop: [ALL]", compose)
-            self.assertTrue(any(command[-5:] == ("up", "-d", "--no-build", "--pull", "never") for command in calls))
+    @unittest.skipIf(os.name == "nt", "POSIX host receiver; filesystem activation runs on Linux/macOS")
+    def test_first_failure_removes_only_new_current_link(self):
+        marker = self.root / "unrelated"
+        marker.write_text("preserve")
+        with self.assertRaisesRegex(ValueError, "unhealthy"):
+            self.activate(health=lambda m, base: (_ for _ in ()).throw(ValueError("unhealthy")))
+        self.assertFalse((self.root / "current").exists())
+        self.assertEqual(marker.read_text(), "preserve")
+        self.assertEqual(len(list((self.root / "releases").iterdir())), 1)
+        self.assertFalse((self.root / "deploy.lock").exists())
 
-    def test_failed_first_activation_removes_only_own_project(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary).resolve()
-            candidate, metadata, config = self.fixture(root)
-            calls = []
-            with patch.object(receive.time, "sleep"):
-                with self.assertRaisesRegex(ValueError, "unhealthy"):
-                    receive.activate(config, candidate, self.runner(calls, metadata["imageId"]),
-                                     lambda m, url: (_ for _ in ()).throw(ValueError("unhealthy")))
-            self.assertFalse((root / "current.json").exists())
-            self.assertFalse((root / "compose.yaml").exists())
-            self.assertEqual(calls[-1][-3:], ("down", "--timeout", "10"))
-            self.assertIn("freeflight-staging", calls[-1])
+    @unittest.skipIf(os.name == "nt", "POSIX host receiver; filesystem activation runs on Linux/macOS")
+    def test_failed_upgrade_restores_and_probes_previous_release(self):
+        self.activate()
+        previous = (self.root / "current").resolve()
+        calls = []
+        def health(metadata, base):
+            calls.append((self.root / "current").resolve())
+            if calls[-1] != previous:
+                raise ValueError("candidate unhealthy")
+        with self.assertRaises(ValueError):
+            self.activate(health=health)
+        self.assertEqual((self.root / "current").resolve(), previous)
+        self.assertEqual(calls[-1], previous)
+        self.assertFalse((self.root / "deploy.lock").exists())
 
-    def test_failed_upgrade_restores_previous_image_and_receipt(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary).resolve()
-            candidate, metadata, config = self.fixture(root)
-            old = {**metadata, "imageId": "sha256:" + "1" * 64, "loopbackPort": 18080}
-            (root / "current.json").write_text(json.dumps(old))
-            (root / "compose.yaml").write_text(receive.compose_text("staging", 18080, old["imageId"]))
-            calls = []
-            def probe(m, url):
-                if m["imageId"] != old["imageId"]:
-                    raise ValueError("new image unhealthy")
-            with patch.object(receive.time, "sleep"):
-                with self.assertRaisesRegex(ValueError, "new image unhealthy"):
-                    receive.activate(config, candidate, self.runner(calls, metadata["imageId"], "owned"), probe)
-            self.assertIn(old["imageId"], (root / "compose.yaml").read_text())
-            self.assertEqual(json.loads((root / "current.json").read_text()), old)
-            self.assertEqual(sum(command[-5:] == ("up", "-d", "--no-build", "--pull", "never") for command in calls), 2)
+    @unittest.skipIf(os.name == "nt", "POSIX host receiver; filesystem activation runs on Linux/macOS")
+    def test_failed_rollback_retains_reconciliation_lock(self):
+        self.activate()
+        with self.assertRaises(ValueError):
+            self.activate(health=lambda m, base: (_ for _ in ()).throw(ValueError("all unhealthy")))
+        self.assertTrue((self.root / "deploy.lock").exists())
+        with self.assertRaises(FileExistsError):
+            self.activate()
 
-    def test_existing_project_without_receipt_cannot_be_adopted(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary).resolve()
-            candidate, metadata, config = self.fixture(root)
-            calls = []
-            with self.assertRaisesRegex(ValueError, "no activation receipt"):
-                receive.activate(config, candidate, self.runner(calls, metadata["imageId"], "foreign"))
-            self.assertEqual(len(calls), 1)
-
-    def test_tamper_wrong_environment_and_production_prerelease_rejected(self):
-        for change in ("image", "environment", "production"):
-            with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
+    @unittest.skipIf(os.name == "nt", "POSIX host receiver; filesystem activation runs on Linux/macOS")
+    def test_existing_nonlink_and_foreign_link_are_not_adopted(self):
+        for kind in ("file", "foreign"):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary).resolve()
-                candidate, metadata, config = self.fixture(root)
-                if change == "image":
-                    (candidate / "image.tar.gz").write_bytes(b"tampered")
-                elif change == "environment":
-                    config["environment"] = "production"
+                (root / "releases").mkdir()
+                if kind == "file":
+                    (root / "current").write_text("owned elsewhere")
                 else:
-                    metadata.update(environment="production", hostname=receive.HOSTS["production"], prerelease=False)
-                    (candidate / "deployment.json").write_text(json.dumps(metadata))
-                    config["environment"] = "production"
-                calls = []
+                    (root / "current").symlink_to(self.root)
+                data, digest = encode(fixture())
                 with self.assertRaises(ValueError):
-                    receive.activate(config, candidate, self.runner(calls, metadata["imageId"]))
-                self.assertEqual(calls, [])
+                    receive.activate({**self.config, "root": str(root)}, data, digest)
 
-    def test_archive_traversal_and_links_rejected_before_extraction(self):
-        for bad in ("../escape", "symlink"):
-            with self.subTest(bad=bad), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary)
-                archive = root / "delivery.tar"
-                with tarfile.open(archive, "w") as output:
-                    for name in receive.FILES:
-                        entry = tarfile.TarInfo("../escape" if bad == "../escape" and name == "image.tar.gz" else name)
-                        if bad == "symlink" and name == "image.tar.gz":
-                            entry.type = tarfile.SYMTYPE
-                            entry.linkname = "/etc/passwd"
-                        else:
-                            entry.size = 1
-                        output.addfile(entry, io.BytesIO(b"x"))
-                destination = root / "out"
-                destination.mkdir()
-                with self.assertRaises(ValueError):
-                    receive.extract(archive, destination)
-                self.assertEqual(list(destination.iterdir()), [])
+    def test_wrong_product_scope_and_extra_or_traversal_files_rejected(self):
+        mutations = [lambda b: b.update(product="dockpipe"),
+                     lambda b: b["deployment"].update(environment="production"),
+                     lambda b: b["files"].update({"../escape": b["files"]["index.html"]}),
+                     lambda b: b["files"].update({"unexpected.js": b["files"]["index.html"]})]
+        for mutate in mutations:
+            bundle = fixture()
+            mutate(bundle)
+            with self.assertRaises(ValueError):
+                self.activate(bundle)
+        self.assertEqual(list((self.root / "releases").iterdir()), [])
 
+    def test_tampered_bytes_and_receipts_rejected(self):
+        for mutate in [lambda b: b["files"]["index.html"].update(content="eA=="),
+                       lambda b: b["deployment"].update(siteReleaseSha256="0" * 64),
+                       lambda b: b["deployment"].update(assets={})]:
+            bundle = fixture()
+            mutate(bundle)
+            with self.assertRaises(ValueError):
+                self.activate(bundle)
 
-class DockerArchiveTests(unittest.TestCase):
-    @unittest.skipUnless(os.environ.get("FREEFLIGHT_QUALIFIED_CONTAINER"), "Optional retained CI artifact")
-    def test_retained_qualified_container(self):
-        archive = Path(os.environ["FREEFLIGHT_QUALIFIED_CONTAINER"])
-        receipt = json.loads((archive.parent / "verification.json").read_text())
-        self.assertEqual(receive.digest(archive), receipt["artifacts"][archive.name])
-        receive.verify_image_archive(archive, receipt["imageId"], receipt["siteReleaseSha256"])
+    def test_production_requires_stable_and_matching_scope(self):
+        data, digest = encode(fixture("production", "1.0.0"))
+        receive.decode(data, digest, "production")
+        with self.assertRaises(ValueError):
+            receive.decode(data, digest, "staging")
+        data, digest = encode(fixture("production", "1.0.0-preview"))
+        with self.assertRaises(ValueError):
+            receive.decode(data, digest, "production")
 
-    def test_only_exact_freeflight_tag_and_verified_blobs_are_accepted(self):
-        for forbidden in (False, True):
-            with self.subTest(forbidden=forbidden), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary)
-                config = b'{"architecture":"amd64","os":"linux"}'
-                image_id = "sha256:" + hashlib.sha256(config).hexdigest()
-                site_hash = "a" * 64
-                oci = json.dumps({"config": {"digest": image_id}, "layers": []}).encode()
-                oci_id = hashlib.sha256(oci).hexdigest()
-                tag = ("other-product:" if forbidden else "freeflight-site:") + site_hash[:16]
-                files = {
-                    "blobs/sha256/" + image_id[7:]: config,
-                    "blobs/sha256/" + oci_id: oci,
-                    "manifest.json": json.dumps([{"Config": "blobs/sha256/" + image_id[7:],
-                                                  "RepoTags": [tag], "Layers": []}]).encode(),
-                    "index.json": json.dumps({"schemaVersion": 2, "manifests": [{
-                        "digest": "sha256:" + oci_id, "annotations": {
-                            "io.containerd.image.name": "docker.io/library/" + tag,
-                            "org.opencontainers.image.ref.name": site_hash[:16]}}]}).encode(),
-                    "oci-layout": b'{"imageLayoutVersion":"1.0.0"}',
-                }
-                path = root / "image.tar.gz"
-                with tarfile.open(path, "w:gz") as archive:
-                    for name, data in files.items():
-                        entry = tarfile.TarInfo(name)
-                        entry.size = len(data)
-                        archive.addfile(entry, io.BytesIO(data))
-                if forbidden:
-                    with self.assertRaisesRegex(ValueError, "unrelated"):
-                        receive.verify_image_archive(path, image_id, site_hash)
-                else:
-                    receive.verify_image_archive(path, image_id, site_hash)
+    def test_numeric_version_staging_tag_is_accepted(self):
+        data, digest = encode(fixture(version="1.0.0"))
+        receive.decode(data, digest, "staging")
+
+    def test_duplicate_json_and_decompression_limit_rejected(self):
+        data = gzip.compress(b'{"product":"freeflight","product":"dockpipe"}')
+        with self.assertRaisesRegex(ValueError, "Duplicate"):
+            receive.decode(data, receive.digest(data), "staging")
+        data, digest = encode(fixture())
+        with patch.object(receive, "MAX_DOCUMENT", 20):
+            with self.assertRaisesRegex(ValueError, "Expanded"):
+                receive.decode(data, digest, "staging")
+
+    def test_root_execution_is_rejected_before_configuration_read(self):
+        with patch.object(receive.os, "geteuid", return_value=0, create=True):
+            with self.assertRaisesRegex(ValueError, "unprivileged"):
+                receive.receive("/nonexistent")
 
 
 if __name__ == "__main__":

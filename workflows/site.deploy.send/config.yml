@@ -7,7 +7,3 @@ steps:
     kind: host
     cwd: repo
     cmd: bash workflows/site.deploy.send/assets/send.sh
-  - id: verify-public
-    kind: host
-    cwd: repo
-    cmd: python3 -B workflows/site.deploy.receive/assets/receive.py --verify-public bin/.local/site-pipeline/deployment.json

@@ -491,3 +491,7 @@ chain with fresh checks; no permission or branch-protection exception was added.
   sources and unsupported project-reference graphs now fail explicitly.
   Hosted CI and legacy Windows qualification pending at this entry. No release,
   merge, branch-protection change or unrelated DockPipe change was performed.
+
+## 2026-10-20 — Paired scaling benchmark
+
+Candidate runtime 986b60b passed all five hosted native targets, both site builds and CodeQL (CI 39357377175). Ran the existing DockPipe benchmark in comparative mode against a verified same-source macOS rebuild of published ba0c4ce. All 12 compatible baseline/candidate runs and all six candidate stress runs passed exact semantics and edit-refresh checks; old C# limits and TS/JS source omission were retained as failures. Results and memory tradeoffs are documented in docs/benchmarks.md. Benchmark tooling/documentation changes do not change the measured runtime. PR20 remains draft; no release or protected merge performed.

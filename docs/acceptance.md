@@ -145,3 +145,7 @@ gateway, website, CI, tests/benchmarks, and exact unmet criteria/blockers.
 Safe-source analysis does not establish legacy project compatibility. No user's
 project target is changed; test target substitutions occur only in disposable copies
 of the authored fixture. Legacy MSBuild evaluation remains explicit and trusted.
+
+### Scaling candidate qualification update
+
+Runtime 986b60b: all five hosted native targets, staging/production site validation and CodeQL passed. Reproducible paired Mac benchmarks against ba0c4ce passed candidate correctness checks for C#/TS/JS; see docs/benchmarks.md for raw-receipt location, timings, memory tradeoffs and limitations. This development candidate is not a new published release.

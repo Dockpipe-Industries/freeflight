@@ -288,3 +288,9 @@ upgrade rollback, failed-rollback lock retention and pre-existing site/admin-pol
 preservation all passed. Keys were ephemeral test fixtures on a disposable runner;
 no staging credentials or infrastructure were involved. This validates the local
 host contract, not live provider/state/TLS readiness or deployment authorization.
+
+- 2026-10-20: First-level staging hostname `freeflight-staging.dockpipe.com` is now
+  used consistently by site generation, receipt validation and receiver/bootstrap.
+  Local release policy and hostname rollback fixtures passed. The real Nginx
+  migration is included in disposable Ubuntu CI; live/hosted status is not implied
+  by these authored tests.

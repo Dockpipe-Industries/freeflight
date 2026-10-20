@@ -16,7 +16,7 @@ class PreparationPolicy(unittest.TestCase):
             receipt = root / "receipt.json"
             receipt.write_text(json.dumps({
                 "sourceCommit": "a" * 40, "sourceTree": "b" * 40, "sourceDirty": False,
-                "environment": "staging", "hostname": "freeflight.staging.dockpipe.com",
+                "environment": "staging", "hostname": "freeflight-staging.dockpipe.com",
                 "imageId": "sha256:" + "e" * 64, "artifacts": {archive.name: "0" * 64}}))
             with patch.object(prepare, "git", side_effect=["b" * 40, "c" * 40, "a" * 40, "b" * 40]):
                 with self.assertRaisesRegex(ValueError, "archive mismatch"):

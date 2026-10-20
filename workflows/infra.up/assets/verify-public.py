@@ -12,7 +12,7 @@ metadata = json.loads((ROOT / "bin/.local/site-pipeline/deployment.json").read_t
 require(metadata["environment"] == "staging", "Production setup is not supported")
 for attempt in range(30):
     try:
-        probe(metadata, "https://freeflight.staging.dockpipe.com")
+        probe(metadata, "https://freeflight-staging.dockpipe.com")
         print("Private staging HTTPS serves the exact qualified assets")
         break
     except Exception:

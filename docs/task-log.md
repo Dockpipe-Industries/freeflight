@@ -865,3 +865,14 @@ and rollback, plus existing-service preservation. Local `release.policy` passed
 89 tests including hostname migration scenarios; hosted disposable Linux coverage
 now exercises the real migration before delivery/rollback. Live verification and
 latest-head hosted qualification are recorded separately after execution.
+
+Live hostname migration completed through the bounded workflow: pinned host files
+matched reviewed hashes, Nginx reloaded, existing services were preserved, and the
+new first-level hostname passed certificate validation. HTTPS health returned 200
+through the routing workflow; an independently denied caller returned 403. Origin
+checks returned 200 for the operator, 403 for a disallowed client and 404 for the old
+hostname. Obsolete Cloudflare entries were removed after verification. Delivery
+remained disabled and no site was activated. Disposable Ubuntu migration CI passed.
+The first Windows run exposed POSIX mode assumptions in the filesystem fixture;
+that fixture is now explicitly POSIX-only while byte/hash rejection tests run on
+all platforms. Actual installer/migration coverage remains in Ubuntu CI.

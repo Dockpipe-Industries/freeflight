@@ -170,7 +170,7 @@ internal static class TrustedProjectLoader
         var candidates = (solutions.Count > 0 ? solutions : projects).Order(StringComparer.Ordinal).ToArray();
         if (candidates.Length != 1)
             throw new ProjectLoadException("project_selection_required", candidates.Length == 0 ? "No .sln or .csproj found" : "Multiple project/solution candidates found", null,
-                "Set csharp.project in startup configuration or project in workspace.open to a root-relative .sln/.csproj path.",
+                "Select project in workspace.open using a root-relative .sln/.csproj path and reload=true; no startup configuration change is required.",
                 candidates.Take(32).Select(path => (object)new { candidate = Path.GetRelativePath(root, path) }).ToArray());
         return candidates[0];
     }

@@ -94,8 +94,15 @@ Large real solution fidelity and performance remain release blockers.
 
 ## Explicitly trusted project mode
 
-The preferred operator interface is top-level `trustedRoots: ["/absolute/trusted/root"]`
-with bundled workers; see [workspace configuration](../../docs/workspaces.md#explicit-trusted-c-configuration-development-repair).
+The development branch's preferred bundled configuration is only
+`{"trustedRoots":["/absolute/source-a","/absolute/source-b"]}`. Each source folder
+provides access and trusted project-loading permission to its descendant repositories;
+no duplicate `roots` or mandatory `csharp.project` is needed. File requests route
+lazily to a repository/project; ambiguous solutions are selected using
+`workspace.open` with `project` and `reload`, not an MCP config edit.
+This source-folder UX is **unreleased**: published preview
+`v0.1.0-preview.20261020.trusted.1997d38` still requires `roots` plus `trustedRoots`.
+See [workspace configuration](../../docs/workspaces.md#configure-once-within-an-explicit-boundary).
 Advanced explicit worker configurations can still add `--trusted-msbuild` to their argv.
 This is startup authorization for every root that worker opens. No request can
 turn it on or switch modes; normal bundled `--workspace` startup remains safe-source.

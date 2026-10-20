@@ -33,9 +33,12 @@ Server::Server(const Json &configuration) {
     }
     if (resources_["maxFileBytes"] > resources_["maxWorkspaceBytes"])
         throw std::runtime_error("maxFileBytes must not exceed maxWorkspaceBytes");
-    if (!configuration.at("roots").is_array() || configuration.at("roots").size() > 32)
+    sourceRoots_ = !configuration.contains("roots") && configuration.contains("trustedRoots");
+    const auto accessRoots =
+        configuration.value("roots", configuration.value("trustedRoots", Json::array()));
+    if (!accessRoots.is_array() || accessRoots.size() > 32)
         throw std::runtime_error("Require 0–32 startup roots");
-    for (const auto &root : configuration.at("roots")) {
+    for (const auto &root : accessRoots) {
         if (!pathFromUtf8(root.get<std::string>()).is_absolute())
             throw std::runtime_error("Startup roots must be absolute");
         auto path = fs::canonical(pathFromUtf8(root.get<std::string>()));
@@ -102,6 +105,51 @@ bool Server::trusts(const fs::path &root) const {
                        [&](const auto &trusted) { return within(trusted, root); });
 }
 
+// Inspect only ancestors of the requested document. Never recursively load a source
+// folder containing unrelated repositories. The worker still resolves ambiguity
+// within the selected repository using its structured project-selection contract.
+fs::path Server::route(const fs::path &root, const fs::path &file, const std::string &language,
+                       std::stop_token stop) const {
+    fs::path project, solution, package;
+    std::size_t entries = 0;
+    for (auto cursor = file.parent_path(); within(root, cursor); cursor = cursor.parent_path()) {
+        if (stop.stop_requested())
+            throw std::runtime_error("Request cancelled");
+        if (fs::exists(cursor / ".git") || fs::exists(cursor / ".hg"))
+            return cursor;
+        for (const auto &entry : fs::directory_iterator(cursor)) {
+            if (stop.stop_requested())
+                throw std::runtime_error("Request cancelled");
+            if (++entries > resources_.at("maxDirectoryEntries").get<std::size_t>())
+                throw std::runtime_error("Project routing directory entry limit exceeded");
+            if (entry.is_symlink() || !entry.is_regular_file())
+                continue;
+            const auto extension = entry.path().extension();
+            if (language == "csharp") {
+                if (extension == ".sln" && solution.empty())
+                    solution = cursor;
+                if (extension == ".csproj" && project.empty())
+                    project = cursor;
+            } else if ((language == "typescript" || language == "javascript") && package.empty() &&
+                       (entry.path().filename() == "tsconfig.json" ||
+                        entry.path().filename() == "jsconfig.json" ||
+                        entry.path().filename() == "package.json")) {
+                package = cursor;
+            }
+        }
+        if (cursor == root)
+            break;
+    }
+    if (!solution.empty())
+        return solution;
+    if (!project.empty())
+        return project;
+    if (!package.empty())
+        return package;
+    // Loose files get a bounded containing workspace, not the whole source tree.
+    return file.parent_path();
+}
+
 fs::path Server::authorize(const std::string &value) const {
     const auto supplied = pathFromUtf8(value);
     if (roots_.empty() || !supplied.is_absolute())
@@ -121,6 +169,7 @@ fs::path Server::authorize(const std::string &value) const {
 }
 
 void Server::close(const fs::path &root) {
+    std::erase_if(explicitWorkspaces_, [&](const auto &path) { return within(root, path); });
     std::erase_if(engines_, [&](const auto &entry) { return within(root, entry.second.root); });
     std::erase_if(projects_, [&](const auto &entry) { return within(root, entry.first); });
     std::erase_if(active_, [&](const auto &path) { return within(root, path); });
@@ -418,6 +467,7 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
             associations_[root] = candidate;
         else
             associations_.erase(root);
+        explicitWorkspaces_.insert(root);
         return {{"root", pathToUtf8(root)}, {"active", true}};
     }
     if (name == "workspace.discover") {
@@ -478,13 +528,12 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
             !(name == "semantic.query" && (key == "operation" || key == "arguments")))
             throw std::runtime_error("Unknown argument: " + key);
     }
-    const auto root = authorize(arguments.at("root").get<std::string>());
+    auto root = authorize(arguments.at("root").get<std::string>());
     if (std::find(active_.begin(), active_.end(), root) == active_.end())
         throw std::runtime_error("Workspace is not active; invoke workspace.open first");
     if (!fs::is_directory(root))
         throw std::runtime_error("Workspace root is not a directory");
     const auto language = arguments.at("language").get<std::string>();
-    const auto key = pathToUtf8(root) + "\n" + language;
     auto params = arguments.value("arguments", Json::object());
     if (!params.is_object())
         throw std::runtime_error("Operation arguments must be an object");
@@ -500,7 +549,27 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
         if (!within(root, path))
             throw std::runtime_error("Document is outside selected workspace");
         params["file"] = pathToUtf8(path);
+        if (sourceRoots_ && !projects_.contains(root) &&
+            std::find(roots_.begin(), roots_.end(), root) != roots_.end()) {
+            root = route(root, path, language, stop);
+            if (std::find(active_.begin(), active_.end(), root) == active_.end()) {
+                if (active_.size() >= 32)
+                    throw std::runtime_error("Active workspace limit reached");
+                active_.push_back(root);
+                std::sort(active_.begin(), active_.end());
+            }
+        }
     }
+    if (sourceRoots_ && !params.contains("file") && !explicitWorkspaces_.contains(root) &&
+        std::find(roots_.begin(), roots_.end(), root) != roots_.end())
+        throw EngineError(
+            {{"code", "workspace_selection_required"},
+             {"root", pathToUtf8(root)},
+             {"message", "Select a repository workspace or supply a document file"},
+             {"remediation",
+              "Invoke workspace.open with a repository directory within trustedRoots, then query "
+              "that root. No configuration change is required."}});
+    const auto key = pathToUtf8(root) + "\n" + language;
     params["root"] = pathToUtf8(root);
     try {
         auto &selected = engine(root, language, stop);
@@ -515,6 +584,11 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
         if (response.contains("error"))
             throw EngineError(response["error"]);
         return response.at("result");
+    } catch (const EngineError &error) {
+        engines_.erase(key);
+        auto detail = error.detail;
+        detail["workspaceRoot"] = pathToUtf8(root);
+        throw EngineError(std::move(detail));
     } catch (...) {
         engines_.erase(key); // A later explicit request lazily recovers; never replay mutations.
         throw;

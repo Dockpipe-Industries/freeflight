@@ -627,3 +627,30 @@ still stop for review. Unique timeline evidence, same-repository branch identity
 qualified-source ancestry and identical-tree gates remain. Regression fixtures
 include the observed public PR #28 record shape and wrong-repository/commit/parent
 cases. Publication remains pending fresh qualification and protected promotion.
+
+
+### Trusted preview publication and source-folder follow-up (2026-10-20)
+
+Source 1997d38 passed hosted release verification 39379428880 after normal protected
+promotion through PRs #29, #30 and #31. The public prerelease
+`v0.1.0-preview.20261020.trusted.1997d38` and all four assets were anonymously
+retrieved and verified. Linux x64 archive SHA256:
+`ab4d7f2312b56ed54870f688384f86b2dde470a42889f3820657c4384aa21048`.
+No production website was activated by that promotion.
+
+The follow-up implements a single startup `trustedRoots` array as both access and
+trusted project-loading permission. Existing `roots` policies remain compatible.
+File routing examines only ancestors to identify a repository or project boundary;
+startup does not scan or evaluate every repository. Workspace-wide requests require
+an explicit workspace selection. Ambiguous solutions/projects expose candidate paths
+and their workspace root, resolved with `workspace.open`, not MCP config changes.
+
+DockPipe core.build/core.test and lint/repo.check pass locally. The packaged MCP
+fixture verifies two source roots, a nested Architecture.sln, identical symbol names
+in different repositories, new projects without restart, changed-file diagnostics,
+TS/JS navigation, explicit ambiguity selection and unauthorized/symlink boundaries.
+The official SDK client and existing worker semantic/cancellation/resource checks
+also pass. Evidence is retained under bin/.local/source-roots-package*.log.
+This is local macOS ARM64 evidence; new hosted platform qualification and a report
+checkpoint precede any promotion/publication. Client configuration and private
+repositories remain untouched; website work and performance experiments are excluded.

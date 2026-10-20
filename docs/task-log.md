@@ -591,3 +591,20 @@ now reject any root component (including drive-relative paths); canonicalization
 uses an error code and a controlled UTF-8 message. Tests cover Windows drive,
 root-directory and UNC forms and retain missing-file/recovery checks. This narrow
 fix follows the authorized repair/CI scope; packaging experiments stay excluded.
+
+### Trusted repair promotion and release collector regression (2026-10-20)
+
+Repair e2c4379 passed CI 39371768117 and CodeQL 39371768265, then promoted
+through PRs #23, #24 and #25 with all required checks. Master ea139ac preserves
+source tree c4540b8d9afce40e4388822dae855baa47f6802f. Explicitly approved preview
+publication has not occurred. Read-only release verification 39374125749 failed
+before publication because native artifact collection expected flat ZIP entries,
+while the current CI multi-path upload places archives under `packages/`.
+
+The collector now accepts that exact prefix or the historical flat layout, rejects
+normalized collisions/traversal/special files, validates all entries before writes,
+and refuses existing outputs. Release-policy regression tests cover both layouts
+and rejection paths. This automation-only correction requires fresh hosted
+qualification and normal promotion; it does not change the language runtime.
+Local NuGet/npm proof and profiling tooling remain excluded. Existing preview
+artifacts and tags are preserved; no client configuration or private project changed.

@@ -579,3 +579,15 @@ opening a draft PR to dev for exact-head Linux/Windows/macOS checks. Protected
 merges, releases, package publication and credential/client changes remain on hold.
 The unfinished NuGet/npm proof and local diagnostic benchmark tooling are excluded
 from the repair commit. Rejected experimental runtime changes remain reverted.
+
+
+## 2026-10-20 — Windows project-path CI correction
+
+Repair 5d74198 was pushed to js/dev and draft PR #23 opened to dev. Exact-head
+Windows CI exposed two protocol failures: `/App.csproj` is rooted but not absolute
+on Windows, and missing project paths in a Unicode workspace could terminate the
+server while reporting a native filesystem error. Startup and request selections
+now reject any root component (including drive-relative paths); canonicalization
+uses an error code and a controlled UTF-8 message. Tests cover Windows drive,
+root-directory and UNC forms and retain missing-file/recovery checks. This narrow
+fix follows the authorized repair/CI scope; packaging experiments stay excluded.

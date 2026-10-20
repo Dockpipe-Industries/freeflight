@@ -57,11 +57,16 @@ class ProtocolTests(unittest.TestCase):
         self.assertFalse(tools[2]["annotations"]["readOnlyHint"])
 
     def test_csharp_operator_policy_validation(self):
-        for policy in ([], None, {"mode": True}, {"mode": "trust-me"},
+        invalid_policies = [[], None, {"mode": True}, {"mode": "trust-me"},
                        {"unknown": "value"}, {"project": "App.csproj"},
                        {"mode": "trusted-msbuild", "project": "../App.csproj"},
                        {"mode": "trusted-msbuild", "project": "/App.csproj"},
-                       {"mode": "trusted-msbuild", "project": "x.json"}):
+                       {"mode": "trusted-msbuild", "project": "x.json"}]
+        if sys.platform == "win32":
+            invalid_policies.extend({"mode": "trusted-msbuild", "project": value}
+                                    for value in ("C:App.csproj", "\\App.csproj",
+                                                  "C:\\App.csproj", "\\\\server\\share\\App.csproj"))
+        for policy in invalid_policies:
             config = self.root / "invalid-csharp.json"
             config.write_text(json.dumps({"roots": [str(self.root)], "engines": {}, "csharp": policy}))
             result = subprocess.run([BINARY, "--config", str(config)], input="",
@@ -120,7 +125,11 @@ class ProtocolTests(unittest.TestCase):
         status = self.tool("workspace.list")["structuredContent"]["workspaces"][0]
         self.assertEqual(status["csharp"], {"mode": "trusted-msbuild", "project": "Other.csproj"})
         self.assertEqual(status["engines"]["csharp"]["analysis"], second)
-        for project in ("../outside.csproj", "/outside.csproj", "source", "missing.csproj"):
+        invalid_projects = ["../outside.csproj", "/outside.csproj", "source", "missing.csproj"]
+        if sys.platform == "win32":
+            invalid_projects.extend(("C:App.csproj", "\\App.csproj",
+                                     "C:\\App.csproj", "\\\\server\\share\\App.csproj"))
+        for project in invalid_projects:
             self.assertTrue(self.tool("workspace.open", {"root": str(self.root), "project": project, "reload": True})["isError"])
         for key in ("mode", "trustedMsbuild", "project", "csharp"):
             self.assertTrue(self.tool("semantic.query", dict(args, operation="identity", arguments={key: "trusted-msbuild"}))["isError"])

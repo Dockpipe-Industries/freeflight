@@ -87,7 +87,7 @@ Server::Server(const Json &configuration) {
         defaultProject_ = csharp.at("project").get<std::string>();
         const auto project = pathFromUtf8(defaultProject_);
         if ((!trustedCsharp_ && trustedRoots_.empty()) || project.empty() ||
-            project.is_absolute() ||
+            project.has_root_path() ||
             (project.extension() != ".sln" && project.extension() != ".csproj") ||
             std::any_of(project.begin(), project.end(),
                         [](const auto &part) { return part == ".."; }))
@@ -107,7 +107,12 @@ fs::path Server::authorize(const std::string &value) const {
     if (roots_.empty() || !supplied.is_absolute())
         throw std::runtime_error("Path is outside startup-authorized workspace roots; restart "
                                  "with --workspace or an explicit --config policy");
-    auto path = fs::canonical(supplied);
+    // Native filesystem_error::what() can contain Windows ANSI path bytes.
+    // Keep errors crossing the JSON boundary in controlled UTF-8 instead.
+    std::error_code resolutionError;
+    auto path = fs::canonical(supplied, resolutionError);
+    if (resolutionError)
+        throw std::runtime_error("Workspace path does not exist or cannot be resolved: " + value);
     for (const auto &root : roots_) {
         if (within(root, path))
             return path;
@@ -377,7 +382,7 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
                     "requests cannot grant trust");
             const auto suppliedProject = arguments.at("project").get<std::string>();
             const auto relative = pathFromUtf8(suppliedProject);
-            if (relative.empty() || relative.is_absolute() ||
+            if (relative.empty() || relative.has_root_path() ||
                 std::any_of(relative.begin(), relative.end(),
                             [](const auto &part) { return part == ".."; }) ||
                 (relative.extension() != ".sln" && relative.extension() != ".csproj"))

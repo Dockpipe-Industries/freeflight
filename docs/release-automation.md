@@ -72,3 +72,11 @@ verification consumes already qualified artifacts instead of repeating builds.
 References: [GitHub artifact API](https://docs.github.com/en/rest/actions/artifacts),
 [GitHub releases API](https://docs.github.com/en/rest/releases/releases). The current
 official API examples specify the pinned `2026-03-10` REST API version used here.
+
+Native artifact collection accepts the historical flat layout and the current
+`packages/` prefix produced by the CI multi-path upload. Only native archive and
+checksum basenames are accepted after removing that one exact prefix. Traversal,
+other directories, normalized collisions and special files are rejected before any
+files are extracted; existing outputs are never overwritten. The release-policy
+suite covers this layout contract. Hosted verification 39374125749 exposed the
+previous mismatch before publication; a successful later run must establish repair.

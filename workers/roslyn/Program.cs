@@ -77,6 +77,7 @@ internal static class Program
                         finally { gate.Release(); }
                     }
                     catch (OperationCanceledException) { Reply(new { id, error = new { message = "Request cancelled" } }); }
+                    catch (ResourceLimitException ex) { Reply(new { id, error = ex.Detail }); }
                     catch (Exception ex) { Reply(new { id, error = new { message = ex.Message } }); }
                     finally { active.TryRemove(key, out _); cts.Dispose(); }
                 }));
@@ -102,9 +103,53 @@ internal static class Program
 
 internal sealed class SourceEngine : IDisposable
 {
-    private const int MaximumFiles = 10000;
-    private const int MaximumFileBytes = 2 * 1024 * 1024;
-    private const long MaximumWorkspaceBytes = 64L * 1024 * 1024;
+    private ResourcePolicy resources = new();
+    private readonly Dictionary<string, FileSnapshot> snapshots = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, long> dirtyFiles = new(StringComparer.Ordinal);
+    private FileSystemWatcher? watcher;
+    private long invalidationGeneration;
+    private long changeSequence;
+    private long bytesRead;
+    private long reusedSnapshots;
+    private sealed record FileSnapshot(long Length, long Modified, long Dirty, long Generation, long ValidatedAt);
+
+    private void Watch(string directory)
+    {
+        watcher?.Dispose();
+        watcher = null;
+        snapshots.Clear();
+        dirtyFiles.Clear();
+        Interlocked.Increment(ref invalidationGeneration);
+        try
+        {
+            watcher = new FileSystemWatcher(directory)
+            {
+                IncludeSubdirectories = true,
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.Size
+            };
+            watcher.Changed += (_, e) => MarkDirty(e.FullPath);
+            watcher.Created += (_, e) => MarkDirty(e.FullPath);
+            watcher.Deleted += (_, e) => MarkDirty(e.FullPath);
+            watcher.Renamed += (_, e) => { MarkDirty(e.OldFullPath); MarkDirty(e.FullPath); };
+            watcher.Error += (_, _) => Interlocked.Increment(ref invalidationGeneration);
+            watcher.EnableRaisingEvents = true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException or ArgumentException)
+        {
+            watcher?.Dispose();
+            watcher = null; // Unsupported watchers fall back to validating every request.
+        }
+    }
+
+    private void MarkDirty(string path)
+    {
+        dirtyFiles[path] = Interlocked.Increment(ref changeSequence);
+        if (dirtyFiles.Count > 4096)
+        {
+            Interlocked.Increment(ref invalidationGeneration);
+            dirtyFiles.Clear();
+        }
+    }
     private readonly AdhocWorkspace workspace = new();
     private readonly Dictionary<string, DocumentId> documents = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> fingerprints = new(StringComparer.Ordinal);
@@ -118,6 +163,8 @@ internal sealed class SourceEngine : IDisposable
 
     public async Task<object> Invoke(string method, JsonElement args, CancellationToken token)
     {
+        if (method != "open" && args.TryGetProperty("resources", out _))
+            throw new ArgumentException("Resource settings may only be supplied by the core when opening a workspace");
         if (method == "capabilities") return new
         {
             languages = new[] { "csharp" },
@@ -125,7 +172,8 @@ internal sealed class SourceEngine : IDisposable
             mode = Mode,
             fidelity = Mode,
             projectEvaluation = trustedMsbuild,
-            edits = "preview-only"
+            edits = "preview-only",
+            refreshStats = new { bytesRead, reusedSnapshots, invalidationGeneration }
         };
         if (method == "open")
         {
@@ -133,7 +181,10 @@ internal sealed class SourceEngine : IDisposable
             if (!Directory.Exists(requested)) throw new DirectoryNotFoundException(requested);
             if (args.TryGetProperty("mode", out var mode) && mode.GetString() != Mode)
                 throw new ArgumentException("Workspace mode must match the operator-owned startup mode; requests cannot change trust");
+            var selectedResources = ResourcePolicy.Parse(args);
             root = ResolveRoot(requested);
+            resources = selectedResources;
+            Watch(root);
             workspace.ClearSolution();
             documents.Clear();
             fingerprints.Clear();
@@ -141,7 +192,7 @@ internal sealed class SourceEngine : IDisposable
             if (trustedMsbuild)
             {
                 var selectedProject = args.TryGetProperty("project", out var selected) ? selected.GetString() : null;
-                var graph = await TrustedProjectLoader.Load(root, selectedProject, CheckPath, token);
+                var graph = await TrustedProjectLoader.Load(root, selectedProject, CheckPath, resources, token);
                 workspace.AddSolution(graph);
                 var loadedDocuments = new Dictionary<string, DocumentId>(StringComparer.Ordinal);
                 foreach (var project in workspace.CurrentSolution.Projects)
@@ -181,7 +232,8 @@ internal sealed class SourceEngine : IDisposable
         if (root is null || projectId is null) throw new InvalidOperationException("Open a workspace first");
         if (method is not ("symbols" or "definition" or "references" or "hover" or "diagnostics" or "rename" or "implementations" or "typeInfo" or "signatureHelp" or "workspaceSymbols" or "callHierarchy" or "typeHierarchy"))
             throw new ArgumentException($"Unsupported operation: {method}");
-        await Refresh(token);
+        var requestedFile = args.TryGetProperty("file", out var queryFile) ? CheckPath(queryFile.GetString()!) : null;
+        await Refresh(token, requestedFile, method == "rename");
         if (method == "workspaceSymbols")
             return await SemanticQueries.WorkspaceSymbols(workspace.CurrentSolution,
                 args.GetProperty("query").GetString() ?? "", token);
@@ -261,7 +313,7 @@ internal sealed class SourceEngine : IDisposable
         }
     }
 
-    private async Task Refresh(CancellationToken token)
+    private async Task Refresh(CancellationToken token, string? forceFile = null, bool forceAll = false)
     {
         var files = new List<string>();
         var pending = new Stack<string>();
@@ -274,7 +326,7 @@ internal sealed class SourceEngine : IDisposable
             foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
             {
                 token.ThrowIfCancellationRequested();
-                if (++entries > 100000) throw new InvalidOperationException("Workspace exceeds 100000 directory entries");
+                ResourcePolicy.Check("maxDirectoryEntries", root!, entry, ++entries, resources.MaxDirectoryEntries);
                 var attributes = File.GetAttributes(entry);
                 if ((attributes & FileAttributes.ReparsePoint) != 0) continue;
                 if ((attributes & FileAttributes.Directory) != 0)
@@ -285,42 +337,67 @@ internal sealed class SourceEngine : IDisposable
                 if (!entry.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) continue;
                 var path = CheckPath(entry);
                 var length = new FileInfo(path).Length;
-                if (length > MaximumFileBytes) throw new InvalidOperationException("C# file exceeds 2 MiB limit");
+                ResourcePolicy.Check("maxFileBytes", root!, path, length, resources.MaxFileBytes);
                 bytes += length;
-                if (bytes > MaximumWorkspaceBytes || files.Count >= MaximumFiles) throw new InvalidOperationException("Workspace exceeds safe-source limits");
+                ResourcePolicy.Check("maxWorkspaceBytes", root!, path, bytes, resources.MaxWorkspaceBytes);
+                ResourcePolicy.Check("maxFiles", root!, path, files.Count + 1L, resources.MaxFiles);
                 files.Add(path);
             }
         }
-        if (files.Count > MaximumFiles) throw new InvalidOperationException("Workspace exceeds file count limit");
+        ResourcePolicy.Check("maxFiles", root!, root!, files.Count, resources.MaxFiles);
+        bytes = 0; // Count actual bytes again; stat values can change during a read.
         files.Sort(StringComparer.Ordinal);
         var solution = workspace.CurrentSolution;
         var nextDocuments = new Dictionary<string, DocumentId>(documents, StringComparer.Ordinal);
         var nextFingerprints = new Dictionary<string, string>(fingerprints, StringComparer.Ordinal);
+        var nextSnapshots = new Dictionary<string, FileSnapshot>(snapshots, StringComparer.Ordinal);
         var present = files.ToHashSet(StringComparer.Ordinal);
         foreach (var removed in documents.Keys.Where(path => !present.Contains(path)).ToArray())
         {
             solution = solution.RemoveDocument(documents[removed]);
             nextDocuments.Remove(removed);
             nextFingerprints.Remove(removed);
+            nextSnapshots.Remove(removed);
         }
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
             CheckPath(file);
+            var info = new FileInfo(file);
+            var length = info.Length;
+            var modified = info.LastWriteTimeUtc.Ticks;
+            var generation = Interlocked.Read(ref invalidationGeneration);
+            var dirty = dirtyFiles.GetValueOrDefault(file);
+            var now = Environment.TickCount64;
+            ResourcePolicy.Check("maxFileBytes", root!, file, length, resources.MaxFileBytes);
+            if (!forceAll && !string.Equals(file, forceFile, PathComparison) && watcher is not null &&
+                snapshots.TryGetValue(file, out var cached) && cached.Length == length && cached.Modified == modified &&
+                cached.Generation == generation && cached.Dirty == dirty && now - cached.ValidatedAt < 5000 &&
+                documents.ContainsKey(file))
+            {
+                bytes += length;
+                ResourcePolicy.Check("maxWorkspaceBytes", root!, file, bytes, resources.MaxWorkspaceBytes);
+                reusedSnapshots++;
+                continue;
+            }
             // Bounded read even when the file grows after enumeration.
             using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             using var memory = new MemoryStream();
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             var buffer = new byte[8192];
             int count;
             while ((count = await stream.ReadAsync(buffer.AsMemory(), token)) != 0)
             {
-                if (memory.Length + count > MaximumFileBytes) throw new InvalidOperationException("C# file exceeds 2 MiB limit");
+                ResourcePolicy.Check("maxFileBytes", root!, file, memory.Length + count, resources.MaxFileBytes);
+                bytes += count;
+                bytesRead += count;
+                ResourcePolicy.Check("maxWorkspaceBytes", root!, file, bytes, resources.MaxWorkspaceBytes);
+                hash.AppendData(buffer, 0, count);
                 await memory.WriteAsync(buffer.AsMemory(0, count), token);
             }
             memory.Position = 0;
-            nextFingerprints[file] = Convert.ToHexString(SHA256.HashData(memory.ToArray())).ToLowerInvariant();
-            bytes += trustedMsbuild ? memory.Length : 0;
-            if (bytes > MaximumWorkspaceBytes) throw new InvalidOperationException("Workspace exceeds source size limit");
+            nextFingerprints[file] = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+            nextSnapshots[file] = new FileSnapshot(memory.Length, modified, dirty, generation, now);
             var source = SourceText.From(memory, encoding: Encoding.UTF8);
             if (!documents.TryGetValue(file, out var id))
             {
@@ -328,9 +405,13 @@ internal sealed class SourceEngine : IDisposable
                 nextDocuments.Add(file, id);
                 solution = solution.AddDocument(id, Path.GetFileName(file), source, filePath: file);
             }
-            else if (!(await solution.GetDocument(id)!.GetTextAsync(token)).ContentEquals(source)) solution = solution.WithDocumentText(id, source);
+            else if (!fingerprints.ContainsKey(file) ||
+                !(await solution.GetDocument(id)!.GetTextAsync(token)).ContentEquals(source))
+                solution = solution.WithDocumentText(id, source);
         }
         if (!workspace.TryApplyChanges(solution)) throw new InvalidOperationException("Could not update workspace");
+        snapshots.Clear();
+        foreach (var entry in nextSnapshots) snapshots.Add(entry.Key, entry.Value);
         documents.Clear();
         foreach (var entry in nextDocuments) documents.Add(entry.Key, entry.Value);
         fingerprints.Clear();
@@ -365,5 +446,9 @@ internal sealed class SourceEngine : IDisposable
 
     private static object Location(Location location) => new { file = location.SourceTree?.FilePath, range = Range(location.GetLineSpan().Span) };
     private static object Range(LinePositionSpan span) => new { start = new { line = span.Start.Line, character = span.Start.Character }, end = new { line = span.End.Line, character = span.End.Character } };
-    public void Dispose() => workspace.Dispose();
+    public void Dispose()
+    {
+        watcher?.Dispose();
+        workspace.Dispose();
+    }
 }

@@ -1,8 +1,8 @@
 # Workspace selection and access
 
-This describes the development-branch workspace lifecycle. The published Ubuntu
-22.04 preview retains its original startup-root interface until a replacement is
-qualified and explicitly published.
+The configure-once preview supports this workspace lifecycle. Resource controls
+and incremental refresh improvements below are development changes and require
+a newly qualified distribution; they are not present in the published preview.
 
 FreeFlight separates permission to access a directory from selecting a project
 for analysis. A project path supplied by an AI is a selection, not permission.
@@ -74,3 +74,70 @@ Filesystem access and repository code execution remain separate permissions.
 Opening a workspace does not enable MSBuild evaluation, plugins, generators or
 analyzers. See [security](../SECURITY.md) for worker privilege and filesystem-race
 limitations.
+
+## Source resources and incremental refresh
+
+Normal analysis retains language-service state between requests. C# keeps stable
+Roslyn document IDs and source snapshots; TypeScript keeps language services and
+a bounded source-snapshot cache. The requested document is content-checked on each
+query. Unchanged unrelated sources reuse snapshots, with metadata checks and a
+five-second content-revalidation fallback. C# also watches changes and invalidates
+on watcher overflow. File enumeration still occurs; these changes do not make
+safe-source C# a project-aware solution loader or promise constant-time queries.
+Rename/edit previews revalidate source contents before emitting original hashes.
+
+Default source budgets apply automatically, without per-project configuration:
+
+| Startup setting | Default | Maximum accepted override |
+| --- | ---: | ---: |
+| `maxFileBytes` | 32 MiB | 256 MiB |
+| `maxWorkspaceBytes` | 512 MiB | 2 GiB |
+| `maxFiles` | 50,000 | 200,000 |
+| `maxDirectoryEntries` | 500,000 | 2,000,000 |
+
+These are source/admission budgets, not a process RSS guarantee: semantic trees,
+metadata and compiler state consume additional memory. They replace the preview's
+2 MiB C# file/64 MiB workspace limits. C# safe and explicitly trusted project modes
+use the same policy; TS/JS uses it for its retained projects. Worker concurrency,
+message sizes and cache counts remain independently bounded. No analyzer, plugin
+or MSBuild execution permission is granted by raising a resource budget.
+
+Operators who need a different budget may launch `freeflight --config` with an
+absolute path to an explicitly selected configuration file, for example:
+
+```json
+{
+  "roots": ["/absolute/projects"],
+  "resources": {
+    "maxFileBytes": 67108864,
+    "maxWorkspaceBytes": 1073741824
+  }
+}
+```
+
+Installed bundles discover their internal workers when `engines` is omitted.
+Development builds may explicitly supply absolute engine commands as before.
+Settings must be positive integers within the documented bounds, with file budget
+no greater than workspace budget. Unknown settings are rejected. Tool requests
+and repository files cannot change this startup policy.
+
+Resource failures are explicit MCP tool errors: `isError: true` and
+`structuredContent.error` contains `code: resource_limit_exceeded`, the resource,
+root-relative path, observed size/count, limit and remediation. Files are not
+silently dropped to fit a budget. After correcting the source or restarting with
+an appropriate operator policy, an explicit retry can recover. The published
+preview's error omits this detail and has no supported resource override.
+
+Unrelated-file changes are eventually reconciled: watcher delivery can lag and
+metadata alone cannot prove unchanged contents. Direct targets are read afresh;
+the fallback bounds persistent stale unrelated snapshots. Trusted project graph
+changes still require closing/reopening the workspace. Full large-solution and
+long-running memory qualification remain separate from generated-source tests.
+
+TypeScript retains lightweight content versions independently of its 64 MiB text
+cache, so text eviction does not force rereading every unchanged dependency.
+Its budget includes configured sources and loaded dependency/configuration files.
+Project-reference graphs are not yet fully supported: configurations declaring
+them fail with `unsupported_project_references` instead of returning apparently
+complete partial results. Ordinary imports within a configured project remain
+supported. This fix does not introduce a solution builder or run repository builds.

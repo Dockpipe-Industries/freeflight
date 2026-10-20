@@ -112,9 +112,12 @@ Pipelang API, SDK, LSP support or additional language support is claimed today.
 - Worker root authorization is not an OS sandbox; filesystem races remain possible
   against a hostile concurrent local writer. No source mutation is supported.
 - Discovery scans at most 50,000 entries; worker/project/file limits are documented.
-- Incremental worker refresh occurs on queries; no native filesystem watcher yet.
+- Incremental refresh occurs on queries. C# combines filesystem invalidation with
+  bounded content revalidation; TS/JS checks source and resolution metadata.
+  Direct query targets are reread. See [scaling readiness](scaling-readiness.md).
 - Thread execution is serialized; long calls can delay other calls.
-- Real-world large solution/monorepo qualification and exact-head cross-platform gates remain pending.
+- Real-world large solution/monorepo qualification remains pending; cross-platform
+  results apply only to the exact commits identified in the acceptance evidence.
 - Registry publication, DockPipe end-to-end installation and hosting are pending.
 
 See [acceptance](acceptance.md), [comparison](comparison.md), and [release](release.md).

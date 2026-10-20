@@ -14,6 +14,25 @@ static bool within(const fs::path &root, const fs::path &path) {
 }
 
 Server::Server(const Json &configuration) {
+    resources_ = {{"maxFileBytes", 32 * 1024 * 1024},
+                  {"maxWorkspaceBytes", 512 * 1024 * 1024},
+                  {"maxFiles", 50000},
+                  {"maxDirectoryEntries", 500000}};
+    const Json ceilings = {{"maxFileBytes", 256 * 1024 * 1024},
+                           {"maxWorkspaceBytes", 2147483648LL},
+                           {"maxFiles", 200000},
+                           {"maxDirectoryEntries", 2000000}};
+    const auto resources = configuration.value("resources", Json::object());
+    if (!resources.is_object())
+        throw std::runtime_error("resources must be an object in operator startup configuration");
+    for (const auto &[name, value] : resources.items()) {
+        if (!ceilings.contains(name) || !value.is_number_integer() || value <= 0 ||
+            value > ceilings.at(name))
+            throw std::runtime_error("Invalid startup resource limit: " + name);
+        resources_[name] = value;
+    }
+    if (resources_["maxFileBytes"] > resources_["maxWorkspaceBytes"])
+        throw std::runtime_error("maxFileBytes must not exceed maxWorkspaceBytes");
     if (!configuration.at("roots").is_array() || configuration.at("roots").size() > 32)
         throw std::runtime_error("Require 0–32 startup roots");
     for (const auto &root : configuration.at("roots")) {
@@ -206,12 +225,15 @@ Server::Engine &Server::engine(const fs::path &root, const std::string &language
     auto response = process->request(
         {{"id", ++sequence_}, {"method", "capabilities"}, {"params", Json::object()}}, stop);
     if (response.contains("error"))
-        throw std::runtime_error(response["error"].dump());
+        throw EngineError(response["error"]);
     auto capabilities = response.at("result");
-    auto opened = process->request(
-        {{"id", ++sequence_}, {"method", "open"}, {"params", {{"root", pathToUtf8(root)}}}}, stop);
+    auto opened =
+        process->request({{"id", ++sequence_},
+                          {"method", "open"},
+                          {"params", {{"root", pathToUtf8(root)}, {"resources", resources_}}}},
+                         stop);
     if (opened.contains("error"))
-        throw std::runtime_error(opened["error"].dump());
+        throw EngineError(opened["error"]);
     return engines_.emplace(key, Engine{std::move(process), capabilities, root}).first->second;
 }
 
@@ -355,6 +377,8 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
         auto params = arguments.value("arguments", Json::object());
         if (!params.is_object())
             throw std::runtime_error("Operation arguments must be an object");
+        if (params.contains("resources"))
+            throw std::runtime_error("Resource limits are owned by operator startup configuration");
         if (params.contains("file")) {
             const auto path = authorize(params["file"].get<std::string>());
             if (!within(root, path))
@@ -365,7 +389,7 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
         auto response = selected.process->request(
             {{"id", ++sequence_}, {"method", operation}, {"params", params}}, stop);
         if (response.contains("error"))
-            throw std::runtime_error(response["error"].dump());
+            throw EngineError(response["error"]);
         return response.at("result");
     } catch (...) {
         engines_.erase(key); // A later explicit request lazily recovers; never replay mutations.

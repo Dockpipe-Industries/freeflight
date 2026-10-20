@@ -10,6 +10,7 @@ was inspected. This is a prioritization guide, not a parity or performance claim
 | Diagnostics | Both document analysis/diagnostics | Compiler diagnostics; repository analyzers intentionally disabled |
 | Rename/editing | TGlider documents preview/live document/save operations | Preview edits only; source is not modified |
 | Hierarchies/callers | TGlider documents hierarchy/caller tools | See actual worker capabilities; no blanket parity claim |
+| Workspace setup | Public Codex configuration launches both without workspace paths; Glider documents runtime project loading | Published preview uses startup roots. Development branch adds dormant no-argument startup and runtime open/list/close within explicit startup access policy; client suggestions do not grant access |
 | Transport | TGlider documents stdio and Streamable HTTP | stdio; HTTP pending |
 | Distribution | Language products documented separately | One C++ server and internal workers; release verification pending |
 | Licensing | Public support resources do not establish product source licensing | FreeFlight source Apache-2.0 |
@@ -18,3 +19,5 @@ Sources: [Glider](https://glidermcp.com/glider),
 [TGlider](https://glidermcp.com/tglider),
 [compatibility](https://glidermcp.com/tglider/compatibility),
 [tool documentation](https://glidermcp.com/tglider/installation).
+
+Workspace setup evidence: [publisher Codex configuration](https://github.com/glidermcp/glidermcp/blob/main/install/codex/config.toml) and [Glider load tool](https://glidermcp.com/glider/tools/load). These public interfaces do not establish the products' internal authorization policy; no unrestricted-access or MCP client-roots support is inferred.

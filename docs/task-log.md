@@ -705,3 +705,74 @@ The initial development push was rejected because the existing GitHub credential
 cannot update workflow YAML. It did not update the remote branch. The unpublished
 commit was amended to leave CI YAML unchanged and invoke the baseline from existing
 DockPipe package.native composition instead. No credential scope was expanded.
+
+## 2026-10-20 — Consolidated dependency compatibility review
+
+The user requested an isolated consolidated draft PR. The review branch starts at
+`a446d375906134ad88ff38fad0720d21bae5e9ba`, preserving the qualified external compiler
+input repair. TypeScript 6.0.3 retains the classic JavaScript Language Service API
+and passes all 34 current worker tests on macOS ARM64 with Node 24.22.0 through
+`dockpipe --workflow workers.typescript`. The pinned manifest and lockfile use the
+official registry tarball and SHA-512 integrity. Combined qualification is pending.
+
+PR #6 (`0b9be272f755910fb793c1a0b9e16c59232abf7f`) remains held: TypeScript 7.0.2
+exports version metadata at its root and separate unstable native APIs, not the
+classic Language Service consumed by this worker. No backend migration is included.
+PR #18 (`f2e4c0e2ebd64a0483da79e276d2529dd42509e3`) remains held: the official
+StringTools 18.11.0 buildTransitive target explicitly warns that net10.0 is unsupported
+and requests net11.0. Job 118403733498 confirms build/basic worker tests pass but
+`integration.real` rejects that unsupported framework warning during trusted loading.
+Retain StringTools 17.14.28 with the aligned Microsoft.Build 17.14.28 references,
+ExcludeAssets=runtime and PrivateAssets=all; no warning suppression or target bump.
+
+PR #19 (`5297978a530e56933cb214cb608ffb9003b2e25d`) has ten successful checks. Its
+five setup-python replacements use the verified v7.0.0 commit
+`5fda3b95a4ea91299a34e894583c3862153e4b97`. Those changes are prepared locally for
+combined testing but publication is pending the existing workflow-write permission
+boundary. No credential or permission change, merge, closure or release is authorized.
+
+Local combined qualification completed on macOS ARM64 with Node 24.22.0, .NET
+SDK 10.0.402 / runtime 10.0.13: core tests, 34 TypeScript tests, Roslyn safe/trusted
+suites, real MCP integration, real-project integration, official MCP SDK, lint,
+strict dependency audits (no findings) and registry schema validation passed.
+The native package exercised both external compiler-input fixtures (Test SDK
+16.0.1 and 17.8.0), including routing, read-only definitions and selection/reload;
+both passed. Local site compilation lacks Qt/WASM tooling; hosted site jobs remain
+required. A separate current-baseline TypeScript 7.0.2 probe passed 6/34 and failed
+28/34 tests (missing classic API, including ts.sys).
+
+Draft PR #32 targets js/dev and is textually mergeable. Hosted five-platform/site
+qualification is pending; promotion policy and CodeQL passed on its initial head.
+No remote js/dev changes were made. The unpublished setup-python patch remains a
+separate local deliverable pending an authorized workflow writer.
+
+## Approved .NET 11 RC2 combined qualification (2026-10-20)
+
+The user explicitly requested .NET 11 RC2 in draft PR #32. The worker now targets
+net11.0 with pinned SDK 11.0.100-rc.2.26504.105 (prerelease explicitly enabled),
+StringTools 18.11.0 and TypeScript 6.0.3. Original net8/net10 project fixtures and
+legacy Framework targets remain unchanged. This supersedes the earlier StringTools
+hold; TypeScript 7 remains held because 28/34 current API tests fail.
+
+On macOS ARM64, the complete DockPipe check and package.native workflows passed
+with .NET 11 RC2, including locked restore, zero-warning build, trusted real-project
+loading, audits, self-contained package semantics and both external Test SDK input
+fixtures (16.0.1 and 17.8.0). Both Roslyn build hosts remain in the native package.
+Windows qualification now additionally verifies packaged non-SDK 4.7/4.8/4.8.1 and
+SDK-style net48; these new Windows cases await hosted execution. Receipts explicitly
+distinguish the in-process Locator from Roslyn's remote build-host selection.
+
+The user confirmed saving workflow permission on the existing token. The consolidated
+workflow changes include the five setup-python v7 replacements and CI's exact RC2
+SDK pin. No authentication routing or credentials are replaced by this work.
+The preceding .NET 10 head 3a8ff3f passed all ten hosted checks, including all five
+platforms, both sites and CodeQL. A fresh hosted run must qualify this RC2 revision.
+
+RC2 hosted qualification exposed an old-preview baseline mismatch: SDK 11 writes
+MSBuild binary logs newer than the checksum-pinned historical preview can read.
+Linux ARM64 and macOS RC2 qualification passed, while x64 baseline control failed
+before reaching the intended external-input rejection. CI now provisions SDK
+10.0.402 alongside RC2, and only the historical baseline fixture pins 10.0.402 in
+its disposable global.json and asserts that selection. Corrected fixtures remain
+on RC2. No rejection assertion is weakened. Both current packaged external-input
+cases pass locally after making setup/server working directories explicit.

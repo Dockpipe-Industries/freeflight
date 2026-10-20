@@ -465,3 +465,29 @@ branch-to-ecosystem mapping and tests using the real npm/nuget branch shapes; fa
 npm-prefixed branches remain rejected. This workflow-only correction does not
 change the published ba0c4ce runtime. It follows the ordinary protected promotion
 chain with fresh checks; no permission or branch-protection exception was added.
+# 2026-10-20 — Resource limits and incremental source reuse
+
+- Diagnosed the published preview's hard-coded 2 MiB per-C#-file and 64 MiB
+  aggregate cap; a user-supplied test summary confirms whole-repository loading
+  was blocked while narrower-folder semantic queries worked. No private source
+  was needed or copied into fixtures.
+- Added one validated operator-owned resource policy forwarded by the C++ core,
+  shared by safe/trusted C# and TS/JS. Runtime queries cannot raise it. Bundles
+  retain automatic internal-worker discovery when configuration omits engines.
+- Resource failures retain path, observed count/size, limit and remediation as
+  structured MCP errors. Native package verification exercises this configuration.
+- C# retains stable Roslyn documents with watcher/metadata invalidation and a
+  five-second full-content fallback. Direct targets and rename sources remain
+  freshly checked. TS retains bounded source snapshots and content versions.
+- Local C# fixture: 71,725,175 source bytes, 25,587,657-byte largest file,
+  55,000 generated constants; exact semantic checks pass. Warm query reads 56
+  bytes and reuses three large files. Single open sample 0.124 seconds; this is
+  not a latency distribution or production memory budget. Trusted 3 MiB fixture,
+  cancellation, boundaries, recovery and watcher-bookkeeping overflow pass.
+- Local core protocol/process and real-worker MCP resource/recovery tests pass.
+  Real-project and official MCP client checks pass. TS/JS fixtures cover 9 MiB
+  sources and a 72 MiB configured project; independent version metadata avoids
+  text-LRU eviction causing repeated dependency reads/hashes. Unreadable configured
+  sources and unsupported project-reference graphs now fail explicitly.
+  Hosted CI and legacy Windows qualification pending at this entry. No release,
+  merge, branch-protection change or unrelated DockPipe change was performed.

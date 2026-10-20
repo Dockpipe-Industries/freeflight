@@ -76,6 +76,9 @@ int runMain(const std::vector<std::string> &argv) {
             std::ifstream input(freeflight::pathFromUtf8(argv[2]));
             config = Json::parse(input, boundedJsonDepth);
         } else {
+            config = {{"roots", argc == 1 ? Json::array() : Json::array({argv[2]})}};
+        }
+        if (!config.contains("engines")) {
             const auto library =
                 executablePath().parent_path().parent_path() / "lib" / "freeflight";
 #ifdef _WIN32
@@ -90,12 +93,10 @@ int runMain(const std::vector<std::string> &argv) {
                              !std::filesystem::exists(roslyn)))
                 throw std::runtime_error(
                     "Incomplete runtime bundle; use --config for development builds");
-            config = {
-                {"roots", argc == 1 ? Json::array() : Json::array({argv[2]})},
-                {"engines",
-                 {{"typescript", {freeflight::pathToUtf8(node), freeflight::pathToUtf8(worker)}},
-                  {"javascript", {freeflight::pathToUtf8(node), freeflight::pathToUtf8(worker)}},
-                  {"csharp", {freeflight::pathToUtf8(roslyn)}}}}};
+            config["engines"] = {
+                {"typescript", {freeflight::pathToUtf8(node), freeflight::pathToUtf8(worker)}},
+                {"javascript", {freeflight::pathToUtf8(node), freeflight::pathToUtf8(worker)}},
+                {"csharp", {freeflight::pathToUtf8(roslyn)}}};
         }
         freeflight::Server server(config);
         std::mutex outputMutex;
@@ -195,6 +196,11 @@ int runMain(const std::vector<std::string> &argv) {
                         {"content", Json::array({{{"type", "text"}, {"text", value.dump()}}})},
                         {"structuredContent", value.is_object() ? value : Json{{"items", value}}},
                         {"isError", false}};
+                } catch (const freeflight::EngineError &exception) {
+                    response = {
+                        {"content", Json::array({{{"type", "text"}, {"text", exception.what()}}})},
+                        {"structuredContent", {{"error", exception.detail}}},
+                        {"isError", true}};
                 } catch (const std::exception &exception) {
                     response = {
                         {"content", Json::array({{{"type", "text"}, {"text", exception.what()}}})},

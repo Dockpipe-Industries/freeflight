@@ -1,8 +1,8 @@
 # Internal Roslyn worker
 
-This internal .NET 10 worker uses Microsoft.CodeAnalysis.CSharp.Workspaces 5.9.0
+This internal .NET 11 RC2 worker uses Microsoft.CodeAnalysis.CSharp.Workspaces 5.9.0
 (MIT). Its pinned transitive dependencies are recorded in `packages.lock.json`.
-The repository pins SDK 10.0.402 in `global.json`. The lockfile includes
+The repository pins SDK 11.0.100-rc.2.26504.105 in `global.json` with prerelease selection explicitly enabled. The lockfile includes
 osx-arm64, osx-x64, linux-x64, linux-arm64 and win-x64 restore graphs; this is not
 evidence of execution on all five platforms.
 It is owned and launched by the C++ server, not configured as a separate MCP endpoint.
@@ -217,7 +217,7 @@ and 4.7.2 are not directly tested by this representative matrix. MSBuild evaluat
 can execute repository code; explicit trust is mandatory and this is not a sandbox.
 
 The coordinated dependency update pins both Roslyn workspace packages to 5.9.0
-and MSBuild.Locator to 1.11.2. Microsoft.NET.StringTools 17.14.28 is explicitly
+and MSBuild.Locator to 1.11.2. Microsoft.NET.StringTools 18.11.0 is explicitly
 excluded from runtime assets and private to the worker project to honor Locator's
 assembly-loading guard. Do not suppress that guard or mix Roslyn workspace versions.
 All changed package metadata declares MIT; preserve distribution notices.
@@ -262,3 +262,24 @@ paths, and the read-only flag. Reload replaces the catalogue.
 `FREEFLIGHT_TEST_BINARY`; `integration.external.baseline` reproduces the failure in
 the checksum-pinned Linux preview. Native package qualification invokes the same
 regression asset. Explicit fixture restore is test setup, never server behavior.
+
+## .NET 11 RC2 qualification
+
+The worker runtime is independent of the frameworks in analyzed projects. The
+self-contained worker targets net11.0; its SDK is pinned to
+11.0.100-rc.2.26504.105. This is an explicitly selected release candidate, not GA.
+StringTools 18.11.0 is now supported by the worker target; its runtime exclusion
+and Locator guard remain. MSBuild compile references remain 17.14.28 with runtime
+assets excluded; the installed SDK supplies evaluated MSBuild. No support warning
+is suppressed. net8/net10 fixtures retain their original targets.
+
+Roslyn 5.9.0 includes both BuildHost-netcore and BuildHost-net472. SDK-style
+projects (including net48) select the former; traditional Windows projects use
+the latter and may fall back to SDK MSBuild if VS/Build Tools are unavailable.
+FreeFlight's own Locator registration still requires an installed SDK. Existing
+toolset receipts identify in-process registration, not the remote build host.
+Windows packaging checks required Framework host files and runs the controlled
+legacy 4.7/4.8/4.8.1 fixtures plus SDK-style net48 against the packaged executable.
+The SDK-style disposable fixture explicitly restores before server startup; the
+server never restores it. Hosted Windows qualification is required before claiming
+these added cases pass.

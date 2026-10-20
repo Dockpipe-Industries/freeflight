@@ -26,17 +26,17 @@ def summary(values):
 
 
 class Session:
-    def __init__(self, root, directory):
-        binary = REPO / 'bin/.local/build/freeflight'
+    def __init__(self, root, directory, installation=REPO):
+        binary = installation / 'bin/.local/build/freeflight'
         if not binary.exists():
-            binary = REPO / 'bin/.local/build/Release/freeflight.exe'
+            binary = installation / 'bin/.local/build/Release/freeflight.exe'
         self.binary = binary
         node, dotnet = shutil.which('node'), shutil.which('dotnet')
         assert node and dotnet and binary.is_file(), 'Run DockPipe build before benchmarking'
         config = directory / 'freeflight.json'
         config.write_text(json.dumps({'roots': [str(root)], 'engines': {
-            'typescript': [node, str(REPO / 'bin/.local/typescript/worker.mjs')],
-            'csharp': [dotnet, str(REPO / 'bin/.local/roslyn/bin/FreeFlight.Roslyn/debug/FreeFlight.Roslyn.dll')]
+            'typescript': [node, str(installation / 'bin/.local/typescript/worker.mjs')],
+            'csharp': [dotnet, str(installation / 'bin/.local/roslyn/bin/FreeFlight.Roslyn/debug/FreeFlight.Roslyn.dll')]
         }}))
         self.root = root
         self.sequence = 0
@@ -235,5 +235,171 @@ def main():
     print(f'Benchmark complete: {receipt}', flush=True)
 
 
+def comparison_fixture(directory, language, profile):
+    """Fixed source with real declarations and explicit padding to exercise byte budgets."""
+    directory.mkdir()
+    suffix = {'csharp': 'cs', 'typescript': 'ts', 'javascript': 'js'}[language]
+    source = ('public class Target { public static int Value() => Generated0.Field0 + 42; public int Read() => Value(); }\n'
+              if language == 'csharp' else
+              'import { field0_0 } from \"./Generated000\";\nexport function value() { return field0_0 + 42; }\nexport const result = value();\n')
+    target = directory / ('Target.' + suffix)
+    target.write_bytes(source.encode())
+    if language != 'csharp':
+        (directory / 'tsconfig.json').write_text(json.dumps({'compilerOptions': {
+            'strict': True, 'target': 'es2022', 'allowJs': True, 'checkJs': True},
+            'include': ['*.' + suffix]}))
+    count, size = {'compatible': (24, 1024 * 1024), 'large-file': (1, 9 * 1024 * 1024),
+                   'aggregate': (72, 1024 * 1024)}[profile]
+    for index in range(count):
+        declarations = ('public class Generated%d {\n' % index + ''.join(
+            'public const int Field%d = %d;\n' % (n, n) for n in range(100)) + '}\n'
+            if language == 'csharp' else ''.join(
+                'export const field%d_%d = %d;\n' % (index, n, n) for n in range(100)))
+        encoded = declarations.encode()
+        encoded += b'/*' + b'x' * (size - len(encoded) - 4) + b'*/'
+        (directory / ('Generated%03d.' % index + suffix)).write_bytes(encoded)
+    files = sorted(directory.iterdir())
+    digest = hashlib.sha256()
+    for path in files:
+        digest.update(path.name.encode() + b'\0' + path.read_bytes())
+    return target, source, {'files': len(files), 'source_bytes': sum(p.stat().st_size for p in files if p.suffix == '.' + suffix),
+                           'largest_file_bytes': max(p.stat().st_size for p in files),
+                           'declarations_per_generated_file': 100, 'sha256': digest.hexdigest()}
+
+
+def comparison_run(installation, root, target, source, language, directory):
+    directory.mkdir()
+    record = {'status': 'running', 'measurements': {}, 'phase': 'startup'}
+    session = None
+    engine = 'csharp' if language == 'csharp' else 'typescript'
+    name = 'Value' if language == 'csharp' else 'value'
+    declaration_offset = source.index(name)
+    use_offset = source.rindex(name)
+    def position(offset):
+        return {'line': source[:offset].count('\n'), 'character': len(source[:offset].rsplit('\n', 1)[-1])}
+    declaration, use = position(declaration_offset), position(use_offset)
+    def verify(operation, result):
+        if operation == 'diagnostics':
+            assert result == [], result
+        elif operation == 'symbols':
+            assert sum(item['name'] == name for item in result) == 1, result
+        elif operation == 'definition':
+            assert len(result) == 1 and Path(result[0]['file']) == target, result
+            assert result[0]['range']['start'] == declaration, result
+        else:
+            expected = [use] if language == 'csharp' else [declaration, use]
+            assert len(result) == len(expected), result
+            assert all(Path(item['file']) == target for item in result), result
+            assert sorted((r['range']['start']['line'], r['range']['start']['character']) for r in result) == sorted((p['line'], p['character']) for p in expected), result
+    try:
+        session = Session(root, directory, installation)
+        record['startup_discovery_ms'] = session.startup_ms
+        record['phase'] = 'workspace.open'
+        started = time.perf_counter()
+        session.request('tools/call', {'name': 'workspace.open', 'arguments': {'root': str(root)}})
+        record['workspace_open_ms'] = (time.perf_counter() - started) * 1000
+        for operation in ('diagnostics', 'symbols', 'definition', 'references'):
+            arguments = {'file': str(target)}
+            if operation in ('definition', 'references'):
+                arguments.update(use if operation == 'definition' else declaration)
+            samples = []
+            for index in range(REPEATS + 1):
+                record['phase'] = operation + ('.first' if index == 0 else '.warm')
+                result, elapsed = session.query(engine, operation, **arguments)
+                verify(operation, result)
+                if index == 0:
+                    record['measurements'][operation + '.first'] = summary([elapsed])
+                else:
+                    samples.append(elapsed)
+            record['measurements'][operation + '.warm'] = summary(samples)
+        record['phase'] = 'changed-file.refresh'
+        changed = source.replace('42', 'missingBenchmarkName')
+        target.write_bytes(changed.encode())
+        result, elapsed = session.query(engine, 'diagnostics', file=str(target))
+        expected_code = 'CS0103' if language == 'csharp' else 2304
+        assert len(result) == 1 and result[0]['code'] == expected_code and 'missingBenchmarkName' in result[0]['message'], result
+        record['measurements']['changed-file.diagnostics'] = summary([elapsed])
+        target.write_bytes(source.encode())
+        result, elapsed = session.query(engine, 'diagnostics', file=str(target))
+        assert result == [], result
+        record['measurements']['restored-file.diagnostics'] = summary([elapsed])
+        record['phase'] = 'steady-memory'
+        first = len(session.rss_samples)
+        time.sleep(0.6)
+        samples = session.rss_samples[first:]
+        record['steady_rss'] = {'samples': samples, 'median_tree_kib': statistics.median(s['tree_kib'] for s in samples)} if samples else {'status': 'unavailable'}
+        record['status'] = 'passed'
+    except Exception as error:
+        record['status'] = 'failed'
+        record['error_type'] = type(error).__name__
+        record['error'] = str(error)
+        # Preserve the actual protocol response when an MCP assertion rejected it.
+        if error.args and isinstance(error.args[0], (dict, list)):
+            record['response'] = error.args[0]
+    finally:
+        target.write_bytes(source.encode())
+        if session:
+            record['rss'] = session.memory()
+            record['rss']['raw_samples'] = list(session.rss_samples)
+            try:
+                session.close()
+            except Exception as error:
+                record['shutdown_error'] = str(error)
+                record['status'] = 'failed'
+    return record
+
+
+def compare(baseline):
+    output = REPO / 'bin/.local/benchmarks'
+    output.mkdir(parents=True, exist_ok=True)
+    base = Path(tempfile.mkdtemp(prefix='comparison-', dir=output)).resolve()
+    receipt = base / 'comparison.json'
+    installations = {'baseline': baseline, 'candidate': REPO}
+    report = {'schema': 1, 'status': 'running', 'platform': platform.platform(), 'machine': platform.machine(),
+              'cpu_count': os.cpu_count(), 'warm_repeats': REPEATS, 'runs': [], 'installations': {},
+              'toolchains': {'node': subprocess.check_output(['node', '--version'], text=True).strip(),
+                             'dotnet': subprocess.check_output(['dotnet', '--version'], text=True).strip(), 'python': platform.python_version()},
+              'configuration': 'Identical roots and explicit worker commands; default resource policy of each version; no MSBuild evaluation.',
+              'limitations': ['Synthetic declarations plus comment padding; not a real solution or monorepo.',
+                              'Cold means fresh processes, not cold operating-system disk caches.',
+                              'Workspace.open registers the root; first diagnostics includes lazy worker initialization and source loading.',
+                              'First symbol/definition/reference measurements follow first diagnostics and are not cold compiler measurements.',
+                              'Two compatible runs alternate version order; larger cases have one run each.',
+                              'RSS is sampled ps process-tree RSS, can miss peaks and double-count shared pages; steady RSS is a 600ms post-query window.',
+                              'No competitor comparison; no concurrency, trusted MSBuild or project-reference workload.']}
+    for label, installation in installations.items():
+        files = ['bin/.local/build/freeflight', 'bin/.local/typescript/worker.mjs',
+                 'bin/.local/roslyn/bin/FreeFlight.Roslyn/debug/FreeFlight.Roslyn.dll']
+        report['installations'][label] = {'directory': str(installation), 'sha256': {
+            name: hashlib.sha256((installation / name).read_bytes()).hexdigest() for name in files}}
+        provenance = (REPO / 'bin/.local/baseline-provenance.json') if label == 'baseline' else installation / 'benchmark-source.json'
+        if provenance.exists():
+            report['installations'][label]['source_receipt'] = json.loads(provenance.read_text())
+        else:
+            report['installations'][label]['git_head'] = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=installation, text=True).strip()
+    if platform.system() == 'Darwin':
+        report['hardware'] = subprocess.check_output(['/usr/sbin/sysctl', '-n', 'machdep.cpu.brand_string', 'hw.memsize'], text=True).splitlines()
+    for profile in ('compatible', 'large-file', 'aggregate'):
+        for language in ('csharp', 'typescript', 'javascript'):
+            target, source, fixture = comparison_fixture(base / (profile + '-' + language), language, profile)
+            for iteration in range(2 if profile == 'compatible' else 1):
+                order = ('baseline', 'candidate') if iteration == 0 else ('candidate', 'baseline')
+                for label in order:
+                    result = comparison_run(installations[label], target.parent, target, source, language,
+                                            base / (profile + '-' + language + '-' + str(iteration) + '-' + label))
+                    result.update({'profile': profile, 'language': language, 'iteration': iteration, 'version': label, 'fixture': fixture})
+                    report['runs'].append(result)
+                    receipt.write_text(json.dumps(report, indent=2) + '\n')
+                    print(json.dumps(result), flush=True)
+    report['status'] = 'completed' if all(r['status'] == 'passed' for r in report['runs'] if r['version'] == 'candidate' or r['profile'] == 'compatible') else 'failed'
+    receipt.write_text(json.dumps(report, indent=2) + '\n')
+    print(f'Comparison complete: {receipt}', flush=True)
+    if report['status'] != 'completed':
+        raise RuntimeError('Candidate or compatible baseline failed correctness checks; inspect retained observations')
+
+
 if __name__ == '__main__':
-    main()
+    if os.environ.get('FREEFLIGHT_BENCHMARK_BASELINE'):
+        compare(Path(os.environ['FREEFLIGHT_BENCHMARK_BASELINE']).resolve())
+    else:
+        main()

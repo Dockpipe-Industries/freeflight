@@ -18,24 +18,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-dockpipe
       - name: Check protected-branch promotion source
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_BRANCH: ${{ github.base_ref }}
-          HEAD_BRANCH: ${{ github.head_ref }}
-          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-          REPOSITORY: ${{ github.repository }}
-        shell: python
-        run: |
-          import os
-          expected = {'dev': 'js/dev', 'staging': 'dev', 'master': 'staging'}
-          base = os.environ['BASE_BRANCH']
-          if os.environ['EVENT_NAME'] == 'pull_request' and base in expected:
-              if os.environ['HEAD_BRANCH'] != expected[base] or os.environ['HEAD_REPOSITORY'] != os.environ['REPOSITORY']:
-                  raise SystemExit(f'Promotion to {base} requires the same-repository {expected[base]} branch')
-              print(f'Valid promotion: {expected[base]} -> {base}')
-          else:
-              print('No protected-branch promotion requested')
+        run: dockpipe --workflow promotion.check
   qualify:
     needs: promotion-policy
     name: Qualify (${{ matrix.os }})
@@ -54,14 +43,15 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.13'
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24.22.0'
-      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+          package-manager-cache: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.402'
       - name: Select macOS C++23 toolchain
@@ -96,6 +86,9 @@ jobs:
         run: dockpipe --workflow integration.test
       - name: Real repository semantics
         run: dockpipe --workflow integration.real
+      - name: Legacy .NET Framework project semantics
+        if: runner.os == 'Windows'
+        run: dockpipe --workflow legacy.dotnet
       - name: Independent official MCP client
         run: dockpipe --workflow mcp.compatibility
       - name: Dependency vulnerability checks
@@ -110,7 +103,7 @@ jobs:
         run: dockpipe --workflow package.jammy
       - name: Retain qualified native bundles
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.os == 'ubuntu-22.04' && 'preview-ubuntu-22.04-linux-x64' || format('native-{0}', matrix.os) }}
           path: |
@@ -118,12 +111,13 @@ jobs:
             bin/.local/jammy-compatibility.json
           if-no-files-found: error
           retention-days: 14
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: qualification-${{ matrix.os }}
           path: |
             bin/.local/build/Testing/Temporary/LastTest.log
+            bin/.local/reports/legacy-net*.json
           if-no-files-found: warn
           retention-days: 14
   site:
@@ -138,13 +132,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.13'
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24.22.0'
+          package-manager-cache: false
       - name: Provision build frontend
         run: python -m pip install --disable-pip-version-check cmake==3.31.6 PyYAML==6.0.2
       - uses: ./.github/actions/setup-dockpipe
@@ -162,7 +157,7 @@ jobs:
         run: dockpipe --workflow site.audit
       - name: Retain qualified website assets
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: qt-wasm-site-${{ matrix.environment }}
           path: bin/.local/site/
@@ -170,7 +165,7 @@ jobs:
           retention-days: 14
       - name: Retain browser verification evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: qt-wasm-browser-evidence-${{ matrix.environment }}
           path: bin/.local/site-test/
@@ -178,7 +173,7 @@ jobs:
           retention-days: 14
       - name: Retain tested serving container
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: qt-site-container-${{ matrix.environment }}
           path: bin/.local/site-container/
@@ -186,7 +181,7 @@ jobs:
           retention-days: 14
       - name: Retain corresponding Qt sources and relink materials
         if: matrix.environment == 'staging' && github.event_name != 'pull_request'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: qt-corresponding-sources
           path: bin/.local/site-sources/
@@ -194,7 +189,7 @@ jobs:
           retention-days: 14
       - name: Retain container vulnerability evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: qt-site-audit-${{ matrix.environment }}
           path: |

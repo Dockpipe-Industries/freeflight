@@ -18,6 +18,18 @@ spec.loader.exec_module(api)
 
 
 class GitHubApiTests(unittest.TestCase):
+    def test_draft_without_tag_blocks_duplicate_creation(self):
+        with patch.object(api, 'request', return_value=[{'tag_name': 'v0.1.0-staging.42.abc', 'draft': True}]) as request:
+            with self.assertRaisesRegex(ValueError, 'Existing draft'):
+                api.require_release_absent('v0.1.0-staging.42.abc')
+            self.assertEqual(request.call_count, 1)
+
+    def test_absence_requires_both_release_and_tag_404(self):
+        missing = api.HTTPError('https://api.github.com', 404, 'Not found', {}, None)
+        with patch.object(api, 'request', side_effect=[[], missing, missing]) as request:
+            api.require_release_absent('v0.1.0')
+            self.assertEqual(request.call_count, 3)
+
     def test_jammy_receipt_requires_explicit_compatibility_artifact(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

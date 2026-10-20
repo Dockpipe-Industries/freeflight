@@ -214,6 +214,27 @@ def collect():
         output.write('FREEFLIGHT_RELEASE_CANDIDATE=' + str(candidate) + '\n')
 
 
+def require_release_absent(tag):
+    # A draft need not have a Git tag yet. Authenticated listing is required in
+    # addition to the by-tag endpoints before retrying any publication.
+    for page in range(1, 11):
+        releases = request('/releases?per_page=100&page=' + str(page))
+        require(isinstance(releases, list), 'Invalid release inventory')
+        require(not any(release.get('tag_name') == tag for release in releases),
+                'Existing draft/public release: reconcile without creating a duplicate')
+        if len(releases) < 100:
+            break
+    else:
+        raise ValueError('Release inventory exceeds bounded query; review manually')
+    for endpoint in ('/releases/tags/' + tag, '/git/ref/tags/' + tag):
+        try:
+            request(endpoint)
+        except HTTPError as error:
+            require(error.code == 404, 'Could not establish release/tag absence')
+        else:
+            raise ValueError('Existing release/tag: stop and reconcile; never overwrite automatically')
+
+
 def publish():
     require(os.environ.get('RELEASE_MODE') == 'publish', 'Explicit publish mode required')
     channel, branch = release_context()
@@ -233,13 +254,7 @@ def publish():
     files = [(Path(a['source']), a['sha256']) for a in report['artifacts']]
     files += [(Path(a['source']), a['sha256']) for a in report['additionalAssets']]
     files += [(prepared / name, digest(prepared / name)) for name in ('SHA256SUMS', 'release-manifest.json')]
-    for endpoint in ('/releases/tags/' + tag, '/git/ref/tags/' + tag):
-        try:
-            request(endpoint)
-        except HTTPError as error:
-            require(error.code == 404, 'Could not establish release/tag absence')
-        else:
-            raise ValueError('Existing release/tag: stop and reconcile; never overwrite automatically')
+    require_release_absent(tag)
     release = request('/releases', 'POST', {'tag_name': tag, 'target_commitish': verified['master'],
         'name': 'FreeFlight ' + ('staging ' if channel == 'staging' else '') + report['version'],
         'draft': True, 'prerelease': channel == 'staging', 'make_latest': 'false' if channel == 'staging' else 'true',

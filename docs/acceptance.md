@@ -294,3 +294,8 @@ host contract, not live provider/state/TLS readiness or deployment authorization
   Local release policy and hostname rollback fixtures passed. The real Nginx
   migration is included in disposable Ubuntu CI; live/hosted status is not implied
   by these authored tests.
+
+- 2026-10-20: Approved hostname-only live migration verified valid TLS and health
+  for `freeflight-staging.dockpipe.com`; existing Cloud services and operator access
+  policy preserved. Old nested-host DNS, ingress and transform removed with verified
+  readback. No site activation or automatic-delivery enablement performed.

@@ -1,12 +1,23 @@
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
-from remote import FILES, OLD, NEW, migrate
+from remote import FILES, OLD, NEW, migrate, replacement
 
 
 class HostnameTest(unittest.TestCase):
+    def test_reviewed_bytes_required(self):
+        original = (OLD + '\n').encode()
+        digest = hashlib.sha256(original).hexdigest()
+        self.assertEqual(replacement(original, digest, 1), (NEW + '\n').encode())
+        for data, expected, count in [(original + b'foreign', digest, 1),
+                                       (original, '0' * 64, 1), (original, digest, 3)]:
+            with self.assertRaises(ValueError):
+                replacement(data, expected, count)
+
+    @unittest.skipUnless(os.name == 'posix', 'Linux origin requires POSIX modes, ownership and atomic file APIs')
     def test_scope_and_rollback(self):
         for mode in ('success', 'modified', 'active', 'invalid-nginx', 'reload-failure'):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:

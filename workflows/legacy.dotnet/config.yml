@@ -15,3 +15,7 @@ steps:
     kind: host
     cwd: repo
     cmd: python3 -B tests/legacy-dotnet.py --framework 4.8.1
+  - id: sdk-framework-48
+    kind: host
+    cwd: repo
+    cmd: python3 -B tests/legacy-dotnet.py --framework 4.8 --sdk-style

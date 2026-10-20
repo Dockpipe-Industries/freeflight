@@ -745,3 +745,25 @@ Draft PR #32 targets js/dev and is textually mergeable. Hosted five-platform/sit
 qualification is pending; promotion policy and CodeQL passed on its initial head.
 No remote js/dev changes were made. The unpublished setup-python patch remains a
 separate local deliverable pending an authorized workflow writer.
+
+## Approved .NET 11 RC2 combined qualification (2026-10-20)
+
+The user explicitly requested .NET 11 RC2 in draft PR #32. The worker now targets
+net11.0 with pinned SDK 11.0.100-rc.2.26504.105 (prerelease explicitly enabled),
+StringTools 18.11.0 and TypeScript 6.0.3. Original net8/net10 project fixtures and
+legacy Framework targets remain unchanged. This supersedes the earlier StringTools
+hold; TypeScript 7 remains held because 28/34 current API tests fail.
+
+On macOS ARM64, the complete DockPipe check and package.native workflows passed
+with .NET 11 RC2, including locked restore, zero-warning build, trusted real-project
+loading, audits, self-contained package semantics and both external Test SDK input
+fixtures (16.0.1 and 17.8.0). Both Roslyn build hosts remain in the native package.
+Windows qualification now additionally verifies packaged non-SDK 4.7/4.8/4.8.1 and
+SDK-style net48; these new Windows cases await hosted execution. Receipts explicitly
+distinguish the in-process Locator from Roslyn's remote build-host selection.
+
+The user confirmed saving workflow permission on the existing token. The consolidated
+workflow changes include the five setup-python v7 replacements and CI's exact RC2
+SDK pin. No authentication routing or credentials are replaced by this work.
+The preceding .NET 10 head 3a8ff3f passed all ten hosted checks, including all five
+platforms, both sites and CodeQL. A fresh hosted run must qualify this RC2 revision.

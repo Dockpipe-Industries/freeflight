@@ -19,7 +19,11 @@ if sys.platform != 'win32':
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--framework', choices=('4.7', '4.8', '4.8.1'), required=True)
-framework = parser.parse_args().framework
+parser.add_argument('--sdk-style', action='store_true')
+parser.add_argument('--binary', type=Path, help='Qualify an assembled bundle with its own worker')
+args = parser.parse_args()
+framework = args.framework
+assert not args.sdk_style or framework == '4.8', 'SDK-style fixture qualifies net48 only'
 reference_root = Path(os.environ.get('ProgramFiles(x86)', 'C:/Program Files (x86)')) / 'Reference Assemblies/Microsoft/Framework/.NETFramework' / ('v' + framework)
 assert (reference_root / 'mscorlib.dll').is_file(), f'Install the .NET Framework {framework} developer/targeting pack: missing {reference_root / "mscorlib.dll"}; qualification cannot skip this prerequisite'
 
@@ -32,7 +36,8 @@ binary = generated / 'build/freeflight'
 if not binary.exists():
     binary = generated / 'build/Release/freeflight.exe'
 worker = generated / 'roslyn/bin/FreeFlight.Roslyn/debug/FreeFlight.Roslyn.dll'
-assert binary.is_file() and worker.is_file(), 'Run core.build and workers.roslyn first'
+binary = args.binary.resolve() if args.binary else binary
+assert binary.is_file() and (args.binary or worker.is_file()), 'Run core.build and workers.roslyn first'
 meta = {'io.modelcontextprotocol/protocolVersion': '2026-07-28',
         'io.modelcontextprotocol/clientCapabilities': {}}
 
@@ -50,15 +55,31 @@ with tempfile.TemporaryDirectory(prefix='legacy-net48-', dir=generated) as direc
     shutil.copytree(source, root, dirs_exist_ok=True)
     for project in root.rglob('*.csproj'):
         project.write_text(project.read_text(encoding='utf-8').replace('<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>', '<TargetFrameworkVersion>v' + framework + '</TargetFrameworkVersion>'), encoding='utf-8')
+    if args.sdk_style:
+        for project in root.rglob('*.csproj'):
+            reference = '<ProjectReference Include="../Lib/Lib.csproj" />' if project.parent.name == 'App' else ''
+            project.write_text('<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>'
+                '<TargetFramework>net48</TargetFramework><LangVersion>7.3</LangVersion>'
+                '<DefineConstants>LEGACY_PROJECT</DefineConstants>'
+                '<GenerateAssemblyInfo>false</GenerateAssemblyInfo>'
+                '<GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>'
+                '<EnableNETAnalyzers>false</EnableNETAnalyzers>'
+                '</PropertyGroup><ItemGroup><Reference Include="System.Xml.Linq" />'
+                + reference + '</ItemGroup></Project>', encoding='utf-8')
     env = os.environ.copy()
     env['DOTNET_ROOT'] = str(Path(dotnet).resolve().parent)
     env['DOTNET_CLI_TELEMETRY_OPTOUT'] = '1'
     env['DOTNET_GENERATE_ASPNET_CERTIFICATE'] = 'false'
     env['DOTNET_NOLOGO'] = '1'
-    # This authored fixture has no NuGet dependencies: no restore or build needed.
+    # SDK-style projects need assets even without package references. Restore is
+    # explicit fixture setup, never a server operation. The legacy fixture needs none.
+    if args.sdk_style:
+        subprocess.run([dotnet, 'restore', str(root / 'Legacy.sln')], cwd=root,
+                       env=env, check=True, timeout=180)
     config = root / 'freeflight-test.json'
-    config.write_text(json.dumps({'roots': [str(root)], 'engines': {
-        'csharp': [dotnet, str(worker), '--trusted-msbuild']}}), encoding='utf-8')
+    settings = {'roots': [str(root)], 'trustedRoots': [str(root)]} if args.binary else {
+        'roots': [str(root)], 'engines': {'csharp': [dotnet, str(worker), '--trusted-msbuild']}}
+    config.write_text(json.dumps(settings), encoding='utf-8')
     stderr_path = root / 'worker-stderr.log'
     stderr_log = stderr_path.open('wb')
     process = subprocess.Popen([str(binary), '--config', str(config)], cwd=root,
@@ -126,7 +147,10 @@ with tempfile.TemporaryDirectory(prefix='legacy-net48-', dir=generated) as direc
         assert len(toolsets) == 1 and toolsets[0]['msbuildVersion'] and toolsets[0]['runtimeVersion'], toolsets
         reference_files = {name: hashlib.sha256((reference_root / name).read_bytes()).hexdigest() for name in ('mscorlib.dll', 'System.Xml.Linq.dll', 'RedistList/FrameworkList.xml')}
         report = {'toolset': toolsets[0], 'referencePack': {'path': str(reference_root), 'filesSha256': reference_files}, 'project': 'Legacy.sln', 'targetFramework': 'v' + framework,
-                  'projectFormat': 'non-SDK C#', 'mode': 'trusted-msbuild',
+                  'projectFormat': 'SDK-style C#' if args.sdk_style else 'non-SDK C#',
+                  'workerDeployment': 'packaged' if args.binary else 'development',
+                  'toolsetScope': 'in-process Locator; does not identify Roslyn remote build host',
+                  'mode': 'trusted-msbuild',
                   'transport': 'C++ MCP stdio', 'sourceSha256': hashes,
                   'assertions': ['conditional project define and System.Xml.Linq reference resolution',
                                  'exact cross-project Widget definition and single reference',
@@ -137,7 +161,7 @@ with tempfile.TemporaryDirectory(prefix='legacy-net48-', dir=generated) as direc
                                   'Explicit trust required; MSBuild is not sandboxed.']}
         output = generated / 'reports'
         output.mkdir(parents=True, exist_ok=True)
-        (output / ('legacy-net' + framework.replace('.', '') + '.json')).write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+        (output / ('legacy-net' + framework.replace('.', '') + ('-sdk' if args.sdk_style else '') + ('-packaged' if args.binary else '') + '.json')).write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
         print(json.dumps(report, indent=2))
     finally:
         process.stdin.close()

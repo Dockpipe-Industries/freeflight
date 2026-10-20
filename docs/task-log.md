@@ -438,3 +438,21 @@ The supported Roslyn repairs are applied together on js/dev: both Workspaces
 packages 5.9.0, Locator 1.11.2, and StringTools excluded from runtime alongside
 MSBuild assemblies. Combined safe/trusted worker tests and self-contained macOS
 ARM64 tests pass locally. TypeScript 7 remains incompatible and held.
+
+## 2026-10-20 — Hosted dependency and legacy qualification
+
+Implementation a6456c2 passed all five native push-CI jobs and both website jobs
+in run 39346076164; both CodeQL runs passed. Windows qualification exercised
+non-SDK C# projects targeting 4.7, 4.8 and 4.8.1 through actual C++ MCP, selected
+SDK 10.0.402 / runtime 10.0.13 / MSBuild 18.9.15.50611, and emitted targeting-pack
+hashes plus exact semantic assertions. Downloaded artifact 12230623607's ZIP
+SHA-256 af7ce89f80ccce7c7981f01ff8590e3be841b6786cd019522665884b72b4d20b
+was verified independently. Intermediate framework versions and additional legacy
+project types remain unqualified. Updated earlier dependency-version prose to match
+the repaired manifests. No dependency PR was merged.
+
+The new upload-artifact action retained the required ZIP semantics. Independently
+verified Linux tar freeflight-linux-x64-64b8711f25d8ceae.tar.gz has SHA-256
+43030e2d097924f35e018489d7ebf707fd22575735edd33ccdc97ffd15db067a and matches
+the native/MCPB source receipts and clean Ubuntu/Fedora tests. It is not published.
+DockPipe Flatpak run 39342951155 completed successfully at 15eafc8.

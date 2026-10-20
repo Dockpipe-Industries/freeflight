@@ -117,7 +117,7 @@ gateway, website, CI, tests/benchmarks, and exact unmet criteria/blockers.
 
 - [x] Intended C# .NET Framework support floor recorded as 4.7 through 4.8.1.
 - [x] Controlled non-SDK two-project fixture and Windows-only trusted project semantic tests authored.
-- [ ] Windows CI verifies representative 4.7, 4.8 and 4.8.1 project loading, exact navigation, reference count and incremental diagnostics.
+- [x] Windows CI verifies representative 4.7, 4.8 and 4.8.1 project loading, exact navigation, reference count and incremental diagnostics (a6456c2, run 39346076164).
 - [ ] Broader project types and intermediate targeting-pack versions qualified.
 
 Safe-source analysis does not establish legacy project compatibility. No user's

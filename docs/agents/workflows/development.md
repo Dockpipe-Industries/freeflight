@@ -33,3 +33,9 @@ does not impersonate Dependabot; it remains outside this exception.
 Lockfile JSON is accepted as dependency metadata, not proof of integrity or registry
 trust. Locked installs, vulnerability checks, semantic tests and full platform CI
 remain required. Incompatible major upgrades stay held.
+
+GitHub's `target-branch` setting routes version-update PRs to dev once the
+configuration reaches the default branch. Security updates still use the default
+branch under [GitHub's documented service behavior](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#target-branch).
+This repository does not disable security updates or automatically bypass the
+protected-branch policy for them.

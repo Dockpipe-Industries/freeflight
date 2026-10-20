@@ -20,7 +20,7 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
     (root / "App").mkdir()
     (root / "Lib/Lib.csproj").write_text(f'<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>{properties}<DefineConstants>PROJECT_SETTING</DefineConstants></PropertyGroup></Project>')
     widget_source = "namespace Library;\n#if PROJECT_SETTING\npublic class Widget { public int Value => 42; }\n#endif\n" + "/*" + "x" * (3 * 1024 * 1024) + "*/"
-    (root / "Lib/Widget.cs").write_text(widget_source)
+    (root / "Lib/Widget.cs").write_bytes(widget_source.encode("utf-8"))
     source = "using Library;\nclass Consumer { public int Read(Widget value) => value.Value; }\n"
     (root / "App/Consumer.cs").write_text(source)
     (root / "App/App.csproj").write_text(f'<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>{properties}</PropertyGroup><ItemGroup><ProjectReference Include="../Lib/Lib.csproj" /></ItemGroup></Project>')

@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <set>
 #include <stdexcept>
 #include <stop_token>
 #include <string>
@@ -35,6 +36,11 @@ class Server {
     Json candidates_ = Json::array();
     Json resources_;
     bool trustedCsharp_ = false;
+    bool sourceRoots_ = false;
+    std::set<std::filesystem::path> explicitWorkspaces_;
+    std::filesystem::path route(const std::filesystem::path &root,
+                                const std::filesystem::path &file, const std::string &language,
+                                std::stop_token stop) const;
     std::vector<std::filesystem::path> trustedRoots_;
     bool trusts(const std::filesystem::path &root) const;
     std::string defaultProject_;

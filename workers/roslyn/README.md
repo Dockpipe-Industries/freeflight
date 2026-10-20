@@ -1,8 +1,8 @@
 # Internal Roslyn worker
 
-This internal .NET 10 worker uses Microsoft.CodeAnalysis.CSharp.Workspaces 5.9.0
+This internal .NET 11 RC2 worker uses Microsoft.CodeAnalysis.CSharp.Workspaces 5.9.0
 (MIT). Its pinned transitive dependencies are recorded in `packages.lock.json`.
-The repository pins SDK 10.0.402 in `global.json`. The lockfile includes
+The repository pins SDK 11.0.100-rc.2.26504.105 in `global.json` with prerelease selection explicitly enabled. The lockfile includes
 osx-arm64, osx-x64, linux-x64, linux-arm64 and win-x64 restore graphs; this is not
 evidence of execution on all five platforms.
 It is owned and launched by the C++ server, not configured as a separate MCP endpoint.
@@ -94,8 +94,15 @@ Large real solution fidelity and performance remain release blockers.
 
 ## Explicitly trusted project mode
 
-The preferred operator interface is top-level `trustedRoots: ["/absolute/trusted/root"]`
-with bundled workers; see [workspace configuration](../../docs/workspaces.md#explicit-trusted-c-configuration-development-repair).
+The development branch's preferred bundled configuration is only
+`{"trustedRoots":["/absolute/source-a","/absolute/source-b"]}`. Each source folder
+provides access and trusted project-loading permission to its descendant repositories;
+no duplicate `roots` or mandatory `csharp.project` is needed. File requests route
+lazily to a repository/project; ambiguous solutions are selected using
+`workspace.open` with `project` and `reload`, not an MCP config edit.
+This source-folder UX is **unreleased**: published preview
+`v0.1.0-preview.20261020.trusted.1997d38` still requires `roots` plus `trustedRoots`.
+See [workspace configuration](../../docs/workspaces.md#configure-once-within-an-explicit-boundary).
 Advanced explicit worker configurations can still add `--trusted-msbuild` to their argv.
 This is startup authorization for every root that worker opens. No request can
 turn it on or switch modes; normal bundled `--workspace` startup remains safe-source.
@@ -210,7 +217,7 @@ and 4.7.2 are not directly tested by this representative matrix. MSBuild evaluat
 can execute repository code; explicit trust is mandatory and this is not a sandbox.
 
 The coordinated dependency update pins both Roslyn workspace packages to 5.9.0
-and MSBuild.Locator to 1.11.2. Microsoft.NET.StringTools 17.14.28 is explicitly
+and MSBuild.Locator to 1.11.2. Microsoft.NET.StringTools 18.11.0 is explicitly
 excluded from runtime assets and private to the worker project to honor Locator's
 assembly-loading guard. Do not suppress that guard or mix Roslyn workspace versions.
 All changed package metadata declares MIT; preserve distribution notices.
@@ -239,3 +246,40 @@ and missing evaluated assets; no log is uploaded or intentionally retained.
 `selectedProject`, `loadWarnings`, `degradedFidelity` and limitations are returned
 by open/capabilities. Vulnerability warnings retain their full actionable message.
 This is graph loading tolerance, not a dependency security override or remediation.
+
+### External compiler inputs
+
+In trusted mode, the evaluated graph may declare external source files. Exact
+paths enter a per-session analysis catalogue; directory access and edit authority
+are not expanded. External text is loaded through bounded snapshots, with symlink
+checks and nonblocking Unix open for special-file rejection. All DocumentIds for a
+shared external file receive refreshed text. Direct query files still require the
+workspace boundary. Rename refuses the entire preview when any declaration or
+changed document is external. Capability analysis reports a count, first 32 sorted
+paths, and the read-only flag. Reload replaces the catalogue.
+
+`dockpipe --workflow integration.external` tests a complete bundle selected by
+`FREEFLIGHT_TEST_BINARY`; `integration.external.baseline` reproduces the failure in
+the checksum-pinned Linux preview. Native package qualification invokes the same
+regression asset. Explicit fixture restore is test setup, never server behavior.
+
+## .NET 11 RC2 qualification
+
+The worker runtime is independent of the frameworks in analyzed projects. The
+self-contained worker targets net11.0; its SDK is pinned to
+11.0.100-rc.2.26504.105. This is an explicitly selected release candidate, not GA.
+StringTools 18.11.0 is now supported by the worker target; its runtime exclusion
+and Locator guard remain. MSBuild compile references remain 17.14.28 with runtime
+assets excluded; the installed SDK supplies evaluated MSBuild. No support warning
+is suppressed. net8/net10 fixtures retain their original targets.
+
+Roslyn 5.9.0 includes both BuildHost-netcore and BuildHost-net472. SDK-style
+projects (including net48) select the former; traditional Windows projects use
+the latter and may fall back to SDK MSBuild if VS/Build Tools are unavailable.
+FreeFlight's own Locator registration still requires an installed SDK. Existing
+toolset receipts identify in-process registration, not the remote build host.
+Windows packaging checks required Framework host files and runs the controlled
+legacy 4.7/4.8/4.8.1 fixtures plus SDK-style net48 against the packaged executable.
+The SDK-style disposable fixture explicitly restores before server startup; the
+server never restores it. Hosted Windows qualification is required before claiming
+these added cases pass.

@@ -179,6 +179,137 @@ with tempfile.TemporaryDirectory(prefix="trusted-bundle-", dir=repo / "bin/.loca
         assert client.good("engine.capabilities", selection)["analysis"]["mode"] == "safe-source"
     finally:
         client.close()
+    # The normal operator configuration authorizes source folders once. Each
+    # contains independent repositories, discovered lazily from requested files.
+    source_a, source_b = base / "Source A", base / "Source B"
+    source_a.mkdir(); source_b.mkdir()
+    architecture = source_a / "Architecture"
+    shutil.copytree(root, architecture)
+    (architecture / ".git").mkdir()
+    subprocess.run([dotnet, "restore", str(architecture / "source/App/App.csproj"),
+        "--ignore-failed-sources"], check=True, timeout=60)
+
+    def make_repository(parent, name):
+        target = parent / name
+        (target / ".git").mkdir(parents=True)
+        project = target / "App.csproj"
+        project.write_text(f'<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>{props}</PropertyGroup></Project>')
+        document = target / "Sample.cs"
+        document.write_text("namespace Library; public class Widget { public int Value = 7; public int Read() => Value; }\n")
+        subprocess.run([dotnet, "restore", str(project), "--ignore-failed-sources"],
+            check=True, timeout=60)
+        return target, document
+
+    other, other_file = make_repository(source_b, "Other")
+    config.write_text(json.dumps({"trustedRoots": [str(source_a), str(source_b)]}))
+    client = Client(config)
+
+    def routed(source, language, operation, **arguments):
+        return client.good("semantic.query", {"root": str(source), "language": language,
+            "operation": operation, "arguments": arguments})["items"]
+
+    try:
+        initial = client.good("workspace.list")
+        assert set(initial["allowedRoots"]) == {str(source_a), str(source_b)}, initial
+        assert all(not workspace.get("engines") for workspace in initial["workspaces"]), initial
+        routed_consumer = architecture / "source/App/Consumer.cs"
+        routed_widget = architecture / "source/Lib/Widget.cs"
+        definition = routed(source_a, "csharp", "definition", file=str(routed_consumer), line=1, character=57)
+        assert len(definition) == 1 and pathlib.Path(definition[0]["file"]).resolve() == routed_widget, definition
+        assert definition[0]["range"]["start"] == {"line": 2, "character": 33}, definition
+        assert routed(source_a, "csharp", "diagnostics", file=str(routed_consumer)) == []
+        text = other_file.read_text()
+        definition = routed(source_b, "csharp", "definition", file=str(other_file), line=0,
+            character=text.rindex("Value") + 1)
+        assert len(definition) == 1 and pathlib.Path(definition[0]["file"]).resolve() == other_file, definition
+        assert definition[0]["range"]["start"] == {"line": 0, "character": text.index("Value")}, definition
+        assert routed(source_b, "csharp", "diagnostics", file=str(other_file)) == []
+        other_file.write_text(text.replace("Value = 7", 'Value = "wrong"'))
+        diagnostics = routed(source_b, "csharp", "diagnostics", file=str(other_file))
+        assert len(diagnostics) == 1 and diagnostics[0]["code"] == "CS0029", diagnostics
+        assert pathlib.Path(diagnostics[0]["location"]["file"]).resolve() == other_file, diagnostics
+        other_file.write_text(text)
+        assert routed(source_b, "csharp", "diagnostics", file=str(other_file)) == []
+        # A later-created project works without Git metadata, rewriting config or
+        # restarting. Its nearest project directory provides the scoped workspace.
+        later, later_file = make_repository(source_a, "Created Later")
+        (later / ".git").rmdir()
+        assert routed(source_a, "csharp", "diagnostics", file=str(later_file)) == []
+        client.good("workspace.close", {"root": str(later)})
+        assert client.call("semantic.query", {"root": str(source_a), "language": "csharp",
+            "operation": "symbols", "arguments": {"file": str(other_file)}})["isError"]
+        assert client.call("semantic.query", {"root": str(source_a), "language": "csharp",
+            "operation": "symbols", "arguments": {"file": str(widget)}})["isError"]
+        # Workspace-level selection is a tool operation, never a config edit.
+        client.good("workspace.open", {"root": str(architecture)})
+        capabilities = client.good("engine.capabilities", {"root": str(architecture), "language": "csharp"})
+        assert capabilities["analysis"]["selectedProject"].replace("\\", "/") == "source/Architecture.sln", capabilities
+        duplicate = architecture / "source/Alternative.sln"
+        duplicate.write_text((architecture / "source/Architecture.sln").read_text())
+        client.good("workspace.open", {"root": str(architecture), "reload": True})
+        ambiguous = client.call("engine.capabilities", {"root": str(architecture), "language": "csharp"})
+        assert ambiguous["isError"], ambiguous
+        error = ambiguous["structuredContent"]["error"]
+        assert error["code"] == "project_selection_required", error
+        assert pathlib.Path(error["workspaceRoot"]).resolve() == architecture, error
+        assert {item["candidate"].replace("\\", "/") for item in error["diagnostics"]} == {
+            "source/Architecture.sln", "source/Alternative.sln"}, error
+        client.good("workspace.open", {"root": str(architecture), "project": "source/Architecture.sln", "reload": True})
+        assert routed(architecture, "csharp", "diagnostics", file=str(routed_consumer)) == []
+        client.good("workspace.close", {"root": str(architecture)})
+        client.good("workspace.close", {"root": str(other)})
+        # The same source-root configuration routes both official TS/JS services.
+        for language, extension in (("typescript", "ts"), ("javascript", "js")):
+            web = source_b / language
+            (web / ".git").mkdir(parents=True)
+            (web / "tsconfig.json").write_text(json.dumps({"compilerOptions": {
+                "strict": True, "allowJs": True, "checkJs": True}, "include": ["*." + extension]}))
+            document = web / ("sample." + extension)
+            document.write_text("export const answer = 42;\nexport const result = answer;\n")
+            definition = routed(source_b, language, "definition", file=str(document), line=1, character=23)
+            assert len(definition) == 1 and pathlib.Path(definition[0]["file"]).resolve() == document, definition
+            assert definition[0]["range"]["start"] == {"line": 0, "character": 13}, definition
+            assert routed(source_b, language, "diagnostics", file=str(document)) == []
+            client.good("workspace.close", {"root": str(web)})
+        # One physical document in two projects has two compilation contexts.
+        # Returning an arbitrary first project would silently give wrong answers.
+        linked = source_a / "Linked Contexts"
+        (linked / ".git").mkdir(parents=True)
+        shared = linked / "Shared.cs"
+        shared.write_text("public class Shared { public int Value => 42; }\n")
+        solution_projects = []
+        for number, name in enumerate(("First", "Second"), start=1):
+            directory = linked / name
+            directory.mkdir()
+            project = directory / (name + ".csproj")
+            project.write_text(f'<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>{props}</PropertyGroup>'
+                '<ItemGroup><Compile Include="../Shared.cs" Link="Shared.cs" /></ItemGroup></Project>')
+            subprocess.run([dotnet, "restore", str(project), "--ignore-failed-sources"],
+                check=True, timeout=60)
+            solution_projects.append(
+                f'Project("{{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}}") = "{name}", '
+                f'"{name}/{name}.csproj", "{{00000000-0000-0000-0000-{number:012d}}}"\nEndProject\n')
+        (linked / "Contexts.sln").write_text("Microsoft Visual Studio Solution File, Format Version 12.00\n"
+            + "".join(solution_projects) + "Global\nEndGlobal\n")
+        client.good("workspace.open", {"root": str(linked)})
+        ambiguous = client.call("engine.capabilities", {"root": str(linked), "language": "csharp"})
+        assert ambiguous["isError"], ambiguous
+        error = ambiguous["structuredContent"]["error"]
+        assert error["code"] == "project_selection_required", error
+        assert pathlib.Path(error["workspaceRoot"]).resolve() == linked, error
+        assert {item["candidate"].replace("\\", "/") for item in error["diagnostics"]} == {
+            "First/First.csproj", "Second/Second.csproj"}, error
+        client.good("workspace.open", {"root": str(linked), "project": "First/First.csproj", "reload": True})
+        assert routed(linked, "csharp", "diagnostics", file=str(shared)) == []
+        client.good("workspace.close", {"root": str(linked)})
+        if sys.platform != "win32":
+            escape = source_a / "escape.cs"
+            escape.symlink_to(widget)
+            assert client.call("semantic.query", {"root": str(source_a), "language": "csharp",
+                "operation": "symbols", "arguments": {"file": str(escape)}})["isError"]
+        print("trustedRoots-only packaged routing: two source roots, nested solution, isolated same-name symbols, new repository, ambiguity/selection, TS/JS and boundaries passed")
+    finally:
+        client.close()
     # This Mac has only a task-local SDK. A separate test process can therefore
     # verify runtime-only behavior without altering any installed SDK or session.
     standard_sdk_roots = [pathlib.Path(path) for path in (

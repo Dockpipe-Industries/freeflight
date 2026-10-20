@@ -50,11 +50,56 @@ The TypeScript workflow stages source/lockfiles/tests under bin/.local/typescrip
 and runs npm ci --ignore-scripts there. Do not install node_modules in source.
 Cleanup must target only identified generated artifacts; never use broad git clean.
 
-## Development configuration
+## Configure a complete bundle
+
+The development branch adds a **not-yet-published** source-folder configuration:
 
 ```json
 {
-  "roots": ["/absolute/project"],
+  "trustedRoots": ["/absolute/source-a", "/absolute/source-b"]
+}
+```
+
+Each folder can contain multiple repositories. It grants both access and permission
+for C# design-time MSBuild evaluation, which can execute repository targets/imports.
+Trust only folders containing trusted projects. C# project loading requires a
+compatible installed SDK and restored dependencies. No worker paths or per-project
+solution setting is needed in a complete bundle.
+
+For a Codex MCP client:
+
+```toml
+[mcp_servers.freeflight]
+command = "/absolute/freeflight/bin/freeflight"
+args = ["--config", "/absolute/freeflight.json"]
+```
+
+For clients using `mcpServers`:
+
+```json
+{"mcpServers":{"freeflight":{"command":"/absolute/freeflight/bin/freeflight","args":["--config","/absolute/freeflight.json"]}}}
+```
+
+File queries route lazily from a configured source root to the appropriate
+repository/project. Select a repository with `workspace.open` for workspace-wide
+queries; resolve ambiguous projects through that tool, without editing MCP config.
+See [workspace selection](workspaces.md) for exact routing, reload and access rules.
+
+The published
+[`v0.1.0-preview.20261020.trusted.1997d38`](https://github.com/Dockpipe-Industries/freeflight/releases/tag/v0.1.0-preview.20261020.trusted.1997d38)
+requires its older `roots` plus `trustedRoots` configuration. It does not implement
+the new source-folder routing. Follow its release notes until a replacement bundle
+is qualified. `--workspace /absolute/project` remains a safe-source alternative,
+and no-argument startup remains dormant. Neither grants MSBuild execution trust.
+
+## Source-build configuration
+
+Developers running an unbundled build may supply an `engines` object with absolute
+commands for the staged worker outputs, alongside the chosen startup root policy:
+
+```json
+{
+  "trustedRoots": ["/absolute/source-a"],
   "engines": {
     "typescript": ["/absolute/node", "/absolute/freeflight/bin/.local/typescript/worker.mjs"],
     "javascript": ["/absolute/node", "/absolute/freeflight/bin/.local/typescript/worker.mjs"],
@@ -63,35 +108,9 @@ Cleanup must target only identified generated artifacts; never use broad git cle
 }
 ```
 
-Run the compiled server with `--config /absolute/freeflight.json`. Configuration
-is operator-owned, never discovered or executed from the opened workspace.
-The bundle's `--workspace` mode derives trusted runtime paths from installation.
-
-For a Codex MCP client, configure its normal stdio server entry:
-
-```toml
-[mcp_servers.freeflight]
-command = "/absolute/freeflight/bin/freeflight"
-args = ["--workspace", "/absolute/project"]
-```
-
-Other clients supporting `mcpServers` can use:
-
-```json
-{"mcpServers":{"freeflight":{"command":"/absolute/freeflight/bin/freeflight","args":["--workspace","/absolute/project"]}}}
-```
-
-The published Ubuntu 22.04 preview accepts one `--workspace` directory (not a repeatable flag). It
-serves every supported language and may query narrower project directories within
-that authorized root. A common parent avoids per-project client edits but grants
-access to all descendants. Advanced `--config` supports 1–32 roots and explicit
-engine paths. There is no runtime root grant, workspace open/close API or automatic
-MCP client-roots integration yet. Authorization changes require restart. See
-[platform-specific preview instructions](distribution.md). The development branch
-adds a dormant no-argument endpoint and explicit runtime workspace lifecycle;
-[workspace selection and access](workspaces.md) explains its policy and the
-difference between client suggestions and filesystem authorization. This does not
-change the already published preview.
+Use `roots` instead of `trustedRoots` when intentionally choosing safe-source C#
+analysis. Configuration is operator-owned and never discovered from repository
+files. Worker executables run with the operator's OS privileges.
 
 ## Engine contract
 
@@ -124,5 +143,5 @@ See [acceptance](acceptance.md), [comparison](comparison.md), and [release](rele
 
 Additional evidence: [real project](real-project-qualification.md), [LSP evaluation](lsp-evaluation.md), [release preparation](release-preparation.md), and [Registry publication](registry-publication.md).
 
-Unreleased trusted-loading configuration, warnings, reload guidance and outline fixes
-are documented in [next-release notes](unreleased.md). They are not in published `57851e3`.
+Unreleased source-folder configuration and routing are documented in
+[next-release notes](unreleased.md), separately from the published trusted-loading repairs.

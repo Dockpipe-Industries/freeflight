@@ -80,13 +80,21 @@ class GitHubApiTests(unittest.TestCase):
                  'created_at': pull['merged_at']}
         return pull, event
 
+    def commit_fixture(self, pull, event):
+        parents = ['c' * 40, pull['head']['sha']]
+        return {'sha': event['commit_id'], 'url': event['commit_url'],
+                'parents': [{'sha': sha, 'url': api.API + '/commits/' + sha} for sha in parents]}
+
     def test_current_api_promotion_uses_authoritative_timeline_commit(self):
         pull, event = self.promotion_fixture()
-        with patch.object(api, 'request', return_value=[event]) as request:
+        commit = self.commit_fixture(pull, event)
+        with patch.object(api, 'request', side_effect=[[event], commit]) as request:
             evidence = api.promotion_evidence([pull])
-        request.assert_called_once_with('/issues/3/timeline?per_page=100&page=1')
+        self.assertEqual(request.call_args_list[0].args, ('/issues/3/timeline?per_page=100&page=1',))
+        self.assertEqual(request.call_args_list[1].args, ('/commits/' + 'b' * 40,))
         self.assertEqual(evidence[0]['merge_commit_sha'], 'b' * 40)
         self.assertEqual(evidence[0]['merge_event'], event)
+        self.assertEqual(evidence[0]['merge_commit_evidence'], commit)
         self.assertNotIn('merge_commit_sha', pull)
         self.assertNotEqual(evidence[0]['merge_commit_sha'], pull['head']['sha'])
 
@@ -116,13 +124,47 @@ class GitHubApiTests(unittest.TestCase):
     def test_promotion_paginates_and_rejects_exhausted_history(self):
         pull, event = self.promotion_fixture()
         page = [{'event': 'commented'}] * 100
-        with patch.object(api, 'request', side_effect=[page, [event]]) as request:
+        with patch.object(api, 'request', side_effect=[page, [event], self.commit_fixture(pull, event)]) as request:
             self.assertEqual(api.promotion_evidence([pull])[0]['merge_commit_sha'], 'b' * 40)
-            self.assertEqual(request.call_args.args[0], '/issues/3/timeline?per_page=100&page=2')
+            self.assertEqual(request.call_args_list[1].args[0], '/issues/3/timeline?per_page=100&page=2')
         with patch.object(api, 'request', return_value=page) as request:
             with self.assertRaisesRegex(ValueError, 'exceeds bounded query'):
                 api.promotion_evidence([pull])
             self.assertEqual(request.call_count, 10)
+
+    def test_real_pr28_shape_allows_one_second_recording_delay(self):
+        pull, event = self.promotion_fixture()
+        pull.update(number=28, merged_at='2026-10-20T05:49:54Z')
+        pull['head']['sha'] = '013811b0f2fcab7ffb57eb1e37c1972cee640323'
+        sha = 'feb339390a9b1948ded8fad398804fd5c10dd0f4'
+        event.update(commit_id=sha, commit_url=api.API + '/commits/' + sha,
+                     created_at='2026-10-20T05:49:55Z')
+        commit = self.commit_fixture(pull, event)
+        first = 'ea139acfd754f7afa2e24f18b46837dc8b15e4d4'
+        commit['parents'][0] = {'sha': first, 'url': api.API + '/commits/' + first}
+        with patch.object(api, 'request', side_effect=[[event], commit]):
+            self.assertEqual(api.promotion_evidence([pull])[0]['merge_commit_sha'], sha)
+
+    def test_promotion_timestamp_bound_is_not_identity_substitute(self):
+        pull, event = self.promotion_fixture()
+        for timestamp in ('2026-10-19T22:46:41Z', '2026-10-19T22:47:43Z', None, 'invalid'):
+            with self.subTest(timestamp=timestamp), patch.object(api, 'request', return_value=[{
+                    **event, 'created_at': timestamp}]) as request:
+                with self.assertRaises(ValueError):
+                    api.promotion_evidence([pull])
+                self.assertEqual(request.call_count, 1)
+        commit = self.commit_fixture(pull, event)
+        wrong = [copy.deepcopy(commit) for _ in range(6)]
+        wrong[0]['sha'] = 'd' * 40
+        wrong[1]['url'] = 'https://api.github.com/repos/other/repo/commits/' + event['commit_id']
+        wrong[2]['parents'] = commit['parents'][:1]
+        wrong[3]['parents'][1] = {'sha': 'd' * 40, 'url': api.API + '/commits/' + 'd' * 40}
+        wrong[4]['parents'][1]['url'] = 'https://api.github.com/repos/other/repo/commits/' + 'a' * 40
+        wrong[5]['parents'] = list(reversed(commit['parents']))
+        for value in wrong:
+            with self.subTest(commit=value), patch.object(api, 'request', side_effect=[[event], value]):
+                with self.assertRaisesRegex(ValueError, 'does not corroborate'):
+                    api.promotion_evidence([pull])
 
     def test_promotion_rejects_non_numeric_identifier_before_request(self):
         pull, _ = self.promotion_fixture()

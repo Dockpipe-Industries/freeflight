@@ -249,5 +249,11 @@ distinguish the in-process Locator from Roslyn's remote build-host selection.
 The user confirmed saving workflow permission on the existing token. The consolidated
 workflow changes include the five setup-python v7 replacements and CI's exact RC2
 SDK pin. No authentication routing or credentials are replaced by this work.
+
+Hosted RC2 source 6e7b9a5 subsequently passed all native/site jobs and CodeQL in
+runs 39433227935 and 39433227841. Staging promotion PR #34 passed and merged.
+Production/master promotion is paused for user acceptance. Site deployment
+preparation is separate from activation: no hosted FreeFlight website or new RC2
+prerelease is established by prepared files or local validation.
 The preceding .NET 10 head 3a8ff3f passed all ten hosted checks, including all five
 platforms, both sites and CodeQL. A fresh hosted run must qualify this RC2 revision.

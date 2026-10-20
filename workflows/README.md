@@ -16,6 +16,10 @@ The website follows the Qt/WASM renderer architecture: `site.toolchain` provisio
 pinned task-local SDKs, `site.build` compiles and stages environment-specific assets,
 `site.test` runs real Chromium at desktop/mobile widths, and `site.container` builds
 and smoke-tests a disposable unprivileged container. No workflow activates hosting.
+`site.deploy.prepare` validates environment-specific delivery receipts and emits
+isolated Compose wiring without accessing hosts or credentials. Production inputs
+must have a stable version and matching qualified source, release-tag and master
+trees. See `docs/site-deployment.md` for remaining activation gates.
 
 To compare a locally built pinned baseline with the current source, set
 `FREEFLIGHT_BENCHMARK_BASELINE` to its absolute checkout/archive directory and run

@@ -785,3 +785,27 @@ merging PR #32 and publishing the corrected preview. PR #32 merged to js/dev as
 so existing release automation marks the publication prerelease. Qualification,
 js/dev -> dev -> staging -> master promotion and public-byte verification remain
 mandatory. No bot PR closure, website deployment or Registry publication is included.
+
+## Staging scope correction and production preparation (2026-10-20)
+
+The owner subsequently paused master promotion and production publication, requested
+a downloadable staging prerelease and live staging website, and approved the exact
+staging hostname DNS/HTTPS/tunnel route. Production wiring is requested in advance,
+but production activation and its specific ingress/security changes are not approved.
+These later instructions supersede the publication scope above.
+
+PRs #32, #33 and #34 merged; staging is 0b2b7e4 with the exact tree of qualified
+source 6e7b9a5. CI push run 39433227935 and CodeQL 39433227841 passed. Linux and
+Windows archives, MCPBs and corresponding Qt sources are prepared locally; no new
+release or site deployment is claimed. Master remains at the prior 27fba35.
+
+The site.deploy.prepare workflow validates local artifact/audit bindings and
+promotion identity, emits isolated Compose wiring, and rejects prerelease inputs
+for production. It performs no remote mutation and cannot authorize deployment.
+Existing operator access, live preflight and ingress activation remain outstanding.
+
+DockPipe site.deploy.prepare passed against the downloaded, hash-verified staging
+container/audit/source artifacts for 6e7b9a5 and emitted a non-authorizing preparation
+receipt. Five rejection tests cover unpromoted source, prerelease production,
+wrong-environment archives, changed archives and symlink inputs. repo.check passed.
+No production candidate has been prepared or activated.

@@ -1,38 +1,43 @@
-# Unreleased: trusted project loading and document outlines
+# Unreleased: one trusted source-folder configuration
 
-These repairs follow published source `57851e3`. They are **not** in the scaling
-preview and require a newly built and qualified complete bundle. Commit/push for
-cross-platform CI is authorized; protected promotion and publication remain pending. No active client
-configuration or running user session is changed by this repair.
+This change follows the published
+[`v0.1.0-preview.20261020.trusted.1997d38`](https://github.com/Dockpipe-Industries/freeflight/releases/tag/v0.1.0-preview.20261020.trusted.1997d38)
+trusted-loading preview. **The new configuration and routing are not published.**
+That preview still requires both `roots` and `trustedRoots`; use its release notes
+when configuring it. No active client configuration or user session is changed by
+this work. Qualification and promotion must precede a replacement distribution.
 
-## One operator choice per folder
+## Configure trusted source folders once
 
-In an operator-owned FreeFlight configuration:
+For a complete bundle built from this development branch:
 
 ```json
 {
-  "roots": ["/absolute/workspace", "/absolute/read-only-project"],
-  "trustedRoots": ["/absolute/workspace"],
-  "csharp": {"project": "source/Architecture.sln"}
+  "trustedRoots": ["/absolute/source-a", "/absolute/source-b"]
 }
 ```
 
-Launch the bundled `bin/freeflight` with
-`--config /absolute/freeflight-trusted.json`. Omit `engines`: workers and runtimes
-are located automatically. `trustedRoots` means “Trust projects in this folder.”
-Project-aware C# loading is the default for selected workspaces inside that folder.
-The read-only sibling remains safe-source. Trust entries cannot expand `roots`.
-MSBuild design-time evaluation may execute repository targets/imports with the
-operator's privileges; it is not a sandbox. Trusted mode needs an installed SDK
-and restored dependencies; no automatic restore/build is requested.
+Launch bundled `bin/freeflight` with `--config /absolute/freeflight.json`.
+Workers are located automatically. No separate `roots`, engine paths or mandatory
+`csharp.project` setting is needed. Each entry grants access **and permission for
+MSBuild design-time repository code execution** in its descendants. Use only
+source folders whose projects you trust. This is not a sandbox; a compatible SDK,
+targeting packs and restored dependencies remain prerequisites for trusted C#.
 
-The optional `csharp.project` accepts a relative `.sln` or `.csproj`. Without it,
-bounded discovery finds nested solutions, prefers solutions over projects, and
-requires one unambiguous candidate. Ambiguity returns candidates and selection
-guidance. Set a workspace-specific project using `workspace.open` with `project`
-and `reload: true`; no trust flag is accepted in semantic requests.
+Startup does not scan every repository. A file query through a configured source
+root lazily selects its repository/project workspace. Nested solutions are
+discovered within that selected workspace. Workspace-wide queries require
+`workspace.open` with the desired repository directory. Genuine ambiguity returns
+structured `project_selection_required` candidates; choose one using
+`workspace.open` with a relative `project` and `reload: true`. No client config edit
+is needed. Source edits refresh incrementally; project graph changes require reload.
+See [workspace behavior and compatibility](workspaces.md) for exact routing rules.
 
-## Correctness and visible status
+Legacy `roots`, `roots` plus a trusted subset, and `--workspace` remain supported.
+The latter remains safe-source. Requests and repository configuration cannot
+expand startup trust or filesystem boundaries.
+
+## Repairs already in the published trusted-loading preview
 
 - Confirmed NU1603/NU1903/NU1701 restore warnings no longer reject otherwise usable
   graphs merely because Roslyn reports them as Failure. Exact project/message
@@ -70,15 +75,15 @@ remain fatal. `.slnx`, linked source across projects, custom generator fidelity 
 universal solution compatibility remain unqualified.
 
 Validation results are recorded in [the task log](task-log.md). The reported Linux
-installation and private project were not accessed during this repair; Mac fixture
+installation and private project were not accessed during the trusted-loading repair; Mac fixture
 results do not claim Linux reproduction or project-aware parity with another tool.
 The separately measured warm-path work below does not establish performance parity with another tool.
 
-## Warm-path experiment excluded
+## Historical warm-path experiment excluded
 
 A bounded per-refresh ancestor-check optimization was investigated and then
 reverted independently of the functional repairs. Original measurements showed
 34–37% lower medians but 27–34% higher p90; diagnostic controls did not establish
 a cause or a reliable correction. The retained Refresh/CheckPath methods match
 57851e3. See [preserved measurement evidence](hotpath-performance.md); no runtime
-speedup or competitor-win claim applies to this repair.
+speedup or competitor-win claim applies to the trusted-loading repair.

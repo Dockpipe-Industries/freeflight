@@ -35,8 +35,14 @@ Rename/import edits are previews. Original hashes help callers detect stale edit
 FreeFlight never silently applies them. Arbitrary repository configuration must not
 be promoted into executable commands.
 
-The bundled application accepts explicit startup-only `trustedRoots`
-within operator-authorized roots. Read-only roots remain safe-source by default. The internal worker also retains its advanced
+In the development branch, a startup-only `trustedRoots` array is the normal
+bundled configuration. Every entry grants both filesystem access and trusted
+C# project loading for descendant repositories, including future projects.
+No separate `roots` array is required. This source-folder interface is unreleased;
+published preview `v0.1.0-preview.20261020.trusted.1997d38` requires both arrays.
+Legacy configurations with explicit `roots` retain safe-source access unless a
+contained directory is separately trusted; `--workspace` remains safe-source.
+Tool calls cannot add trust. The internal worker also retains its advanced
 `--trusted-msbuild` argument. It uses MSBuildWorkspace design-time evaluation, which can execute
 repository targets and imports with the worker's OS privileges. Do not enable it
 for untrusted repositories. Opening a normal workspace cannot enable this mode.

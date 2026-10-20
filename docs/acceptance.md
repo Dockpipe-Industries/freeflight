@@ -176,3 +176,21 @@ See [scaling readiness](scaling-readiness.md) for corrected zero-read claims, ex
 See [unreleased notes](unreleased.md), [task log](task-log.md) and
 [hot-path evidence](hotpath-performance.md). Earlier release records are historical;
 this update does not mark the full initial-release checklist complete.
+
+
+### Configure-once source folders (2026-10-20, unreleased)
+
+- [x] `trustedRoots` alone supplies access and trusted design-time loading policy.
+- [x] Two source folders, separate repositories and nested solution routing pass
+  local packaged C# semantic tests; same-name symbols resolve to the correct file.
+- [x] New projects, source edits, TS/JS navigation and workspace boundaries pass.
+- [x] Ambiguity returns structured candidates; tool-level selection needs no config edit.
+- [x] Legacy safe-source and per-root policies remain covered by protocol tests.
+- [x] Documentation distinguishes this UX from the published 1997d38 preview.
+- [ ] Exact-head hosted cross-platform qualification for this new UX.
+- [ ] Separate authorization/report checkpoint before promotion or publication.
+
+The previous trusted-loading repair was qualified and published as
+`v0.1.0-preview.20261020.trusted.1997d38`; its historical pending entries above
+are superseded by the publication evidence in the task log. This new source-folder
+UX is a separate, unreleased change and does not claim private-solution qualification.

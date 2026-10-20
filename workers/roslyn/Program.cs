@@ -213,7 +213,12 @@ internal sealed class SourceEngine : IDisposable
                     {
                         var path = CheckPath(loadedDocument.FilePath!);
                         if (!loadedDocuments.TryAdd(path, loadedDocument.Id))
-                            throw new InvalidOperationException("Linked documents across projects require explicit project selection and are not supported yet");
+                            throw new ProjectLoadException("project_selection_required",
+                                "Document belongs to multiple compilation contexts: " + Path.GetRelativePath(root, path),
+                                selectedProject, "Select a project with workspace.open project and reload=true; no startup configuration change is required.",
+                                workspace.CurrentSolution.Projects.Where(candidate => candidate.Documents.Any(document =>
+                                    string.Equals(document.FilePath, path, StringComparison.Ordinal)))
+                                    .Select(candidate => (object)new { candidate = Path.GetRelativePath(root, candidate.FilePath!) }).ToArray());
                     }
                 }
                 foreach (var entry in loadedDocuments) documents.Add(entry.Key, entry.Value);

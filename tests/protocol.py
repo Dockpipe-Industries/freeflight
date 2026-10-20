@@ -99,6 +99,39 @@ class ProtocolTests(unittest.TestCase):
             result = subprocess.run([BINARY, "--config", str(config)], input="", capture_output=True, text=True, timeout=5)
             self.assertNotEqual(result.returncode, 0)
 
+    def test_trusted_source_roots_only_lazy_routing(self):
+        second = self.root / "second-source"
+        second.mkdir()
+        first = self.root / "first-source"
+        first.mkdir()
+        worker = self.root / "route.py"
+        worker.write_text("import json,sys\nfor line in sys.stdin:\n"
+            " r=json.loads(line)\n"
+            " v={'operations':['identity']} if r['method']=='capabilities' else r['params']\n"
+            " print(json.dumps({'id':r['id'],'result':v}),flush=True)\n")
+        self.config.write_text(json.dumps({"trustedRoots": [str(first), str(second)],
+            "engines": {"csharp": [sys.executable, str(worker)]}}))
+        self.restart(["--config", str(self.config)])
+        listed = self.tool("workspace.list")["structuredContent"]
+        self.assertEqual(listed["allowedRoots"], [str(first), str(second)])
+        self.assertTrue(all(not item["engines"] for item in listed["workspaces"]))
+        refused = self.tool("engine.capabilities", {"root": str(first), "language": "csharp"})
+        self.assertEqual(refused["structuredContent"]["error"]["code"], "workspace_selection_required")
+        for source in (first, second):
+            repo = source / "repo"
+            document = repo / "source" / "App" / "Same.cs"
+            document.parent.mkdir(parents=True)
+            document.write_text("class Same {}")
+            (repo / "source" / "Architecture.sln").write_text("fixture")
+            (document.parent / "App.csproj").write_text("fixture")
+            args = {"root": str(source), "language": "csharp", "operation": "identity",
+                    "arguments": {"file": str(document)}}
+            value = self.tool("semantic.query", args)["structuredContent"]
+            self.assertEqual(value["root"], str(repo / "source"))
+            self.assertEqual(value["file"], str(document))
+            args["arguments"]["file"] = str(self.config)
+            self.assertTrue(self.tool("semantic.query", args)["isError"])
+
     def test_csharp_selection_reload_and_status(self):
         worker = self.root / "policy.py"
         worker.write_text("import json,sys,os\nfor line in sys.stdin:\n"

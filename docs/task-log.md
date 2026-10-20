@@ -654,3 +654,13 @@ also pass. Evidence is retained under bin/.local/source-roots-package*.log.
 This is local macOS ARM64 evidence; new hosted platform qualification and a report
 checkpoint precede any promotion/publication. Client configuration and private
 repositories remain untouched; website work and performance experiments are excluded.
+
+### Windows routing fixture encoding (2026-10-20)
+
+Hosted run 39381056310 exposed a Windows-only failure in the new protocol fixture:
+its Python echo worker decoded UTF-8 JSON through the default Windows text encoding,
+corrupting the Unicode workspace name. The fixture now explicitly configures both
+streams as UTF-8, matching existing worker fixtures. The exact path assertion remains
+unchanged. This correction changes no server/worker implementation. Local DockPipe
+core.test passes; fresh hosted Windows qualification is required. Original CodeQL
+run 39381056453 passed. No promotion/publication is authorized by this test correction.

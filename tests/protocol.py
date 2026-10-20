@@ -105,7 +105,8 @@ class ProtocolTests(unittest.TestCase):
         first = self.root / "first-source"
         first.mkdir()
         worker = self.root / "route.py"
-        worker.write_text("import json,sys\nfor line in sys.stdin:\n"
+        worker.write_text("import json,sys\nsys.stdin.reconfigure(encoding='utf-8')\n"
+            "sys.stdout.reconfigure(encoding='utf-8')\nfor line in sys.stdin:\n"
             " r=json.loads(line)\n"
             " v={'operations':['identity']} if r['method']=='capabilities' else r['params']\n"
             " print(json.dumps({'id':r['id'],'result':v}),flush=True)\n")

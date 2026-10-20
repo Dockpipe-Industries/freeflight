@@ -767,3 +767,12 @@ workflow changes include the five setup-python v7 replacements and CI's exact RC
 SDK pin. No authentication routing or credentials are replaced by this work.
 The preceding .NET 10 head 3a8ff3f passed all ten hosted checks, including all five
 platforms, both sites and CodeQL. A fresh hosted run must qualify this RC2 revision.
+
+RC2 hosted qualification exposed an old-preview baseline mismatch: SDK 11 writes
+MSBuild binary logs newer than the checksum-pinned historical preview can read.
+Linux ARM64 and macOS RC2 qualification passed, while x64 baseline control failed
+before reaching the intended external-input rejection. CI now provisions SDK
+10.0.402 alongside RC2, and only the historical baseline fixture pins 10.0.402 in
+its disposable global.json and asserts that selection. Corrected fixtures remain
+on RC2. No rejection assertion is weakened. Both current packaged external-input
+cases pass locally after making setup/server working directories explicit.

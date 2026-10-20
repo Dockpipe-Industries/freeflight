@@ -82,7 +82,7 @@ meta = {"io.modelcontextprotocol/protocolVersion": "2026-07-28",
 class Client:
     def __init__(self, config):
         self.errors = tempfile.TemporaryFile(mode="w+t", encoding="utf-8")
-        self.process = subprocess.Popen([str(binary), "--config", str(config)],
+        self.process = subprocess.Popen([str(binary), "--config", str(config)], cwd=config.parent,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.errors,
             text=True, encoding="utf-8")
         self.replies = queue.Queue()
@@ -123,8 +123,8 @@ class Client:
             self.errors.close()
 
 
-def run(*command):
-    return subprocess.run([str(item) for item in command], env=setup_env,
+def run(*command, cwd=None):
+    return subprocess.run([str(item) for item in command], env=setup_env, cwd=cwd,
         capture_output=True, text=True, encoding="utf-8", check=True, timeout=180).stdout
 
 
@@ -144,6 +144,12 @@ properties = ("<TargetFramework>net8.0</TargetFramework><GenerateAssemblyInfo>fa
     "<EnableNETAnalyzers>false</EnableNETAnalyzers><NuGetAudit>false</NuGetAudit>")
 with tempfile.TemporaryDirectory(prefix="external-inputs-", dir=repo / "bin/.local") as temporary:
     base = pathlib.Path(temporary).resolve()
+    if args.baseline_release:
+        # The pinned old binary cannot read the newer SDK's binary-log format.
+        # Preserve its qualified toolchain; the corrected bundle still uses RC2.
+        (base / "global.json").write_text(json.dumps({"sdk": {
+            "version": "10.0.402", "rollForward": "disable", "allowPrerelease": False}}), encoding="utf-8")
+        assert run(dotnet, "--version", cwd=base).strip() == "10.0.402"
     source = base / "Source"
     source.mkdir()
     config = base / "freeflight.json"
@@ -176,10 +182,10 @@ with tempfile.TemporaryDirectory(prefix="external-inputs-", dir=repo / "bin/.loc
         solution = root / "source/Architecture.sln"
         solution.write_text('Microsoft Visual Studio Solution File, Format Version 12.00\n'
             'Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "App", "App/App.csproj", "{F99CC167-3E5A-4E4E-8C0E-B43FD3F69B41}"\nEndProject\nGlobal\nEndGlobal\n', encoding="utf-8")
-        run(dotnet, "restore", app, "--ignore-failed-sources")
-        run(dotnet, "restore", control_project, "--ignore-failed-sources")
+        run(dotnet, "restore", app, "--ignore-failed-sources", cwd=root)
+        run(dotnet, "restore", control_project, "--ignore-failed-sources", cwd=root)
         evaluated = json.loads(run(dotnet, "msbuild", app, "-target:GenerateProgramFile",
-            "-getItem:Compile", "-property:DesignTimeBuild=true", "-verbosity:quiet"))
+            "-getItem:Compile", "-property:DesignTimeBuild=true", "-verbosity:quiet", cwd=root))
         external = [pathlib.Path(item["FullPath"]) for item in evaluated["Items"]["Compile"]
             if not pathlib.Path(item["FullPath"]).is_relative_to(root)]
         assert len(external) == 1 and external[0].name == "Microsoft.NET.Test.Sdk.Program.cs", external
@@ -265,7 +271,7 @@ with tempfile.TemporaryDirectory(prefix="external-inputs-", dir=repo / "bin/.loc
             second_file.write_text("public class SecondConsumer { public int Shared => SharedInput.Value; }\n", encoding="utf-8")
             app.write_text(app_text.replace('</ItemGroup>', shared_item + '<ProjectReference Include="../Second/Second.csproj" /></ItemGroup>'), encoding="utf-8")
             consumer.write_text(consumer_text.replace("public System.Type Generated", "public int Shared => SharedInput.Value; public System.Type Generated"), encoding="utf-8")
-            run(dotnet, "restore", app, "--ignore-failed-sources")
+            run(dotnet, "restore", app, "--ignore-failed-sources", cwd=root)
             client.good("workspace.open", {"root": str(root), "reload": True})
             for document in (consumer, second_file):
                 assert good_query(client, root, "diagnostics", file=str(document)) == []
@@ -279,7 +285,7 @@ with tempfile.TemporaryDirectory(prefix="external-inputs-", dir=repo / "bin/.loc
             # Restore the single-project shape before testing special-file refusal.
             app.write_text(app_text, encoding="utf-8")
             consumer.write_text(consumer_text, encoding="utf-8")
-            run(dotnet, "restore", app, "--ignore-failed-sources")
+            run(dotnet, "restore", app, "--ignore-failed-sources", cwd=root)
             if os.name != "nt":
                 linked = base / ("Symlink-" + sdk + ".cs")
                 linked.symlink_to(authored)

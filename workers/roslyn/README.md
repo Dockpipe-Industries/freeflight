@@ -158,3 +158,47 @@ constructor/method outgoing calls, nested callable ownership, UTF-16 positions,
 and symbol/edge limits with recovery. The shared per-request cancellation token
 flows into Roslyn query APIs and operation traversal. These queries use the selected
 safe-source or trusted project model and inherit its fidelity limitations.
+
+## Provisional Windows .NET Framework qualification
+
+The intended legacy C# support floor is .NET Framework 4.7, through 4.8.1.
+This remains provisional until Windows CI supplies passing semantic evidence.
+`dockpipe --workflow legacy.dotnet` tests 4.7, 4.8 and 4.8.1 separately using
+one controlled two-project non-SDK solution. The source fixture targets 4.8;
+each test changes only its disposable copy beneath `bin/.local` to its selected
+framework. No developer project is changed. The workflow fails on non-Windows
+hosts or missing targeting packs instead of recording a skipped test as success.
+
+Prerequisites are built C++/Roslyn outputs (`core.build`, `workers.roslyn`), the
+pinned .NET SDK on PATH, and each selected .NET Framework developer/targeting
+pack under the standard Windows Reference Assemblies location. A runtime alone
+is insufficient. The worker uses the SDK MSBuild selected by Microsoft.Build.Locator;
+this test deliberately determines whether that toolset can load these simple
+non-SDK projects. Visual Studio-only project types/tasks are not qualified.
+No dependency restore or build occurs for this package-free fixture.
+
+The test uses the actual C++ MCP endpoint and explicitly configured
+`--trusted-msbuild` worker. It checks project-defined conditional compilation,
+System.Xml.Linq framework-reference resolution, exact cross-project definition
+and reference positions, clean diagnostics, and an exact introduced CS0029 that
+then clears on edit. Passing those cases would qualify these controlled project
+shapes only: packages.config, custom targets, web applications, COM, VB, and large
+legacy solutions still require separate evidence. Intermediate versions 4.7.1
+and 4.7.2 are not directly tested by this representative matrix. MSBuild evaluation
+can execute repository code; explicit trust is mandatory and this is not a sandbox.
+
+The coordinated dependency update pins both Roslyn workspace packages to 5.9.0
+and MSBuild.Locator to 1.11.2. Microsoft.NET.StringTools 17.14.28 is explicitly
+excluded from runtime assets and private to the worker project to honor Locator's
+assembly-loading guard. Do not suppress that guard or mix Roslyn workspace versions.
+All changed package metadata declares MIT; preserve distribution notices.
+
+Each passing legacy receipt records the worker's actual .NET runtime, Locator
+instance/discovery type, selected MSBuild assembly file version and location,
+plus hashes of the selected targeting pack's mscorlib, System.Xml.Linq and
+FrameworkList.xml. These distinguish selected tooling from the target framework.
+Microsoft documents that [.NET Locator discovers SDK MSBuild, not Visual Studio
+MSBuild](https://learn.microsoft.com/en-us/visualstudio/msbuild/find-and-use-msbuild-versions?view=vs-2022).
+The [.NET Framework developer guide](https://learn.microsoft.com/en-us/dotnet/framework/install/guide-for-developers)
+explains the separate targeting/developer packs; installing only a later runtime
+does not supply every older target's reference assemblies.

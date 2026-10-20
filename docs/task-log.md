@@ -413,3 +413,28 @@ b4e491d48a7b2b4dcc24b5ddd8256adc71668a5c31a0f445061df891a46e4028.
 Independent archive inspection and clean Ubuntu 22.04/Fedora 44 runtime receipts
 verify workspace switching, dormant startup and client-root revocation. It remains
 unpublished; the public b22a53a compatibility preview and its notes are unchanged.
+
+## 2026-10-20 — Narrow Dependabot promotion validator
+
+Explicit follow-up authorization permits genuine Dependabot dependency-only PRs
+into dev while retaining the normal promotion chain. Added DockPipe promotion.check
+and positive/negative cases covering authentic identity, spoofed actor/author,
+foreign head/base, invalid branch, unrelated ancestry/files, action commands and
+permissions, package scripts/sources and dependency relocation. Independent review
+found action/PackageReference swapping between unchanged steps/conditions; full
+normalized-source positional comparison and regressions now reject both. Local
+DockPipe development.test passes 11 promotion tests plus three lifecycle tests.
+Repository protection settings and release qualification remain unchanged.
+
+Reviewed action updates against primary upstream release documentation: checkout
+7.0.1, setup-node 7.1.0, setup-dotnet 6.0.0, upload-artifact 7.0.2 and coordinated
+CodeQL init/analyze 4.39.0 retain the existing inputs and SHA pinning. Explicitly
+disable setup-node's automatic package-manager cache; retain upload-artifact's
+default ZIP archive behavior required by release evidence verification. Dependabot
+groups only the coupled CodeQL actions and Roslyn packages to avoid split upgrades.
+Full hosted qualification is pending; no dependency PR is merged.
+
+The supported Roslyn repairs are applied together on js/dev: both Workspaces
+packages 5.9.0, Locator 1.11.2, and StringTools excluded from runtime alongside
+MSBuild assemblies. Combined safe/trusted worker tests and self-contained macOS
+ARM64 tests pass locally. TypeScript 7 remains incompatible and held.

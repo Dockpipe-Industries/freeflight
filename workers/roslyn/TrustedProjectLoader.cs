@@ -18,7 +18,17 @@ internal static class TrustedProjectLoader
         if (!MSBuildLocator.IsRegistered)
         {
             // Registration is intentionally deferred: safe-source never searches for an SDK.
-            MSBuildLocator.RegisterDefaults();
+            var instance = MSBuildLocator.RegisterDefaults();
+            Console.Error.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+            {
+                kind = "freeflight.msbuild-toolset",
+                runtimeVersion = Environment.Version.ToString(),
+                instanceVersion = instance.Version.ToString(),
+                discoveryType = instance.DiscoveryType.ToString(),
+                msbuildPath = instance.MSBuildPath,
+                msbuildVersion = System.Diagnostics.FileVersionInfo.GetVersionInfo(
+                    Path.Combine(instance.MSBuildPath, "Microsoft.Build.dll")).FileVersion
+            }));
         }
 
         string target;

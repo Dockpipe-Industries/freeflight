@@ -7,3 +7,7 @@ steps:
     kind: host
     cwd: repo
     cmd: python3 -B workflows/clean/assets/test_policy.py
+  - id: promotion-policy
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/promotion.check/assets/test_policy.py

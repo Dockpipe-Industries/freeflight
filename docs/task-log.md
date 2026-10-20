@@ -824,3 +824,13 @@ The receiver requires its own approved identity, pinned host key and installed
 fixed command; those grants are not created by this code. DNS/HTTPS routing was
 approved for staging, but operator access and receiver identity/setup remain
 unavailable. Offline tests establish rejection/rollback behavior, not deployment.
+
+## Cloud architecture alignment hold (2026-10-20)
+
+The owner requested matching DockPipe Cloud's actual provisioning and delivery
+workflow. Comparison against Cloud staging 4f55a5a identified a material difference:
+Cloud uses state-owned identities and an unprivileged static receiver; PR #35
+proposes manual setup and privileged container activation. The manual installation
+procedure is withdrawn pending the documented shared implementation alignment.
+No provider/state reads, Cloud edits, infrastructure mutation or PR promotion
+occurred. Existing policy tests do not establish architectural acceptance.

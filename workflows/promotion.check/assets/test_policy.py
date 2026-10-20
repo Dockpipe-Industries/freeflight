@@ -21,6 +21,17 @@ class PolicyTests(unittest.TestCase):
     def test_authentic_dependabot(self):
         self.assertIn('all qualification checks still required', self.run_policy())
 
+    def test_real_dependabot_ecosystem_branch_names(self):
+        e = event()
+        e['pull_request']['head']['ref'] = 'dependabot/npm_and_yarn/workers/typescript/dev/typescript-5.9.4'
+        changes = {'workers/typescript/package.json': ('{"dependencies":{"typescript":"5.9.3"}}', '{"dependencies":{"typescript":"5.9.4"}}')}
+        self.assertIn('Authentic', self.run_policy(e, changes=changes))
+        e['pull_request']['head']['ref'] = 'dependabot/npm/workers/typescript/dev/typescript-5.9.4'
+        with self.assertRaises(ValueError): self.run_policy(e, changes=changes)
+        e['pull_request']['head']['ref'] = 'dependabot/nuget/workers/roslyn/dev/Microsoft.Build.Locator-1.11.2'
+        old = '<PackageReference Include="Microsoft.Build.Locator" Version="1.7.8" />'
+        self.assertIn('Authentic', self.run_policy(e, changes={'workers/roslyn/FreeFlight.Roslyn.csproj': (old, old.replace('1.7.8', '1.11.2'))}))
+
     def test_ordinary_promotions(self):
         for base, head in [('dev', 'js/dev'), ('staging', 'dev'), ('master', 'staging')]:
             e = event(); e['pull_request']['base']['ref'] = base; e['pull_request']['head']['ref'] = head

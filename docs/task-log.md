@@ -380,3 +380,36 @@ no dependency PR was merged. Existing PRs #4–#11 are under individual review f
 base-change contamination, compatibility and exact-head CI before disposition.
 The separately qualified workspace UX remains commit `a617399`; this configuration
 change must not be confused with an already published artifact.
+
+## 2026-10-20 — Dependabot review and retargeting evidence
+
+PRs #4, #5, #6, #7, #9, #10 and #11 were verified to contain only one dependency
+commit relative to dev and retargeted to dev without changing their heads.
+#6 is a draft: isolated DockPipe TypeScript qualification passed 2/17 tests and
+failed 15 because TypeScript 7 no longer exports the classic Language Service API.
+#10 is a draft: locked restore passed, but Locator 1.11.2's MSBL001 check rejects
+the copied Microsoft.NET.StringTools runtime assembly. #11 is a draft: locked
+restore fails NU1608 because Roslyn Workspaces.MSBuild 4.14 requires Common 4.14
+while CSharp.Workspaces 5.9 requires Common 5.9. No checks were suppressed.
+
+#8 could not be safely retargeted: its ancestry adds six unrelated development
+commits and an 18-file diff. Draft replacement #13 preserves only upload-artifact
+7.0.2's pinned action changes in the two existing dev workflows; #8 is closed
+unmerged and its original branch remains intact. #13's promotion gate fails as
+expected because the existing policy allows only js/dev into dev; compilation
+is skipped by that gate. The other bot PRs' previous CI runs were cancelled,
+except #8, whose green old-base run does not qualify #13. No dependency PR is
+merge-ready. CodeQL init/analyze versions also require coordinated review for #7.
+
+The target configuration is committed on js/dev and takes effect for future
+Dependabot updates only after promotion to the default branch. No protected branch
+was directly updated, no promotion exception or protection setting was changed,
+and no dependency upgrade was merged. Reconciling dependency PRs into dev with
+the js/dev-only promotion policy remains an explicit pending decision.
+
+Separately, workspace UX commit a617399 passed push and PR CI/CodeQL. Its exact
+Ubuntu 22.04 artifact, freeflight-linux-x64-35f6ef0b42563319.tar.gz, has SHA-256
+b4e491d48a7b2b4dcc24b5ddd8256adc71668a5c31a0f445061df891a46e4028.
+Independent archive inspection and clean Ubuntu 22.04/Fedora 44 runtime receipts
+verify workspace switching, dormant startup and client-root revocation. It remains
+unpublished; the public b22a53a compatibility preview and its notes are unchanged.

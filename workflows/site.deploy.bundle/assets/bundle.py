@@ -34,7 +34,7 @@ def main():
     with zipfile.ZipFile(directory / ("qt-wasm-site-" + environment + ".zip")) as archive:
         site_hash = hashlib.sha256(archive.read("release.json")).hexdigest()
     require(site_hash == image["siteReleaseSha256"], "Container/site mismatch")
-    hostname = "freeflight.staging.dockpipe.com" if environment == "staging" else "freeflight.dockpipe.com"
+    hostname = "freeflight-staging.dockpipe.com" if environment == "staging" else "freeflight.dockpipe.com"
     require(site["hostname"] == image["hostname"] == hostname, "Unexpected published hostname")
     deployment = {
         "schema": 2, "environment": environment, "hostname": hostname,

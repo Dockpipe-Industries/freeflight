@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
-HOSTS = {"staging": "freeflight.staging.dockpipe.com", "production": "freeflight.dockpipe.com"}
+HOSTS = {"staging": "freeflight-staging.dockpipe.com", "production": "freeflight.dockpipe.com"}
 
 
 def require(condition, message):

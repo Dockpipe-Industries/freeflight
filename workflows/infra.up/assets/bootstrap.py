@@ -25,7 +25,7 @@ ALLOWLIST
 }
 server {
     listen 127.0.0.1:18080;
-    server_name freeflight.staging.dockpipe.com;
+    server_name freeflight-staging.dockpipe.com;
     root /srv/freeflight-staging/current;
     add_header X-Content-Type-Options nosniff always;
     add_header X-Robots-Tag noindex always;
@@ -39,8 +39,8 @@ server {
 }
 server {
     listen 127.0.0.1:18081;
-    server_name freeflight.staging.dockpipe.com;
-    if ($host != freeflight.staging.dockpipe.com) { return 404; }
+    server_name freeflight-staging.dockpipe.com;
+    if ($host != freeflight-staging.dockpipe.com) { return 404; }
     if ($freeflight_operator = 0) { return 403; }
     location / { proxy_pass http://127.0.0.1:18080; }
 }

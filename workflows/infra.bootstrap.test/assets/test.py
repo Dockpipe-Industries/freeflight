@@ -75,10 +75,26 @@ def main():
                'entrypoint': base64.b64encode((ROOT / 'workflows/site.deploy.receive/assets/forced-command.sh').read_bytes()).decode()}
     bootstrap.install(payload)
     bootstrap.install(payload)  # Supported repeat setup keeps identity and existing services.
+    # Exercise the bounded hostname migration against real Nginx before activation.
+    sys.path.insert(0, str(ROOT / 'workflows/infra.hostname/assets'))
+    from remote import FILES, OLD, NEW, migrate
+    hashes = {}
+    for name in FILES:
+        path = Path(name)
+        old_data = path.read_bytes().replace(NEW.encode(), OLD.encode())
+        path.write_bytes(old_data)
+        hashes[name] = hashlib.sha256(old_data).hexdigest()
+    run(['nginx', '-t'])
+    run(['systemctl', 'reload', 'nginx'])
+    migrate({'hashes': hashes})
+    assert_true(http(18081, '/healthz', {'Host': NEW, 'X-DockPipe-Client-IP': '192.0.2.7'})[0] == 200,
+                'New hostname was not activated at the origin')
+    assert_true(http(18081, '/healthz', {'Host': OLD, 'X-DockPipe-Client-IP': '192.0.2.7'})[0] == 404,
+                'Old hostname remained accepted')
     for path, digest in original.items():
         assert_true(hashlib.sha256(path.read_bytes()).hexdigest() == digest, 'Existing service configuration changed')
     assert_true(http(18082)[1] == b'existing-site-untouched', 'Existing service changed during install')
-    assert_true(http(18081, headers={'Host': 'freeflight.staging.dockpipe.com'})[0] == 403, 'Missing visitor identity accepted')
+    assert_true(http(18081, headers={'Host': 'freeflight-staging.dockpipe.com'})[0] == 403, 'Missing visitor identity accepted')
     assert_true(http(18081, headers={'Host': 'wrong.example', 'X-DockPipe-Client-IP': '192.0.2.7'})[0] == 404, 'Wrong host accepted')
     account = pwd.getpwnam('freeflight-release')
     assert_true(account.pw_uid != 0 and os.getgrouplist(account.pw_name, account.pw_gid) == [account.pw_gid], 'Privileged group grant')
@@ -151,7 +167,7 @@ def main():
         previous = (serving / 'current').resolve()
         assert_true(http(18083, '/index.html')[1] == b'qualified index.html', 'Wrong served bytes')
         assert_true(http(18083, '/activation.json')[0] == 404, 'Internal receipt exposed')
-        assert_true(http(18081, '/index.html', {'Host': 'freeflight.staging.dockpipe.com',
+        assert_true(http(18081, '/index.html', {'Host': 'freeflight-staging.dockpipe.com',
                     'X-DockPipe-Client-IP': '192.0.2.7'})[0] == 200, 'Approved private ingress rejected')
         failed = deliver(fixture(version='0.1.0-preview.reject'))
         assert_true(failed.returncode != 0 and (serving / 'current').resolve() == previous, 'Upgrade rollback failed')

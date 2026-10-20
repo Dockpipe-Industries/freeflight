@@ -13,7 +13,7 @@ import tempfile
 import time
 from urllib.request import urlopen
 
-HOSTS = {"staging": "freeflight.staging.dockpipe.com", "production": "freeflight.dockpipe.com"}
+HOSTS = {"staging": "freeflight-staging.dockpipe.com", "production": "freeflight.dockpipe.com"}
 PUBLIC_FILES = {"NOTICES.txt", "freeflight-site.js", "freeflight-site.wasm", "index.html",
                 "loader.js", "qtloader.js", "release.json", "review.html", "robots.txt", "styles.css"}
 MAX_ARCHIVE = 64 * 1024 * 1024

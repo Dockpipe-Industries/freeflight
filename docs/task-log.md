@@ -855,3 +855,13 @@ With explicit workflow-push approval, added the disposable Ubuntu bootstrap CI j
 The first run passed all real host/SSH/rollback/isolation checks (job 118835315216,
 run 39482701813). No fixture was executed on the operator Mac or staging host.
 Remaining native/site qualification is monitored separately from deployment gates.
+
+## 2026-10-20 — First-level staging hostname
+
+Changed staging build/delivery/bootstrap contracts to `freeflight-staging.dockpipe.com`
+under the approved hostname decision. Added the bounded `infra.hostname` workflow
+with pinned operator SSH, exact old-file hashes, inactive-site guard, Nginx validation
+and rollback, plus existing-service preservation. Local `release.policy` passed
+89 tests including hostname migration scenarios; hosted disposable Linux coverage
+now exercises the real migration before delivery/rollback. Live verification and
+latest-head hosted qualification are recorded separately after execution.

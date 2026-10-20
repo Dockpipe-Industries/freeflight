@@ -12,43 +12,47 @@ namespace FreeFlight.Roslyn;
 /// </summary>
 internal static class TrustedProjectLoader
 {
-    public static async Task<SolutionInfo> Load(string root, string? requested,
+    internal sealed record Loaded(SolutionInfo Solution, string SelectedProject, List<LoadWarning> Warnings);
+
+    public static Task<Loaded> Load(string root, string? requested,
         Func<string, string> checkPath, ResourcePolicy resources, CancellationToken token)
     {
+        var target = Select(root, requested, checkPath, resources, token);
+        var selected = Path.GetRelativePath(root, target);
         if (!MSBuildLocator.IsRegistered)
         {
             // Registration is intentionally deferred: safe-source never searches for an SDK.
-            var instance = MSBuildLocator.RegisterDefaults();
-            Console.Error.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+            try
             {
-                kind = "freeflight.msbuild-toolset",
-                runtimeVersion = Environment.Version.ToString(),
-                instanceVersion = instance.Version.ToString(),
-                discoveryType = instance.DiscoveryType.ToString(),
-                msbuildPath = instance.MSBuildPath,
-                msbuildVersion = System.Diagnostics.FileVersionInfo.GetVersionInfo(
-                    Path.Combine(instance.MSBuildPath, "Microsoft.Build.dll")).FileVersion
-            }));
+                var instance = MSBuildLocator.RegisterDefaults();
+                Console.Error.WriteLine(System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    kind = "freeflight.msbuild-toolset",
+                    runtimeVersion = Environment.Version.ToString(),
+                    instanceVersion = instance.Version.ToString(),
+                    discoveryType = instance.DiscoveryType.ToString(),
+                    msbuildPath = instance.MSBuildPath,
+                    msbuildVersion = System.Diagnostics.FileVersionInfo.GetVersionInfo(
+                        Path.Combine(instance.MSBuildPath, "Microsoft.Build.dll")).FileVersion
+                }));
+            }
+            catch (InvalidOperationException exception)
+            {
+                throw new ProjectLoadException("sdk_not_found", "Cannot select an installed .NET SDK for trusted project evaluation", selected,
+                    "Install/select a compatible .NET SDK (the bundled runtime is not an SDK), then restart FreeFlight.",
+                    [new { message = exception.Message }]);
+            }
         }
+        return LoadRegistered(root, target, selected, checkPath, resources, token);
+    }
 
-        string target;
-        if (requested is not null)
-        {
-            target = checkPath(requested);
-        }
-        else
-        {
-            var solutions = Directory.GetFiles(root, "*.sln");
-            var candidates = solutions.Length > 0 ? solutions : Directory.GetFiles(root, "*.csproj");
-            if (candidates.Length != 1)
-                throw new ArgumentException("Trusted mode requires exactly one root-level .sln/.csproj, or an explicit project path");
-            target = checkPath(candidates[0]);
-        }
-
+    // Keep Framework/ILogger types out of the registration method's JIT body.
+    // Locator must select the SDK before those assemblies are resolved.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static async Task<Loaded> LoadRegistered(string root, string target, string selected,
+        Func<string, string> checkPath, ResourcePolicy resources, CancellationToken token)
+    {
         var extension = Path.GetExtension(target);
-        if (extension is not (".sln" or ".csproj"))
-            throw new ArgumentException("Trusted mode accepts only .sln or .csproj");
-
         var properties = new Dictionary<string, string>
         {
             ["DesignTimeBuild"] = "true",
@@ -62,12 +66,21 @@ internal static class TrustedProjectLoader
         };
         using var loader = MSBuildWorkspace.Create(properties);
         loader.LoadMetadataForReferencedProjects = false;
-        if (extension == ".sln") await loader.OpenSolutionAsync(target, cancellationToken: token);
-        else await loader.OpenProjectAsync(target, cancellationToken: token);
-
-        var failures = loader.Diagnostics.Where(d => d.Kind == WorkspaceDiagnosticKind.Failure).ToArray();
-        if (failures.Length > 0)
-            throw new InvalidOperationException("Trusted project loading failed; restore dependencies explicitly first: " + string.Join("; ", failures.Select(d => d.Message)));
+        using var logger = new ProjectErrorLogger();
+        try
+        {
+            if (extension.Equals(".sln", StringComparison.OrdinalIgnoreCase)) await loader.OpenSolutionAsync(target, logger.Logger, cancellationToken: token);
+            else await loader.OpenProjectAsync(target, logger.Logger, cancellationToken: token);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw new ProjectLoadException("project_load_failed", "Trusted project evaluation could not load the selected graph", selected,
+                "Inspect the diagnostic and installed SDK/targeting packs. No automatic restore or build was requested.",
+                [new { message = exception.Message }]);
+        }
+        var evaluatedAssets = logger.Read(root, selected, checkPath, token);
+        var warnings = ProjectLoadDiagnostics.Classify(root, selected, loader.CurrentSolution, loader.Diagnostics,
+            checkPath, resources, token, evaluatedAssets);
 
         var projects = new List<ProjectInfo>();
         var count = 0;
@@ -79,6 +92,11 @@ internal static class TrustedProjectLoader
             if (project.Language != LanguageNames.CSharp)
                 throw new InvalidOperationException("Only C# projects are supported by this worker");
             var projectPath = checkPath(project.FilePath ?? throw new InvalidOperationException("Project has no path"));
+            if (project.MetadataReferences.Count == 0 || project.MetadataReferences.Any(reference =>
+                reference is not PortableExecutableReference portable || portable.FilePath is null || !File.Exists(portable.FilePath)) ||
+                project.ProjectReferences.Any(reference => loader.CurrentSolution.GetProject(reference.ProjectId) is null))
+                throw new ProjectLoadException("project_load_failed", "Project graph has missing required references: " + Path.GetRelativePath(root, projectPath),
+                    selected, "Inspect dependency resolution and the installed SDK/targeting packs; the partial graph is not usable.");
             var sources = new List<DocumentInfo>();
             foreach (var document in project.Documents)
             {
@@ -104,7 +122,57 @@ internal static class TrustedProjectLoader
                 documents: sources, projectReferences: project.ProjectReferences,
                 metadataReferences: project.MetadataReferences));
         }
-        if (projects.Count == 0) throw new InvalidOperationException("No supported projects were loaded");
-        return SolutionInfo.Create(SolutionId.CreateNewId(), VersionStamp.Create(), projects: projects);
+        if (projects.Count == 0) throw new ProjectLoadException("project_load_failed", "No supported projects were loaded", selected,
+            "Select a solution or project containing supported C# projects.");
+        return new(SolutionInfo.Create(SolutionId.CreateNewId(), VersionStamp.Create(), projects: projects), selected, warnings);
     }
+
+    private static string Select(string root, string? requested, Func<string, string> checkPath,
+        ResourcePolicy resources, CancellationToken token)
+    {
+        if (requested is not null)
+        {
+            if (Path.IsPathRooted(requested)) throw new ProjectLoadException("project_selection_required",
+                "Project selection must be relative to the authorized workspace", requested, "Use a root-relative .sln or .csproj path.");
+            var target = checkPath(requested);
+            if (!new[] { ".sln", ".csproj" }.Contains(Path.GetExtension(target), StringComparer.OrdinalIgnoreCase))
+                throw new ProjectLoadException("project_selection_required", "Trusted mode accepts only .sln or .csproj", requested,
+                    "Select a root-relative .sln or .csproj path.");
+            return target;
+        }
+        var pending = new Stack<string>();
+        pending.Push(root);
+        var solutions = new List<string>();
+        var projects = new List<string>();
+        var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".git", ".hg", "node_modules", "bin", "obj", ".freeflight", ".dockpipe" };
+        long entries = 0;
+        while (pending.Count > 0)
+        {
+            token.ThrowIfCancellationRequested();
+            foreach (var entry in Directory.EnumerateFileSystemEntries(pending.Pop()))
+            {
+                token.ThrowIfCancellationRequested();
+                ResourcePolicy.Check("maxDirectoryEntries", root, entry, ++entries, resources.MaxDirectoryEntries);
+                var attributes = File.GetAttributes(entry);
+                if ((attributes & FileAttributes.ReparsePoint) != 0) continue;
+                if ((attributes & FileAttributes.Directory) != 0)
+                {
+                    if (!excluded.Contains(Path.GetFileName(entry))) pending.Push(checkPath(entry));
+                    continue;
+                }
+                if (Path.GetExtension(entry).Equals(".sln", StringComparison.OrdinalIgnoreCase)) solutions.Add(checkPath(entry));
+                if (Path.GetExtension(entry).Equals(".csproj", StringComparison.OrdinalIgnoreCase)) projects.Add(checkPath(entry));
+                if (solutions.Count + projects.Count > 1024)
+                    throw new ProjectLoadException("project_selection_required", "Project discovery exceeds 1024 candidates", null,
+                        "Set an explicit root-relative project path to avoid discovery.");
+            }
+        }
+        var candidates = (solutions.Count > 0 ? solutions : projects).Order(StringComparer.Ordinal).ToArray();
+        if (candidates.Length != 1)
+            throw new ProjectLoadException("project_selection_required", candidates.Length == 0 ? "No .sln or .csproj found" : "Multiple project/solution candidates found", null,
+                "Set csharp.project in startup configuration or project in workspace.open to a root-relative .sln/.csproj path.",
+                candidates.Take(32).Select(path => (object)new { candidate = Path.GetRelativePath(root, path) }).ToArray());
+        return candidates[0];
+    }
+
 }

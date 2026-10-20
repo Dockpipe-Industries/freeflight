@@ -153,3 +153,26 @@ Runtime 986b60b: all five hosted native targets, staging/production site validat
 ### Focused pre-promotion review
 
 See [scaling readiness](scaling-readiness.md) for corrected zero-read claims, exact invalidation tests, resource/failure semantics and benchmark regressions. Follow-up fixes address stale TS import/package resolution and the initial trusted Roslyn text-loader path. Local worker checks pass; this follow-up requires new exact-head CI before promotion/publication.
+
+
+### Local trusted-loading repair after published 57851e3
+
+- [x] Controlled warning-only NU1603/NU1701/NU1903 loading preserves warnings;
+  actual errors, warning/error collisions and promoted warnings remain fatal.
+- [x] Operator-owned per-root trust, read-only siblings, nested selection,
+  workspace reload and truthful loaded status pass local protocol/bundle tests.
+- [x] Exact namespace/partial-type outline positions and C# definition/reference
+  results pass through the packaged C++ MCP endpoint on a controlled .NET 8 fixture.
+- [x] Local macOS ARM64 tar/MCPB and official-client validation pass.
+- [x] Full-bundle before/after benchmark retains exact semantic/freshness/boundary
+  assertions and reports cold/RSS tradeoffs and tail regression without filtering.
+- [x] Experimental optimization isolated and reverted after unresolved p90 regression.
+- [ ] Future performance optimization explained and qualified; no speedup retained.
+- [ ] These local repairs qualified on Linux/Windows and hosted CI; reported private
+  solution compatibility verified by its operator.
+- [ ] Repair passes exact-head hosted CI after authorized commit/push.
+- [ ] Repair promoted/published (still requires separate authorization).
+
+See [unreleased notes](unreleased.md), [task log](task-log.md) and
+[hot-path evidence](hotpath-performance.md). Earlier release records are historical;
+this update does not mark the full initial-release checklist complete.

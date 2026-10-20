@@ -80,6 +80,51 @@ def extract(archive, destination):
                 shutil.copyfileobj(source, output)
 
 
+def verify_image_archive(path, image_id, site_hash):
+    """Reject unrelated tags/images before Docker's privileged import operation."""
+    with tarfile.open(path, "r:gz") as archive:
+        entries = archive.getmembers()
+        names = [entry.name for entry in entries]
+        require(len(names) == len(set(names)) and len(names) <= 256 and
+                sum(entry.size for entry in entries) <= 2 * 1024 ** 3, "Invalid Docker archive size/layout")
+        for entry in entries:
+            allowed_file = entry.name in ("manifest.json", "index.json", "oci-layout", "repositories") or re.fullmatch(
+                r"blobs/sha256/[a-f0-9]{64}", entry.name)
+            require((entry.isdir() and entry.name in ("blobs", "blobs/sha256")) or
+                    (entry.isfile() and allowed_file), "Unsafe Docker archive entry")
+        def read_json(name):
+            entry = archive.getmember(name)
+            require(entry.size <= 4 * 1024 ** 2, "Oversized Docker metadata")
+            return json.load(archive.extractfile(entry))
+        manifest = read_json("manifest.json")
+        tag = "freeflight-site:" + site_hash[:16]
+        config_name = "blobs/sha256/" + image_id.removeprefix("sha256:")
+        require(len(manifest) == 1 and manifest[0].get("RepoTags") == [tag]
+                and manifest[0].get("Config") == config_name, "Docker archive targets unrelated image/tags")
+        index = read_json("index.json")
+        require(index.get("schemaVersion") == 2 and len(index.get("manifests", [])) == 1, "Multiple OCI images")
+        descriptor = index["manifests"][0]
+        require(re.fullmatch(r"sha256:[a-f0-9]{64}", descriptor.get("digest", "")), "Invalid OCI image descriptor")
+        annotations = descriptor.get("annotations", {})
+        require(annotations.get("io.containerd.image.name") == "docker.io/library/" + tag
+                and annotations.get("org.opencontainers.image.ref.name") == site_hash[:16], "Unrelated OCI image alias")
+        oci = read_json("blobs/sha256/" + descriptor["digest"][7:])
+        require(oci.get("config", {}).get("digest") == image_id, "OCI config differs from expected image")
+        require(manifest[0].get("Layers") == ["blobs/sha256/" + layer["digest"][7:] for layer in oci["layers"]],
+                "Docker and OCI layers differ")
+        if "repositories" in names:
+            require(oci["layers"] and read_json("repositories") == {
+                "freeflight-site": {site_hash[:16]: oci["layers"][-1]["digest"][7:]}},
+                "Unrelated legacy Docker image alias")
+        for entry in entries:
+            if entry.isfile() and entry.name.startswith("blobs/sha256/"):
+                value = hashlib.sha256()
+                with archive.extractfile(entry) as stream:
+                    for block in iter(lambda: stream.read(1024 * 1024), b""):
+                        value.update(block)
+                require(value.hexdigest() == entry.name.rsplit("/", 1)[1], "Docker blob checksum mismatch")
+
+
 def fetch(url, limit):
     with urlopen(url, timeout=3) as response:
         require(response.status == 200 and response.geturl() == url, "Unexpected health redirect/status")
@@ -160,6 +205,7 @@ def activate(config, directory, runner=command, verifier=probe):
     existing = runner("docker", "ps", "-aq", "--filter", "label=com.docker.compose.project=" + project).strip()
     require(not existing or previous is not None, "Existing project has no activation receipt")
     runner("docker", "compose", "version")
+    verify_image_archive(directory / "image.tar.gz", metadata["imageId"], metadata["siteReleaseSha256"])
     runner("docker", "load", "--input", str(directory / "image.tar.gz"))
     inspected = json.loads(runner("docker", "image", "inspect", metadata["imageId"]))
     require(len(inspected) == 1 and inspected[0]["Id"] == metadata["imageId"] and

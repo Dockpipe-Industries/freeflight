@@ -149,3 +149,7 @@ of the authored fixture. Legacy MSBuild evaluation remains explicit and trusted.
 ### Scaling candidate qualification update
 
 Runtime 986b60b: all five hosted native targets, staging/production site validation and CodeQL passed. Reproducible paired Mac benchmarks against ba0c4ce passed candidate correctness checks for C#/TS/JS; see docs/benchmarks.md for raw-receipt location, timings, memory tradeoffs and limitations. This development candidate is not a new published release.
+
+### Focused pre-promotion review
+
+See [scaling readiness](scaling-readiness.md) for corrected zero-read claims, exact invalidation tests, resource/failure semantics and benchmark regressions. Follow-up fixes address stale TS import/package resolution and the initial trusted Roslyn text-loader path. Local worker checks pass; this follow-up requires new exact-head CI before promotion/publication.

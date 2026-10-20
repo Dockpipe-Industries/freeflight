@@ -88,10 +88,13 @@ internal static class TrustedProjectLoader
                 totalBytes += length;
                 ResourcePolicy.Check("maxFileBytes", root, path, length, resources.MaxFileBytes);
                 ResourcePolicy.Check("maxWorkspaceBytes", root, path, totalBytes, resources.MaxWorkspaceBytes);
-                // FileTextLoader does not execute code. SourceEngine replaces text with a
-                // bounded byte snapshot before any compilation or semantic request.
+                // Do not retain a filesystem-backed loader: comparing initial document
+                // text during Refresh would otherwise trigger an additional, unbounded
+                // read after the guarded snapshot. Refresh fills this inert placeholder
+                // before any compilation or semantic request.
                 sources.Add(DocumentInfo.Create(document.Id, document.Name, document.Folders,
-                    document.SourceCodeKind, new FileTextLoader(path, defaultEncoding: null), path));
+                    document.SourceCodeKind, TextLoader.From(TextAndVersion.Create(
+                        SourceText.From(string.Empty), VersionStamp.Create(), path)), path));
             }
             // Do not retain AnalyzerReferences, including source generator assemblies.
             // Do not use MSBuildWorkspace.TryApplyChanges: it can write to project files.

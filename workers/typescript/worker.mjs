@@ -232,6 +232,19 @@ export class Worker {
     this.querySizes.clear();
     this.budgetBytes = 0;
   }
+  resolutionStamp(file, metadata) {
+    if (!this.allowed(file)) return "missing";
+    if (!metadata) return "present";
+    const stat = fs.statSync(file, { bigint: true });
+    return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
+  }
+  trackResolution(project, file, metadata = false) {
+    const key = path.resolve(file);
+    if (!project.resolutionProbes.has(key))
+      this.checkResource("maxDirectoryEntries", key, project.resolutionProbes.size + 1);
+    metadata ||= project.resolutionProbes.get(key)?.metadata;
+    project.resolutionProbes.set(key, { metadata, stamp: this.resolutionStamp(key, metadata) });
+  }
   project(file) {
     let directory = path.dirname(file),
       config;
@@ -342,7 +355,13 @@ export class Worker {
       this.recordSize(canonical, size);
     }
     const fingerprint = JSON.stringify([parsed.options, parsed.fileNames]);
-    if (p && p.fingerprint !== fingerprint) {
+    // TypeScript retains failed module lookups and package.json resolution.
+    // Source versions alone do not invalidate those when a dependency appears
+    // or a package's types entry changes. Recheck only paths actually probed.
+    const resolutionChanged = p && [...p.resolutionProbes].some(
+      ([name, probe]) => this.resolutionStamp(name, probe.metadata) !== probe.stamp,
+    );
+    if (p && (p.fingerprint !== fingerprint || resolutionChanged)) {
       p.service.dispose();
       this.projects.delete(key);
       p = undefined;
@@ -353,7 +372,8 @@ export class Worker {
         this.projects.get(oldest).service.dispose();
         this.projects.delete(oldest);
       }
-      p = { fingerprint, files: parsed.fileNames, options: parsed.options };
+      p = { fingerprint, files: parsed.fileNames, options: parsed.options,
+        resolutionProbes: new Map() };
       const host = {
         getCompilationSettings: () => p.options,
         getScriptFileNames: () => p.files,
@@ -366,18 +386,26 @@ export class Worker {
         },
         getCurrentDirectory: () => this.root,
         getDefaultLibFileName: (o) => ts.getDefaultLibFilePath(o),
-        fileExists: (f) => this.allowed(f),
-        readFile: (f) => this.read(f),
+        fileExists: (f) => {
+          this.trackResolution(p, f);
+          return this.allowed(f);
+        },
+        readFile: (f) => {
+          this.trackResolution(p, f, true);
+          return this.read(f);
+        },
         readDirectory: parseHost.readDirectory,
         directoryExists: (f) => {
           try {
+            this.trackResolution(p, f, true);
             return this.allowed(f) && fs.statSync(f).isDirectory();
-          } catch {
+          } catch (error) {
+            if (error.details) throw error;
             return false;
           }
         },
         getDirectories: (dir) =>
-          this.allowed(dir)
+          (this.trackResolution(p, dir, true), this.allowed(dir))
             ? ts.sys
                 .getDirectories(dir)
                 .filter((f) => this.allowed(path.join(dir, f)))

@@ -1,8 +1,9 @@
 # Qualified GitHub Release workflow
 
-The manual `Qualified release` workflow is authored on `js/dev`. It has not been
-dispatched and no tag or release has been created by this implementation. It only
-runs from the canonical repository's `master` branch, after normal promotion.
+The manual `Qualified release` workflow runs only from the canonical repository's
+`master` branch after normal promotion. See [Actions](https://github.com/Dockpipe-Industries/freeflight/actions/workflows/release.yml)
+and [Releases](https://github.com/Dockpipe-Industries/freeflight/releases) for live
+verification and publication outcomes; configuration alone does not establish either.
 
 Select an exact successful **CI push run on js/dev** and choose `verify` first.
 This reads GitHub evidence and artifacts, then calls `dockpipe --workflow release.verify`.
@@ -55,9 +56,11 @@ artifact step retains available evidence and checksum manifests for 30 days, eve
 when publication fails. GitHub's current state must resolve an uncertain request
 outcome before another attempt. These integrity checks are not signed attestations.
 
-Hosted end-to-end release verification remains pending a successful exact candidate
-and completed promotion chain. Local tests cover policy rejection and receipt
-integrity, not live Release writes. Registry preflight accepts a promoted tag only
+The first hosted verification reached artifact acquisition after a successful
+qualification and promotion chain, then stopped on an incorrect API Accept header.
+Artifact API requests must accept GitHub JSON even when the response redirects to
+a ZIP. Collector unit tests enforce that contract and redirect credential isolation.
+Local tests cover policy rejection and receipt integrity, not live Release writes. Registry preflight accepts a promoted tag only
 when the qualified source is its ancestor and both commit trees match exactly;
 artifact hash verification remains mandatory.
 

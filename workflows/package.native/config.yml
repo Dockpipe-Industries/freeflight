@@ -3,6 +3,10 @@ description: Assemble and verify a complete native FreeFlight bundle using expli
 vault: none
 docker_preflight: false
 steps:
+  - id: official-client
+    kind: host
+    cwd: repo
+    cmd: dockpipe --workflow mcp.compatibility
   - id: pe-import-contract
     kind: host
     cwd: repo

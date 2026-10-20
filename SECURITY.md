@@ -10,6 +10,14 @@ worker executables. Default source loading never invokes MSBuild targets, TypeSc
 plugins, repository scripts, Roslyn generators or repository analyzers. Third-party
 dependencies are installed during explicit development/provisioning only.
 
+Runtime workspace selection cannot expand startup authorization. No-argument
+startup grants no filesystem access; client roots are informational candidates,
+not grants. Closing a runtime workspace releases its workers but does not erase
+the immutable startup policy, so an explicit authorized reopen remains possible.
+Removing a client-root suggestion closes only analysis workspaces explicitly
+associated with that suggestion. See docs/workspaces.md for scope and revocation
+semantics. No unrestricted local-access mode is enabled.
+
 The process boundary provides cancellation and fault isolation, not an OS security
 sandbox. Workers retain the server's OS privileges. Their environment is reduced
 to runtime search, OS/temp/locale and .NET root settings, plus Windows APPDATA

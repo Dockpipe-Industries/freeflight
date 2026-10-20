@@ -279,6 +279,11 @@ def main():
         checks.extend(["native Roslyn safe-source semantic suite", "native Roslyn trusted-project suite (external SDK)"])
         run([os.environ.get("PYTHON", "python3"), "-B", REPO / "tests/trusted_bundle.py", binary])
         checks.append("packaged MCP startup trust, warning classification, project selection and exact cross-project navigation")
+        if system == "linux" and arch == "x64":
+            run(["dockpipe", "--workflow", "integration.external.baseline"])
+            checks.append("checksum-pinned Linux preview reproduces external Test SDK compiler-input boundary failure")
+        run([os.environ.get("PYTHON", "python3"), "-B", REPO / "tests/external_inputs.py", binary])
+        checks.append("packaged external Test SDK compiler inputs, read-only boundary and nested-solution regression")
         if run(["git", "-C", REPO, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip() != source_commit:
             raise RuntimeError("Source commit changed during package qualification")
         source_dirty = source_dirty or bool(run(["git", "-C", REPO, "status", "--porcelain", "--untracked-files=normal"], capture_output=True, text=True).stdout.strip())

@@ -65,3 +65,21 @@ checked after evaluation; this is not a hard disk/RSS quota on repository code.
 Normal/error completion deletes temporary logs; forced termination or a crash can
 leave evaluated project metadata. Logs are never uploaded. Error events remain
 fatal even when their text matches a recorded NuGet warning.
+
+Trusted MSBuild graphs may declare source inputs outside the selected workspace
+(for example Microsoft.NET.Test.Sdk's generated Program source in the NuGet cache).
+Only exact source paths returned by that explicitly trusted evaluation enter a
+session-local compiler-input catalogue. This is not a directory grant: direct MCP
+file queries, workspace selection and editable paths retain the workspace boundary.
+External declarations and references participate in semantic analysis; a rename
+that would touch any external input fails without returning a partial edit preview.
+Shared external files retain each project's separate compilation context.
+
+All external inputs retain file/aggregate resource limits and strict UTF-8 reads.
+Symlink/reparse components are rejected at registration and refresh. Unix opens
+are nonblocking/no-follow; nonseekable sources such as FIFOs are rejected before
+reading, and seekable inputs remain byte-bounded. This is not a race-free filesystem
+sandbox: concurrent hostile directory replacement and trusted MSBuild execution
+retain the limitations described above. The catalogue does not independently prove
+that a package is benign: the operator has already authorized the project's design-
+time evaluation and its declared compiler inputs. No analyzers/generators are enabled.

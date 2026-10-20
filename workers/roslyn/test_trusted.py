@@ -189,8 +189,9 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
         try:
             project = root / "App/App.csproj"
             project.write_text(project.read_text().replace("</Project>", f'<ItemGroup><Compile Include="{outside.as_posix()}" /></ItemGroup></Project>'))
-            rejected = call("open", root=str(root), project="App/App.csproj")
-            assert "escapes workspace" in rejected["error"]["message"], rejected
+            opened = call("open", root=str(root), project="App/App.csproj")["result"]
+            assert str(outside) in opened["externalCompilerInputs"], opened
+            assert "error" in call("symbols", file=str(outside)), "external input is not a query grant"
         finally:
             outside.unlink()
         print("Trusted MSBuild project settings, cross-project definition/references, diagnostics, refresh and boundary tests passed")

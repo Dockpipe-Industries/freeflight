@@ -87,3 +87,24 @@ reverted independently of the functional repairs. Original measurements showed
 a cause or a reliable correction. The retained Refresh/CheckPath methods match
 57851e3. See [preserved measurement evidence](hotpath-performance.md); no runtime
 speedup or competitor-win claim applies to the trusted-loading repair.
+
+## External compiler inputs (unreleased)
+
+Trusted C# project loading now retains exact external source inputs declared by
+MSBuild, including Microsoft.NET.Test.Sdk's NuGet-cache Program source. These are
+read-only analysis inputs, not additional trusted roots. Direct external-file
+queries remain rejected. Rename fails with `external_input_read_only` if it would
+modify an external declaration or reference; it never returns a silently incomplete
+preview. External paths are validated for symlinks and bounded with the same source
+budgets. Shared external sources retain separate project compilation contexts.
+
+Loaded analysis reports `externalCompilerInputCount`, up to 32 sorted paths in
+`externalCompilerInputs`, and `externalCompilerInputsReadOnly: true`. A rejected
+external input reports a structured code and operation/path context without source
+contents. Changes to the evaluated input set require workspace reload; source text
+changes are refreshed by the existing incremental mechanism.
+
+The synthetic Test SDK regression does not establish compatibility with a private
+solution. After a qualified Linux bundle is available, its operator must repeat the
+previous failing solution/test-project load and the ordinary-project navigation
+control without modifying the project or broadening workspace authorization.

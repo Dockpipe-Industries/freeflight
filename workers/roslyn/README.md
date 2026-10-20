@@ -246,3 +246,19 @@ and missing evaluated assets; no log is uploaded or intentionally retained.
 `selectedProject`, `loadWarnings`, `degradedFidelity` and limitations are returned
 by open/capabilities. Vulnerability warnings retain their full actionable message.
 This is graph loading tolerance, not a dependency security override or remediation.
+
+### External compiler inputs
+
+In trusted mode, the evaluated graph may declare external source files. Exact
+paths enter a per-session analysis catalogue; directory access and edit authority
+are not expanded. External text is loaded through bounded snapshots, with symlink
+checks and nonblocking Unix open for special-file rejection. All DocumentIds for a
+shared external file receive refreshed text. Direct query files still require the
+workspace boundary. Rename refuses the entire preview when any declaration or
+changed document is external. Capability analysis reports a count, first 32 sorted
+paths, and the read-only flag. Reload replaces the catalogue.
+
+`dockpipe --workflow integration.external` tests a complete bundle selected by
+`FREEFLIGHT_TEST_BINARY`; `integration.external.baseline` reproduces the failure in
+the checksum-pinned Linux preview. Native package qualification invokes the same
+regression asset. Explicit fixture restore is test setup, never server behavior.

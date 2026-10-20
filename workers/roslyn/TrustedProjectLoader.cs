@@ -15,7 +15,7 @@ internal static class TrustedProjectLoader
     internal sealed record Loaded(SolutionInfo Solution, string SelectedProject, List<LoadWarning> Warnings);
 
     public static Task<Loaded> Load(string root, string? requested,
-        Func<string, string> checkPath, ResourcePolicy resources, CancellationToken token)
+        Func<string, string> checkPath, Func<string, string, string> compilerInput, ResourcePolicy resources, CancellationToken token)
     {
         var target = Select(root, requested, checkPath, resources, token);
         var selected = Path.GetRelativePath(root, target);
@@ -43,14 +43,14 @@ internal static class TrustedProjectLoader
                     [new { message = exception.Message }]);
             }
         }
-        return LoadRegistered(root, target, selected, checkPath, resources, token);
+        return LoadRegistered(root, target, selected, checkPath, compilerInput, resources, token);
     }
 
     // Keep Framework/ILogger types out of the registration method's JIT body.
     // Locator must select the SDK before those assemblies are resolved.
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private static async Task<Loaded> LoadRegistered(string root, string target, string selected,
-        Func<string, string> checkPath, ResourcePolicy resources, CancellationToken token)
+        Func<string, string> checkPath, Func<string, string, string> compilerInput, ResourcePolicy resources, CancellationToken token)
     {
         var extension = Path.GetExtension(target);
         var properties = new Dictionary<string, string>
@@ -100,7 +100,7 @@ internal static class TrustedProjectLoader
             var sources = new List<DocumentInfo>();
             foreach (var document in project.Documents)
             {
-                var path = checkPath(document.FilePath ?? throw new InvalidOperationException("Document has no path"));
+                var path = compilerInput(document.FilePath ?? throw new InvalidOperationException("Document has no path"), projectPath);
                 ResourcePolicy.Check("maxFiles", root, path, ++count, resources.MaxFiles);
                 var length = new FileInfo(path).Length;
                 totalBytes += length;

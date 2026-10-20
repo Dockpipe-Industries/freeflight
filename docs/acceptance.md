@@ -1,5 +1,27 @@
 # Release acceptance checklist
 
+## Resource/scaling correction — development candidate (2026-10-20)
+
+The published configure-once preview's 2 MiB C# file cap prevents full loading of
+some legitimate repositories. The development correction adds shared validated
+operator resource budgets, explicit structured failures and incremental source
+snapshot reuse. This section does not claim the fix is published.
+
+- [x] C++ policy validation/forwarding and structured MCP error/recovery tests.
+- [x] C# 71,725,175-byte source fixture, largest file 25,587,657 bytes, including
+  55,000 generated declarations; exact definition/reference/diagnostic checks.
+- [x] C# warm request reads only the 56-byte target, reusing three large snapshots.
+- [x] C# trusted 3 MiB source, configuration boundaries, cancellation/recovery,
+  preserved-timestamp edits, rename hashes and watcher-bookkeeping overflow.
+- [x] TS source above 8 MiB and configured aggregate above 64 MiB with semantic
+  assertions; bounded source snapshots, explicit size and I/O errors.
+- [ ] Fresh five-platform hosted qualification, including legacy Windows projects.
+- [ ] Draft PR reviewed; no merge or replacement preview authorized for this fix.
+
+These controlled fixtures do not establish full Biztraak solution fidelity,
+unbounded memory scaling or complete TypeScript project-reference graph support.
+See [workspace resources](workspaces.md#source-resources-and-incremental-refresh).
+
 Evidence snapshot: 2026-10-19. Candidate 1ecf18d passed all four native targets,
 both website environments and CodeQL. Its Ubuntu 24.04 x64 preview was published
 and anonymously downloaded with matching checksums. That core requires glibc 2.38
@@ -123,3 +145,11 @@ gateway, website, CI, tests/benchmarks, and exact unmet criteria/blockers.
 Safe-source analysis does not establish legacy project compatibility. No user's
 project target is changed; test target substitutions occur only in disposable copies
 of the authored fixture. Legacy MSBuild evaluation remains explicit and trusted.
+
+### Scaling candidate qualification update
+
+Runtime 986b60b: all five hosted native targets, staging/production site validation and CodeQL passed. Reproducible paired Mac benchmarks against ba0c4ce passed candidate correctness checks for C#/TS/JS; see docs/benchmarks.md for raw-receipt location, timings, memory tradeoffs and limitations. This development candidate is not a new published release.
+
+### Focused pre-promotion review
+
+See [scaling readiness](scaling-readiness.md) for corrected zero-read claims, exact invalidation tests, resource/failure semantics and benchmark regressions. Follow-up fixes address stale TS import/package resolution and the initial trusted Roslyn text-loader path. Local worker checks pass; this follow-up requires new exact-head CI before promotion/publication.

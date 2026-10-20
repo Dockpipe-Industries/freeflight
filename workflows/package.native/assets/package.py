@@ -68,7 +68,10 @@ def verify_semantics(binary):
         for language, file, operation in [("typescript", "sample.ts", "diagnostics"), ("javascript", "sample.js", "symbols"), ("csharp", "Sample.cs", "diagnostics"), ("csharp", "Sample.cs", "symbols")]:
             requests.append({"jsonrpc": "2.0", "id": len(requests), "method": "tools/call", "params": {"name": "semantic.query", "arguments": {"root": str(root), "language": language, "operation": operation, "arguments": {"file": str(root / file)}}}})
         # EOF would cancel work in an asynchronous server: send one request at a time.
-        process = subprocess.Popen([str(binary), "--workspace", str(root)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="strict")
+        # Operator resource settings must retain automatic bundled-worker discovery.
+        config = root / "operator.json"
+        config.write_text(json.dumps({"roots": [str(root)], "resources": {"maxFileBytes": 16 * 1024 * 1024}}))
+        process = subprocess.Popen([str(binary), "--config", str(config)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="strict")
         replies = queue.Queue()
         def read_replies():
             for line in process.stdout:
@@ -115,7 +118,7 @@ def verify_semantics(binary):
         bundled_node = bundle / "lib/freeflight/node" / ("node.exe" if os.name == "nt" else "bin/node")
         run([bundled_node, REPO / "bin/.local/client/client.mjs"], cwd=REPO,
             env=dict(os.environ, FREEFLIGHT_BINARY=str(binary)))
-        return ["legacy MCP initialization", "TypeScript TS2322", "JavaScript increment symbol", "Roslyn CS0029", "Roslyn Widget symbol", "graceful shutdown", "official MCP SDK bundled semantic qualification"]
+        return ["operator resource configuration with bundled workers", "legacy MCP initialization", "TypeScript TS2322", "JavaScript increment symbol", "Roslyn CS0029", "Roslyn Widget symbol", "graceful shutdown", "official MCP SDK bundled semantic qualification"]
 
 
 SCHEMA_SHA256 = "3a0ac9d845711a1b9b17dfa5a52f8b60628239d6a86a9db417206a9efc78592d"

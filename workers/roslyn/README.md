@@ -59,10 +59,25 @@ are not inferred. Duplicate types or unresolved dependencies can produce extra
 diagnostics. Analyzer diagnostics, code actions and import organization are not advertised.
 The safe-source parser uses C# 12.
 
-Each request rescans the bounded workspace, reuses unchanged Roslyn documents,
-and applies changed text incrementally. This detects added/deleted files but is
-not a filesystem watcher. Limits are 10,000 C# files, 2 MiB per file, 64 MiB of
-source, 100,000 directory entries, 1 MiB requests and 32 queued operations.
+Each request reconciles the bounded file list and metadata. A filesystem watcher
+invalidates changed snapshots; overflow invalidates all snapshots. Unchanged source
+bytes are reused for at most five seconds before content revalidation, and a missing
+watcher falls back to reading each request. The directly queried file is always read;
+rename validates all source bytes before computing previews. Other files have eventual
+consistency while watcher notifications arrive (at most the five-second fallback on
+the next request), including same-size edits with preserved timestamps. Changed text
+is applied incrementally to stable Roslyn document IDs. This detects added/deleted
+files without silently splitting the compilation. Trusted project graph changes still
+require reopening. Default resource budgets are 50,000 C# files, 32 MiB per file, 512 MiB of
+source and 500,000 directory entries, with 1 MiB requests and 32 queued operations.
+The core supplies operator-owned `resources` when opening the worker; safe-source
+and trusted project modes enforce the same file/document/byte policy. Supported
+ceilings are 256 MiB per file, 2 GiB aggregate source, 200,000 documents and
+2,000,000 directory entries. Values must be positive integers and the per-file
+budget cannot exceed the aggregate budget. Repository files and semantic requests
+cannot change the policy. Limit errors identify the root-relative path, resource,
+observed count/bytes, limit and operator remediation; files are never silently omitted.
+The byte budgets constrain input size, not total Roslyn process memory.
 `.git`, `.hg`, `node_modules`, `bin`, `obj`, and `.freeflight` are excluded.
 Symlink/reparse descendants are skipped and explicitly requested links rejected;
 workspace root links are resolved once. This is path validation, not an OS

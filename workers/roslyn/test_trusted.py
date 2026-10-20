@@ -19,7 +19,8 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
     (root / "Lib").mkdir()
     (root / "App").mkdir()
     (root / "Lib/Lib.csproj").write_text(f'<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>{properties}<DefineConstants>PROJECT_SETTING</DefineConstants></PropertyGroup></Project>')
-    (root / "Lib/Widget.cs").write_text("namespace Library;\n#if PROJECT_SETTING\npublic class Widget { public int Value => 42; }\n#endif\n")
+    widget_source = "namespace Library;\n#if PROJECT_SETTING\npublic class Widget { public int Value => 42; }\n#endif\n" + "/*" + "x" * (3 * 1024 * 1024) + "*/"
+    (root / "Lib/Widget.cs").write_bytes(widget_source.encode("utf-8"))
     source = "using Library;\nclass Consumer { public int Read(Widget value) => value.Value; }\n"
     (root / "App/Consumer.cs").write_text(source)
     (root / "App/App.csproj").write_text(f'<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>{properties}</PropertyGroup><ItemGroup><ProjectReference Include="../Lib/Lib.csproj" /></ItemGroup></Project>')
@@ -47,6 +48,12 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
         assert call("capabilities")["result"]["fidelity"] == "trusted-msbuild"
         opened = call("open", root=str(root), project="App/App.csproj")
         assert opened["result"]["projects"] == 2, opened
+        # Initial project documents use inert placeholders; every source must have
+        # its guarded snapshot installed before the following cross-project queries.
+        initial = call("capabilities")["result"]["refreshStats"]
+        assert initial["bytesRead"] == sum(path.stat().st_size for path in
+            (root / "Lib/Widget.cs", root / "App/Consumer.cs")), initial
+        assert initial["reusedSnapshots"] == 0, initial
         diagnostics = call("diagnostics", file="App/Consumer.cs")
         assert diagnostics["result"] == [], diagnostics
         definition = call("definition", file="App/Consumer.cs", line=1, character=57)["result"]
@@ -57,6 +64,11 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
         (root / "App/Consumer.cs").write_text(source.replace("value.Value", '"invalid"'))
         diagnostics = call("diagnostics", file="App/Consumer.cs")["result"]
         assert any(d["code"] == "CS0029" for d in diagnostics), diagnostics
+        rejected = call("open", root=str(root), project="App/App.csproj", resources={"maxFileBytes": 2 * 1024 * 1024})["error"]
+        assert rejected["code"] == "resource_limit_exceeded" and rejected["resource"] == "maxFileBytes", rejected
+        assert rejected["path"].replace("\\", "/") == "Lib/Widget.cs" and rejected["observed"] == len(widget_source.encode()), rejected
+        assert rejected["limit"] == 2 * 1024 * 1024, rejected
+        assert "result" in call("open", root=str(root), project="App/App.csproj"), "trusted worker recovery"
         assert "error" in call("open", root=str(root), project="../outside.csproj")
         assert "error" in call("open", root=str(root), mode="safe-source", project="App/App.csproj")
         outside = root.parent / (root.name + "-outside.cs")

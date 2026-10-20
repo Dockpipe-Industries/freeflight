@@ -844,3 +844,9 @@ plan-first DockPipe entry point and pure additive infrastructure policy. Prepare
 an isolated, unpushed Cloud extension reusing its SSH/provider/exact-plan apply
 helpers, state-owned release identity and additive tunnel configuration. Provider,
 state and host operations were not run. No credentials or permissions changed.
+
+Fixed hosted Windows policy-test import failure by deferring the Unix account API
+until privileged host installation. Added DockPipe infra.terraform.validate and
+completed credential-free, backend-disabled Terraform schema validation. Existing
+Docker daemon is stopped and was not started; disposable Linux bootstrap validation
+remains a separate CI fixture gate. Architecture is unchanged following owner acceptance.

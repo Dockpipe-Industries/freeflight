@@ -4,7 +4,6 @@ import ipaddress
 import json
 import os
 from pathlib import Path
-import pwd
 import re
 import socket
 import subprocess
@@ -85,6 +84,7 @@ WantedBy=multi-user.target
 
 def install(payload, run=subprocess.run):
     require(os.geteuid() == 0, "Operator bootstrap requires root")
+    import pwd
     require(set(payload) == {"publicKey", "networks", "receiver", "entrypoint"}, "Unexpected bootstrap fields")
     require(re.fullmatch(r"ssh-ed25519 [A-Za-z0-9+/]+={0,2}", payload["publicKey"]), "Invalid release public key")
     nginx, ssh, service = configuration(payload["networks"])

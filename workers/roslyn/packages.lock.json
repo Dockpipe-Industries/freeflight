@@ -95,9 +95,9 @@
       },
       "Microsoft.NET.StringTools": {
         "type": "Direct",
-        "requested": "[17.14.28, )",
-        "resolved": "17.14.28",
-        "contentHash": "DMIeWDlxe0Wz0DIhJZ2FMoGQAN2yrGZOi5jjFhRYHWR5ONd0CS6IpAHlRnA7uA/5BF+BADvgsETxW2XrPiFc1A=="
+        "requested": "[18.11.0, )",
+        "resolved": "18.11.0",
+        "contentHash": "46dxu08YSKeHQXbBlz/HYfVnSMJnfF1nM4v3tmfHVqIdBaz5eF8GrxWz6nl8mM3fGHZIOcp/Pr8I2zZCdb6CLA=="
       },
       "System.Security.Cryptography.Pkcs": {
         "type": "Direct",

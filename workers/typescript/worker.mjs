@@ -16,9 +16,58 @@ const inside = (root, file) => {
   );
 };
 const hash = (text) => createHash("sha256").update(text).digest("hex");
+const resourceSpec = {
+  maxFileBytes: [32 * 1024 * 1024, 256 * 1024 * 1024],
+  maxWorkspaceBytes: [512 * 1024 * 1024, 2 * 1024 * 1024 * 1024],
+  maxFiles: [50000, 200000],
+  maxDirectoryEntries: [500000, 2000000],
+};
+function resourcePolicy(value = {}) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("resources must be an object");
+  for (const key of Object.keys(value))
+    if (!Object.hasOwn(resourceSpec, key)) throw new Error(`Unknown resource setting: ${key}`);
+  const result = {};
+  for (const [key, [fallback, maximum]] of Object.entries(resourceSpec)) {
+    const number = Object.hasOwn(value, key) ? value[key] : fallback;
+    if (!Number.isSafeInteger(number) || number < 1 || number > maximum)
+      throw new Error(`${key} must be an integer between 1 and ${maximum}`);
+    result[key] = number;
+  }
+  if (result.maxFileBytes > result.maxWorkspaceBytes)
+    throw new Error("maxFileBytes must not exceed maxWorkspaceBytes");
+  return Object.freeze(result);
+}
+class SourceUnavailableError extends Error {
+  constructor(file, reason) {
+    super(`Source unavailable: ${file} (${reason})`);
+    this.details = { code: "source_unavailable", message: this.message, path: file,
+      remediation: "Restore readable source content and retry; no complete semantic result was produced." };
+  }
+}
+class ResourceLimitError extends Error {
+  constructor(resource, file, observed, limit) {
+    super(`${file}: ${resource} observed ${observed}, limit ${limit}`);
+    this.details = {
+      code: "resource_limit_exceeded", message: this.message, resource,
+      path: file, observed, limit,
+      remediation: `Raise resources.${resource} in operator-owned FreeFlight startup configuration or open a smaller workspace.`,
+    };
+  }
+}
 export class Worker {
   root;
   projects = new Map();
+  resources = resourcePolicy();
+  budget = new Map();
+  querySizes = new Map();
+  budgetBytes = 0;
+  directoryEntries = 0;
+  snapshots = new Map();
+  versions = new Map();
+  snapshotBytes = 0;
+  diskReads = 0;
+  contentHashes = 0;
   capabilities() {
     return {
       languages: ["typescript", "javascript"],
@@ -54,33 +103,147 @@ export class Worker {
     try {
       this.resolve(file, library);
       return true;
-    } catch {
+    } catch (error) {
+      if (["EACCES", "EPERM"].includes(error.code))
+        throw new SourceUnavailableError(path.relative(this.root, file), error.code);
       return false;
     }
   }
-  read(file) {
+  checkResource(resource, file, observed) {
+    if (observed > this.resources[resource])
+      throw new ResourceLimitError(resource, path.relative(this.root, file) || ".", observed, this.resources[resource]);
+  }
+  recordSize(file, size) {
+    const total = this.budgetBytes - (this.budget.get(file) || 0) + size;
+    this.checkResource("maxWorkspaceBytes", file, total);
+    this.checkResource("maxFiles", file, this.budget.size + (this.budget.has(file) ? 0 : 1));
+    this.budgetBytes = total;
+    this.budget.set(file, size);
+    this.querySizes.set(file, size);
+  }
+  read(file, force = false) {
+    let fd;
     try {
       const canonical = this.resolve(file, true);
-      if (fs.statSync(canonical).size > 8 * 1024 * 1024)
-        throw new Error("File exceeds 8 MiB limit");
-      return fs.readFileSync(canonical, "utf8");
-    } catch {
+      fd = fs.openSync(canonical, "r");
+      const stamp = (stat) => [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
+      const before = fs.fstatSync(fd, { bigint: true });
+      const size = Number(before.size);
+      const signature = stamp(before);
+      const cached = this.snapshots.get(canonical);
+      if (!force && canonical !== this.freshTarget && cached && cached.signature === signature && performance.now() - cached.verifiedAt < 5000) {
+        this.recordSize(canonical, size);
+        this.snapshots.delete(canonical);
+        this.snapshots.set(canonical, cached);
+        return cached.text;
+      }
+      if (canonical === this.freshTarget) this.freshTarget = undefined;
+      this.diskReads++;
+      this.checkResource("maxFileBytes", canonical, size);
+      const chunks = [];
+      let bytes = 0;
+      for (;;) {
+        const chunk = Buffer.allocUnsafe(Math.min(65536, this.resources.maxFileBytes - bytes + 1));
+        const count = fs.readSync(fd, chunk, 0, chunk.length, null);
+        if (!count) break;
+        bytes += count;
+        this.checkResource("maxFileBytes", canonical, bytes);
+        this.checkResource("maxWorkspaceBytes", canonical, this.budgetBytes - (this.budget.get(canonical) || 0) + bytes);
+        chunks.push(chunk.subarray(0, count));
+      }
+      if (stamp(fs.fstatSync(fd, { bigint: true })) !== signature)
+        throw new Error("Source changed while reading; retry the operation");
+      this.recordSize(canonical, bytes);
+      const text = Buffer.concat(chunks, bytes).toString("utf8");
+      const version = hash(text);
+      this.contentHashes++;
+      this.lastReadVersion = { file: canonical, version };
+      if (this.versions.size >= this.resources.maxFiles && !this.versions.has(canonical))
+        this.versions.delete(this.versions.keys().next().value);
+      this.versions.set(canonical, { version, signature, bytes, verifiedAt: performance.now() });
+      const capacity = Math.min(64 * 1024 * 1024, this.resources.maxWorkspaceBytes);
+      if (cached) {
+        this.snapshotBytes -= cached.bytes;
+        this.snapshots.delete(canonical);
+      }
+      const cost = Math.max(bytes, text.length * 2);
+      if (cost <= capacity) {
+        while (this.snapshotBytes + cost > capacity) {
+          const oldest = this.snapshots.keys().next().value;
+          this.snapshotBytes -= this.snapshots.get(oldest).bytes;
+          this.snapshots.delete(oldest);
+        }
+        this.snapshots.set(canonical, { text, version, bytes: cost, signature, verifiedAt: performance.now() });
+        this.snapshotBytes += cost;
+      }
+      return text;
+    } catch (error) {
+      if (error instanceof ResourceLimitError || error.message === "Source changed while reading; retry the operation") throw error;
+      if (fd !== undefined || this.budget.has(path.resolve(this.root, file)) || (error.code && !["ENOENT", "ENOTDIR"].includes(error.code)))
+        throw new SourceUnavailableError(path.relative(this.root, file), error.code || error.message);
       return undefined;
+    } finally {
+      if (fd !== undefined) fs.closeSync(fd);
     }
   }
-  open({ root }) {
+  version(file) {
+    let canonical;
+    try {
+      canonical = this.resolve(file, true);
+      const stat = fs.statSync(canonical, { bigint: true });
+      const signature = [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
+      const retained = this.versions.get(canonical);
+      if (canonical !== this.freshTarget && retained && retained.signature === signature && performance.now() - retained.verifiedAt < 5000) {
+        this.recordSize(canonical, retained.bytes);
+        return retained.version;
+      }
+    } catch (error) {
+      if (error.details) throw error;
+      // The bounded reader distinguishes optional missing probes from required source failures.
+    }
+    const text = this.read(file);
+    if (text === undefined) return "missing";
+    const cachedVersion = this.versions.get(canonical)?.version || this.snapshots.get(canonical)?.version;
+    if (cachedVersion) return cachedVersion;
+    if (this.lastReadVersion?.file === canonical) return this.lastReadVersion.version;
+    this.contentHashes++;
+    return hash(text);
+  }
+  open({ root, resources }) {
+    const policy = resourcePolicy(resources);
     if (typeof root !== "string" || !path.isAbsolute(root))
       throw new Error("root must be an absolute authorized directory");
     const canonical = fs.realpathSync(root);
     if (!fs.statSync(canonical).isDirectory())
       throw new Error("root must be a directory");
     this.close();
+    this.resources = policy;
     this.root = canonical;
-    return { root: this.root, ...this.capabilities() };
+    return { root: this.root, resources: this.resources, ...this.capabilities() };
   }
   close() {
     for (const p of this.projects.values()) p.service.dispose();
     this.projects.clear();
+    this.snapshots.clear();
+    this.versions.clear();
+    this.snapshotBytes = 0;
+    this.lastReadVersion = undefined;
+    this.budget.clear();
+    this.querySizes.clear();
+    this.budgetBytes = 0;
+  }
+  resolutionStamp(file, metadata) {
+    if (!this.allowed(file)) return "missing";
+    if (!metadata) return "present";
+    const stat = fs.statSync(file, { bigint: true });
+    return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(":");
+  }
+  trackResolution(project, file, metadata = false) {
+    const key = path.resolve(file);
+    if (!project.resolutionProbes.has(key))
+      this.checkResource("maxDirectoryEntries", key, project.resolutionProbes.size + 1);
+    metadata ||= project.resolutionProbes.get(key)?.metadata;
+    project.resolutionProbes.set(key, { metadata, stamp: this.resolutionStamp(key, metadata) });
   }
   project(file) {
     let directory = path.dirname(file),
@@ -93,6 +256,18 @@ export class Worker {
       directory = path.dirname(directory);
     }
     const key = config || this.root;
+    if (!this.projects.has(key) && this.projects.size >= 8) {
+      const oldest = this.projects.keys().next().value;
+      this.projects.get(oldest).service.dispose();
+      this.projects.delete(oldest);
+    }
+    this.budget = new Map();
+    for (const [cachedKey, cached] of this.projects)
+      if (cachedKey !== key)
+        for (const [name, bytes] of cached.sizes || []) this.budget.set(name, bytes);
+    this.budgetBytes = [...this.budget.values()].reduce((sum, bytes) => sum + bytes, 0);
+    this.querySizes = new Map();
+    this.directoryEntries = 0;
     const configText = config ? this.read(config) : "";
     let p = this.projects.get(key);
     // Reparse config on each request, including inherited configs. No plugin loader is used.
@@ -102,9 +277,22 @@ export class Worker {
       fileExists: (f) => this.allowed(f),
       readDirectory: (dir, extensions, exclude, include, depth) =>
         this.allowed(dir, false)
-          ? ts.sys
-              .readDirectory(dir, extensions, exclude, include, depth)
-              .filter((f) => this.allowed(f, false))
+          ? ts.matchFiles(dir, extensions, exclude, include,
+              ts.sys.useCaseSensitiveFileNames, this.root, depth,
+              (directory) => {
+                const files = [], directories = [];
+                if (!this.allowed(directory, false)) return { files, directories };
+                const handle = fs.opendirSync(directory);
+                try {
+                  for (let entry; (entry = handle.readSync()) !== null;) {
+                    this.checkResource("maxDirectoryEntries", directory, ++this.directoryEntries);
+                    if (entry.isSymbolicLink()) continue;
+                    if (entry.isDirectory()) directories.push(entry.name);
+                    else if (entry.isFile()) files.push(entry.name);
+                  }
+                } finally { handle.closeSync(); }
+                return { files, directories };
+              }, (file) => this.resolve(file, false))
           : [],
     };
     let parsed;
@@ -141,14 +329,39 @@ export class Worker {
         fileNames: [file],
       };
     }
+    if (parsed.projectReferences?.length) {
+      const message = "TypeScript project-reference graphs are not supported by this worker";
+      const error = new Error(message);
+      error.details = { code: "unsupported_project_references", message,
+        path: path.relative(this.root, config),
+        remediation: "Open a project without references for scoped analysis. Solution-wide reference graph analysis is not implemented; no complete result was produced." };
+      throw error;
+    }
     delete parsed.options.plugins;
     parsed.options.noEmit = true;
-    parsed.fileNames = parsed.fileNames.filter((f) => this.allowed(f, false));
+    parsed.fileNames = parsed.fileNames.filter((file) => {
+      if (!inside(this.root, path.resolve(file)))
+        throw new SourceUnavailableError(path.relative(this.root, file), "Configured source is outside the authorized workspace");
+      try { this.resolve(file, false); return true; }
+      catch (error) { throw new SourceUnavailableError(path.relative(this.root, file), error.code || error.message); }
+    });
     if (!parsed.fileNames.includes(file)) parsed.fileNames.push(file);
-    if (parsed.fileNames.length > 20000)
-      throw new Error("Project exceeds 20,000 source file limit");
+    this.checkResource("maxFiles", file, parsed.fileNames.length);
+    // Account every selected project source, including files the service has not read yet.
+    for (const source of parsed.fileNames) {
+      const canonical = this.resolve(source, false);
+      const size = fs.statSync(canonical).size;
+      this.checkResource("maxFileBytes", canonical, size);
+      this.recordSize(canonical, size);
+    }
     const fingerprint = JSON.stringify([parsed.options, parsed.fileNames]);
-    if (p && p.fingerprint !== fingerprint) {
+    // TypeScript retains failed module lookups and package.json resolution.
+    // Source versions alone do not invalidate those when a dependency appears
+    // or a package's types entry changes. Recheck only paths actually probed.
+    const resolutionChanged = p && [...p.resolutionProbes].some(
+      ([name, probe]) => this.resolutionStamp(name, probe.metadata) !== probe.stamp,
+    );
+    if (p && (p.fingerprint !== fingerprint || resolutionChanged)) {
       p.service.dispose();
       this.projects.delete(key);
       p = undefined;
@@ -159,11 +372,12 @@ export class Worker {
         this.projects.get(oldest).service.dispose();
         this.projects.delete(oldest);
       }
-      p = { fingerprint, files: parsed.fileNames, options: parsed.options };
+      p = { fingerprint, files: parsed.fileNames, options: parsed.options,
+        resolutionProbes: new Map() };
       const host = {
         getCompilationSettings: () => p.options,
         getScriptFileNames: () => p.files,
-        getScriptVersion: (f) => hash(this.read(f) ?? ""),
+        getScriptVersion: (f) => this.version(f),
         getScriptSnapshot: (f) => {
           const text = this.read(f);
           return text === undefined
@@ -172,18 +386,26 @@ export class Worker {
         },
         getCurrentDirectory: () => this.root,
         getDefaultLibFileName: (o) => ts.getDefaultLibFilePath(o),
-        fileExists: (f) => this.allowed(f),
-        readFile: (f) => this.read(f),
+        fileExists: (f) => {
+          this.trackResolution(p, f);
+          return this.allowed(f);
+        },
+        readFile: (f) => {
+          this.trackResolution(p, f, true);
+          return this.read(f);
+        },
         readDirectory: parseHost.readDirectory,
         directoryExists: (f) => {
           try {
+            this.trackResolution(p, f, true);
             return this.allowed(f) && fs.statSync(f).isDirectory();
-          } catch {
+          } catch (error) {
+            if (error.details) throw error;
             return false;
           }
         },
         getDirectories: (dir) =>
-          this.allowed(dir)
+          (this.trackResolution(p, dir, true), this.allowed(dir))
             ? ts.sys
                 .getDirectories(dir)
                 .filter((f) => this.allowed(path.join(dir, f)))
@@ -195,6 +417,7 @@ export class Worker {
       p.service = ts.createLanguageService(host);
       this.projects.set(key, p);
     }
+    p.sizes = this.querySizes;
     return p;
   }
   position(source, line, character) {
@@ -247,7 +470,7 @@ export class Worker {
       if (change.isNewFile)
         throw new Error("New-file code actions are not supported");
       const target = this.resolve(change.fileName);
-      const text = this.read(target);
+      const text = this.read(target, true);
       const source = service.getProgram()?.getSourceFile(target);
       if (!source || text !== source.text)
         throw new Error("Document changed during analysis; retry the preview");
@@ -301,17 +524,26 @@ export class Worker {
     };
   }
   handle(method, params = {}) {
+    try { return this.invoke(method, params); }
+    catch (error) {
+      if (error instanceof ResourceLimitError || error instanceof SourceUnavailableError) this.close();
+      throw error;
+    }
+  }
+  invoke(method, params = {}) {
     if (method === "capabilities") return this.capabilities();
     if (method === "open") return this.open(params);
     if (method === "shutdown") {
       this.close();
       return {};
     }
+    if (Object.hasOwn(params, "resources"))
+      throw new Error("Resource policy is startup-owned and cannot change through a query");
     if (!this.capabilities().operations.includes(method))
       throw new Error(`Unsupported method: ${method}`);
-    const file = this.resolve(params.file),
-      p = this.project(file),
-      service = p.service;
+    const file = this.resolve(params.file);
+    this.freshTarget = file;
+    const p = this.project(file), service = p.service;
     const program = service.getProgram();
     const source = program?.getSourceFile(file);
     const analyzed = { getProgram: () => program };
@@ -591,7 +823,7 @@ export function serve(input = process.stdin, output = process.stdout) {
         );
       } catch (error) {
         output.write(
-          `${JSON.stringify({ id: request?.id ?? null, error: { message: error.message } })}\n`,
+          `${JSON.stringify({ id: request?.id ?? null, error: error.details || { message: error.message } })}\n`,
         );
       }
     }

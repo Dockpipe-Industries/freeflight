@@ -1,39 +1,72 @@
 # Workspace selection and access
 
-The configure-once workspace lifecycle and scaling controls are available in the
-scaling preview. The trusted-loading configuration and reload changes documented
-below are local development changes and require a new qualified distribution.
-
-FreeFlight separates permission to access a directory from selecting a project
-for analysis. A project path supplied by an AI is a selection, not permission.
-One server can serve all supported languages and switch between projects inside
-an explicitly authorized parent directory. It does not need a separate MCP
-configuration for each language or each descendant project.
+The `trustedRoots`-only source-folder workflow described here is **unreleased**.
+The published [trusted-loading preview](https://github.com/Dockpipe-Industries/freeflight/releases/tag/v0.1.0-preview.20261020.trusted.1997d38)
+still requires its documented `roots` plus `trustedRoots` configuration. Installing
+that preview does not enable this newer routing behavior.
 
 ## Configure once within an explicit boundary
 
-Configure the installed binary once with `--workspace /absolute/projects`, or use
-an operator-owned `--config` file listing the allowed roots. That parent authorizes
-all descendants, including projects added later, so choose its scope deliberately.
-Changing the access boundary requires changing startup configuration and restarting.
-The server does not look for access configuration in repository files.
+For a complete bundle built from this development branch, create an operator-owned
+configuration file:
 
-Runtime `workspace.open`, `workspace.list` and `workspace.close` manage active
-analysis workspaces within that startup boundary. Closing releases the associated
-workers. It does not remove the operator's underlying permission: an explicit
-subsequent open inside the same boundary is still permitted. There is no implicit
-global active project; semantic requests identify their workspace.
+```json
+{
+  "trustedRoots": ["/absolute/source-a", "/absolute/source-b"]
+}
+```
+
+Launch `bin/freeflight --config /absolute/freeflight.json` through the MCP client.
+Bundled workers are located automatically. No `engines`, duplicate `roots`, or
+per-project `.sln`/`.csproj` setting is needed. Each existing absolute directory
+can contain multiple repositories, including repositories created later.
+
+**Each entry grants both source access and permission for trusted C# design-time
+MSBuild evaluation in its descendants.** Targets and imports can execute repository
+code with the worker's OS privileges. This is not a sandbox. Choose directories
+containing only projects you trust. A compatible installed .NET SDK, required
+targeting packs and already-restored dependencies are still required; the bundled
+runtime is not an SDK, and FreeFlight does not automatically restore projects.
+
+Changing this startup boundary requires a configuration change and MCP restart.
+Repository files and tool arguments cannot grant additional access or trust.
+
+## Lazy document routing and workspace selection
+
+Startup and `workspace.list` do not recursively scan or load all repositories.
+A `semantic.query` can name a configured source directory as `root` and an absolute
+`arguments.file` beneath it. The core inspects that file's ancestors, selecting the
+nearest Git/Mercurial repository boundary. Without repository metadata, it prefers
+an ancestor solution directory, then a project directory (or TS/JS configuration
+or package directory). Loose files use their containing directory. Discovery is
+bounded and checks cancellation; it does not enumerate sibling repositories.
+The selected workspace gets a lazily initialized, reusable language worker.
+
+For example, a file under `/absolute/source-a/app/source/Lib/Widget.cs` can route
+to `app`, where the C# worker discovers `source/Architecture.sln`. Within the
+selected workspace, discovery prefers solutions over projects. Multiple candidates
+return structured `project_selection_required` details rather than guessing.
+
+Workspace-wide queries and capability inspection use an explicitly selected
+repository directory. Call `workspace.open` with that directory, then use it as
+the query's `root`. A source-root request without a file or explicit workspace
+selection returns `workspace_selection_required`, avoiding an accidental load of
+the entire source directory. Project ambiguity is resolved through `workspace.open`
+with a root-relative `project` and `reload: true`; it never requires a client
+configuration edit. See the reload examples below.
 
 | Tool | Arguments | Result |
 | --- | --- | --- |
-| `workspace.list` | `{}` | Allowed roots, active workspaces and client candidates; no project scan |
-| `workspace.open` | `{"root":"/absolute/projects/app"}` | Canonical root and `active: true` |
-| `workspace.close` | `{"root":"/absolute/projects/app"}` | Root and `active: false`; descendant sessions also close |
-| `workspace.clientRoots` | `{}` | Optional client-root discovery; unsupported clients retain normal workspace tools |
+| `workspace.list` | `{}` | Access/trust roots, active workspaces and client candidates; no project scan |
+| `workspace.open` | `{"root":"/absolute/source-a/app"}` | Canonical root and `active: true`; workers remain lazy |
+| `workspace.close` | `{"root":"/absolute/source-a/app"}` | Root and `active: false`; descendant sessions also close |
+| `workspace.clientRoots` | `{}` | Optional client-root discovery; suggestions never grant access |
 
 List results identify `authorization: "startup-only"`, `allowedRoots`,
-`workspaces`, `candidates` and `dormant`. A semantic request for a closed workspace
-fails until an explicit open. Opening one sibling project does not close another.
+`trustedRoots`, `workspaces`, `candidates` and `dormant`. Closing releases workers
+and runtime selections, not startup permission. A direct query against a closed
+workspace requires reopening it; a new file query through an active authorized
+source root can route to it again. Opening one sibling does not close another.
 
 ## No-argument startup
 
@@ -61,19 +94,17 @@ does not depend on a particular client exposing this feature. Current roots use
 the protocol's input-required/retry exchange; older negotiated clients use their
 legacy roots exchange. Neither is an authorization channel.
 
-## Broader local access is a separate decision
+## Legacy safe-source configuration
 
-A possible future trusted-local mode could let runtime project selection use a
-broader operator-approved filesystem scope. Such a mode would need explicit
-consent describing the accessible directories, whether future descendants are
-included, how long the grant lasts, and how to revoke it. It is not enabled by
-this change. Trusting a client to choose directories would also be a separate,
-explicit policy choice; merely advertising roots is insufficient.
+`--workspace /absolute/project` and an explicit `roots` array retain safe-source
+behavior unless separately trusted. Existing configurations with both `roots`
+and a `trustedRoots` subset remain supported: each trust entry must be within
+`roots`. This advanced form is useful when mixing read-only, untrusted source
+areas with trusted projects. It is not required for the normal source-folder setup.
+When `roots` is supplied, the legacy explicit workspace-routing contract remains
+in effect. No-argument startup remains dormant.
 
-Filesystem access and repository code execution remain separate permissions.
-Opening a workspace does not enable MSBuild evaluation, plugins, generators or
-analyzers. See [security](../SECURITY.md) for worker privilege and filesystem-race
-limitations.
+See [security](../SECURITY.md) for process privileges and filesystem-race limits.
 
 ## Source resources and incremental refresh
 
@@ -107,7 +138,7 @@ absolute path to an explicitly selected configuration file, for example:
 
 ```json
 {
-  "roots": ["/absolute/projects"],
+  "trustedRoots": ["/absolute/projects"],
   "resources": {
     "maxFileBytes": 67108864,
     "maxWorkspaceBytes": 1073741824
@@ -142,56 +173,23 @@ them fail with `unsupported_project_references` instead of returning apparently
 complete partial results. Ordinary imports within a configured project remain
 supported. This fix does not introduce a solution builder or run repository builds.
 
-## Explicit trusted C# configuration (development repair)
+## Trusted C# project selection and reload
 
-Use the complete bundled application with an operator-owned configuration file;
-no internal executable paths or separate worker installations are required:
+The normal configuration is the single `trustedRoots` array above. Within the
+selected repository, bounded discovery skips dependency/generated directories
+and symlinks, and discovers nested solutions such as `source/Architecture.sln`.
+One unique solution is selected ahead of individual projects. Multiple solutions
+or projects return structured candidates and require a tool-level selection.
 
-```json
-{
-  "roots": ["/absolute/workspace"],
-  "trustedRoots": ["/absolute/workspace"],
-  "csharp": {
-    "project": "source/Architecture.sln"
-  }
-}
-```
-
-For a Linux installation, set the MCP command to
-`/absolute/install/freeflight-linux-x64/bin/freeflight`,
-with arguments `["--config", "/absolute/freeflight-trusted.json"]`.
-These are operator instructions, not configuration applied by the application. The existing
-published `57851e3` binary does **not** implement this new configuration; a rebuilt,
-qualified bundle is required. This repair has not been published.
-
-Omit `engines` to use bundled workers. Reading an authorized `roots` directory
-remains safe-source by default. Adding a directory to `trustedRoots` is the one-time
-operator choice **“Trust projects in this folder.”** Selected workspaces inside
-that directory use project-aware MSBuild loading by default; sibling read-only
-roots remain safe-source. Each trust entry must be an absolute existing directory
-within the independent `roots` boundary. A parent workspace that merely contains
-a trusted descendant remains safe-source: explicitly select the trusted child.
-Use narrow trust entries; every selected descendant inherits execution trust.
-The advanced legacy `csharp.mode: "trusted-msbuild"` or internal trusted worker
-argv authorizes all startup roots, and cannot be mixed with `trustedRoots`. Prefer
-the per-root setting above. A compatible installed .NET SDK, targeting packs, and already-restored
-project dependencies are still needed for trusted evaluation. The bundled runtime
-is sufficient for safe-source mode, but is not an SDK. No automatic restore is run.
-MSBuild imports/targets may execute repository code; this is not a sandbox.
-
-`csharp.project` is an optional root-relative `.sln` or `.csproj` selection. When
-omitted, bounded recursive discovery skips generated/dependency directories and
-symlinks, preferring solutions over individual projects. One unique candidate is
-selected, including a nested `source/Architecture.sln`. Multiple candidates fail
-with explicit selection guidance instead of silently choosing one. With multiple
-startup roots, the default relative project applies independently to each root;
-select per-workspace projects with `workspace.open` when needed.
+The optional legacy `csharp.project` startup default and `csharp.mode` settings
+remain supported for existing advanced configurations. They are not required for
+source-folder setup. Global legacy trusted mode cannot be mixed with `trustedRoots`.
 
 To change a selection or reload changed project configuration without restarting
 the MCP endpoint:
 
 ```json
-{"root":"/absolute/workspace","project":"source/Architecture.sln","reload":true}
+{"root":"/absolute/source-a/app","project":"source/Architecture.sln","reload":true}
 ```
 
 Pass this to `workspace.open`. `reload: true` stops only that exact workspace's

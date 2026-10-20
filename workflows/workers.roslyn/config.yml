@@ -6,7 +6,7 @@ dependencies:
   host:
     - id: dotnet
       command: dotnet
-      description: .NET SDK 10.0.402 builds the internal Roslyn worker.
+      description: .NET SDK 11.0.100-rc.2.26504.105 builds the internal Roslyn worker.
     - id: python3
       command: python3
       description: Runs the Roslyn semantic and protocol contract tests.

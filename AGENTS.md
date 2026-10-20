@@ -44,8 +44,11 @@ Generated output belongs in bin/.local; DockPipe owns bin/.dockpipe. Never clean
 untracked developer files indiscriminately. Keep source, credentials, telemetry and
 private organization implementation details out of logs and public artifacts.
 
-Opening a workspace must not execute repository code, MSBuild targets, language
-plugins, analyzers or generators. Only explicitly configured absolute worker
+Opening an untrusted workspace must not execute repository code or MSBuild targets.
+Operator startup `trustedRoots` explicitly grants descendant projects access and
+trusted design-time MSBuild evaluation, which may execute repository targets/imports.
+Tool requests cannot grant or expand that trust. Language plugins, analyzers and
+generators remain disabled. Only explicitly configured or bundled absolute worker
 executables may be launched. Workspace authorization comes from server startup.
 Refactoring results are previews until a separately tested application contract exists.
 

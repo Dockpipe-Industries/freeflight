@@ -6,6 +6,8 @@ import io
 import json
 from pathlib import Path
 import unittest
+import tempfile
+import zipfile
 from unittest.mock import Mock, patch
 from urllib.request import Request
 
@@ -16,6 +18,59 @@ spec.loader.exec_module(api)
 
 
 class GitHubApiTests(unittest.TestCase):
+    def test_native_artifact_accepts_flat_and_packages_layout(self):
+        for prefix in ('', 'packages/'):
+            with self.subTest(prefix=prefix), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                archive = root / 'download.zip'
+                names = ['freeflight-linux-x64-abcd.tar.gz', 'freeflight-linux-x64-abcd.tar.gz.sha256',
+                         'freeflight-linux-x64-abcd.mcpb', 'freeflight-linux-x64-abcd.mcpb.sha256']
+                with zipfile.ZipFile(archive, 'w') as bundle:
+                    for name in names:
+                        bundle.writestr(prefix + name, name.encode())
+                api.extract_native_artifact(archive, root)
+                for name in names:
+                    self.assertEqual((root / name).read_bytes(), name.encode())
+
+    def test_native_artifact_rejects_unsafe_layout_before_writes(self):
+        valid = 'freeflight-linux-x64-abcd.tar.gz'
+        for invalid in ('../' + valid, 'packages/../' + valid, '/' + valid,
+                        'packages/packages/' + valid, 'other/' + valid, 'packages/',
+                        'packages\\\\' + valid, 'jammy-compatibility.json',
+                        'packages/' + valid):
+            with self.subTest(invalid=invalid), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                archive = root / 'download.zip'
+                with zipfile.ZipFile(archive, 'w') as bundle:
+                    bundle.writestr(valid, b'first')
+                    bundle.writestr(invalid, b'second')
+                with self.assertRaisesRegex(ValueError, 'Unsafe artifact entry'):
+                    api.extract_native_artifact(archive, root)
+                self.assertFalse((root / valid).exists())
+
+    def test_native_artifact_rejects_special_files_and_existing_outputs(self):
+        name = 'freeflight-linux-x64-abcd.tar.gz'
+        for mode in (0o120777, 0o010600, 0o020600):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                archive = root / 'download.zip'
+                entry = zipfile.ZipInfo('packages/' + name)
+                entry.create_system = 3
+                entry.external_attr = mode << 16
+                with zipfile.ZipFile(archive, 'w') as bundle:
+                    bundle.writestr(entry, b'target')
+                with self.assertRaisesRegex(ValueError, 'Unsafe artifact entry'):
+                    api.extract_native_artifact(archive, root)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / 'download.zip'
+            (root / name).write_bytes(b'preserved')
+            with zipfile.ZipFile(archive, 'w') as bundle:
+                bundle.writestr(name, b'replacement')
+            with self.assertRaises(FileExistsError):
+                api.extract_native_artifact(archive, root)
+            self.assertEqual((root / name).read_bytes(), b'preserved')
+
     def promotion_fixture(self):
         pull = {'number': 3, 'merged_at': '2026-10-19T22:46:42Z',
                 'base': {'ref': 'master', 'repo': {'full_name': api.REPO}},

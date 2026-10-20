@@ -1,0 +1,11 @@
+name: infra.alignment.test
+description: Test isolated Cloud extension routing without infrastructure access.
+vault: none
+docker_preflight: false
+steps:
+  - id: cloud-routing
+    kind: host
+    cwd: repo
+    cmd: |
+      test -n "${FREEFLIGHT_CLOUD_CHECKOUT:?Select the isolated Cloud extension}"
+      node --test "$FREEFLIGHT_CLOUD_CHECKOUT"/workflows/infra.up/assets/tests/freeflight-*.test.ts

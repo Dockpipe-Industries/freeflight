@@ -1,0 +1,13 @@
+name: site.deploy.prepare
+description: Validate site delivery inputs and prepare isolated Compose wiring; never activate hosting.
+vault: none
+docker_preflight: false
+steps:
+  - id: policy
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/site.deploy.prepare/assets/test_prepare.py
+  - id: prepare
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/site.deploy.prepare/assets/prepare.py

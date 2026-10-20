@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Worker } from "../worker.mjs";
+import { Worker, serve } from "../worker.mjs";
 
 function fixture(t) {
   const root = fs.realpathSync(
@@ -409,4 +409,212 @@ test("preview edits reject changed source and overlapping replacements", (t) => 
       ),
     /changed during analysis/,
   );
+});
+
+
+test("resource policy rejects malformed settings and query overrides", (t) => {
+  const { root, worker } = fixture(t);
+  for (const resources of [null, [], { bogus: 1 }, { maxFiles: 0 }, { maxFiles: 1.5 }, { maxFiles: null }, { maxFiles: 200001 }, { maxFileBytes: 100, maxWorkspaceBytes: 99 }])
+    assert.throws(() => worker.open({ root, resources }));
+  assert.throws(() => worker.handle("symbols", { file: "a.ts", resources: {} }), /startup-owned/);
+});
+
+test("bounded source reads accept exact limit, reject growth and recover", (t) => {
+  const { root, worker } = fixture(t);
+  const file = path.join(root, "large.ts");
+  worker.open({ root, resources: { maxFileBytes: 1024, maxWorkspaceBytes: 4096 } });
+  fs.writeFileSync(file, " ".repeat(1024));
+  assert.equal(worker.read(file).length, 1024);
+  fs.appendFileSync(file, " ");
+  assert.throws(() => worker.read(file), (error) => {
+    assert.equal(error.details.code, "resource_limit_exceeded");
+    assert.equal(error.details.path, "large.ts");
+    assert.equal(error.details.observed, 1025);
+    assert.equal(error.details.limit, 1024);
+    assert.match(error.details.remediation, /resources.maxFileBytes/);
+    return true;
+  });
+  fs.writeFileSync(file, "export const recovered = 1;");
+  assert.match(worker.read(file), /recovered/);
+});
+
+test("aggregate and directory budgets report structured failures", (t) => {
+  const { root, worker } = fixture(t);
+  worker.open({ root, resources: { maxFileBytes: 1024, maxWorkspaceBytes: 1024 } });
+  for (const name of ["first.ts", "second.ts"]) fs.writeFileSync(path.join(root, name), " ".repeat(600));
+  worker.read(path.join(root, "first.ts"));
+  assert.throws(() => worker.read(path.join(root, "second.ts")), (error) => error.details.resource === "maxWorkspaceBytes" && error.details.observed === 1200);
+  worker.open({ root, resources: { maxDirectoryEntries: 1 } });
+  assert.throws(() => worker.handle("symbols", { file: "a.ts" }), (error) => error.details.resource === "maxDirectoryEntries");
+  assert.equal(worker.projects.size, 0);
+  worker.open({ root });
+  assert.ok(worker.handle("symbols", { file: "a.ts" }).some((item) => item.name === "add"));
+});
+
+test("large generated source retains exact semantics and warm snapshots", (t) => {
+  const { root, worker } = fixture(t);
+  const file = path.join(root, "generated.ts");
+  const text = "export const generatedValue: number = 42;\nexport const use = generatedValue;\n/*" + "x".repeat(9 * 1024 * 1024) + "*/\n";
+  fs.writeFileSync(file, text);
+  const started = performance.now();
+  const definitions = worker.handle("definition", { file: "generated.ts", line: 1, character: 22 });
+  assert.equal(definitions.length, 1);
+  assert.equal(definitions[0].range.start.line, 0);
+  assert.equal(definitions[0].name, "generatedValue");
+  const before = worker.diskReads;
+  assert.equal(worker.read(file), text);
+  assert.equal(worker.diskReads, before);
+  const previous = fs.statSync(file);
+  fs.writeFileSync(file, text.replace("number = 42", "string = 42"));
+  fs.utimesSync(file, previous.atime, previous.mtime);
+  const diagnostics = worker.handle("diagnostics", { file: "generated.ts" });
+  assert.ok(diagnostics.some((d) => d.code === 2322));
+  t.diagnostic(JSON.stringify({ bytes: Buffer.byteLength(text), elapsedMs: performance.now() - started, diskReads: worker.diskReads, snapshotBytes: worker.snapshotBytes }));
+});
+
+
+test("default policy analyzes a configured source set over 64 MiB", (t) => {
+  const { root, worker } = fixture(t);
+  fs.writeFileSync(path.join(root, "tsconfig.json"), JSON.stringify({ compilerOptions: { noLib: true }, include: ["generated*.ts"] }));
+  let bytes = 0;
+  for (let index = 0; index < 9; index++) {
+    const text = `export const item${index}: number = ${index};\n/*` + "x".repeat(8 * 1024 * 1024) + "*/\n";
+    bytes += Buffer.byteLength(text);
+    fs.writeFileSync(path.join(root, `generated${index}.ts`), text);
+  }
+  const started = performance.now();
+  assert.deepEqual(worker.handle("diagnostics", { file: "generated0.ts" }), []);
+  const symbols = worker.handle("workspaceSymbols", { file: "generated0.ts", query: "item8" });
+  assert.ok(symbols.items.some((item) => item.name === "item8"));
+  assert.ok(worker.budgetBytes > 64 * 1024 * 1024);
+  assert.ok(worker.snapshotBytes <= 64 * 1024 * 1024);
+  const warmReads = worker.diskReads, warmHashes = worker.contentHashes;
+  assert.deepEqual(worker.handle("diagnostics", { file: "generated0.ts" }), []);
+  assert.equal(worker.diskReads - warmReads, 1);
+  assert.equal(worker.contentHashes - warmHashes, 1);
+  t.diagnostic(JSON.stringify({ sourceBytes: bytes, elapsedMs: performance.now() - started, snapshotBytes: worker.snapshotBytes, rssBytes: process.memoryUsage().rss }));
+});
+
+
+test("a source growing during reading cannot bypass the byte budget", (t) => {
+  const { root, worker } = fixture(t);
+  const file = path.join(root, "growth.ts");
+  worker.open({ root, resources: { maxFileBytes: 1024, maxWorkspaceBytes: 4096 } });
+  fs.writeFileSync(file, " ".repeat(1024));
+  const original = fs.readSync;
+  let appended = false;
+  try {
+    fs.readSync = (...args) => {
+      const count = original(...args);
+      if (!appended) { appended = true; fs.appendFileSync(file, "x"); }
+      return count;
+    };
+    assert.throws(() => worker.read(file), (error) => error.details.resource === "maxFileBytes" && error.details.observed === 1025);
+  } finally { fs.readSync = original; }
+});
+
+test("warm requests reread only the direct target and fallback revalidates cached content", (t) => {
+  const { root, worker } = fixture(t);
+  worker.handle("diagnostics", { file: "a.ts" });
+  const before = worker.diskReads;
+  const hashesBefore = worker.contentHashes;
+  worker.handle("diagnostics", { file: "a.ts" });
+  assert.equal(worker.diskReads - before, 1);
+  assert.equal(worker.contentHashes - hashesBefore, 1);
+  const canonical = path.join(root, "b.ts");
+  const cached = worker.snapshots.get(canonical);
+  assert.ok(cached);
+  cached.verifiedAt = -Infinity;
+  const prior = worker.diskReads;
+  worker.read(canonical);
+  assert.equal(worker.diskReads - prior, 1);
+});
+
+
+test("source I/O failures are explicit and do not return partial semantics", (t) => {
+  const { worker } = fixture(t);
+  const original = fs.readSync;
+  try {
+    fs.readSync = () => { const error = new Error("denied"); error.code = "EACCES"; throw error; };
+    assert.throws(() => worker.handle("symbols", { file: "a.ts" }), (error) => error.details.code === "source_unavailable" && /EACCES/.test(error.message));
+  } finally { fs.readSync = original; }
+  assert.equal(worker.projects.size, 0);
+  assert.ok(worker.handle("symbols", { file: "a.ts" }).some((item) => item.name === "add"));
+});
+
+test("internal transport preserves structured resource errors", async (t) => {
+  const { PassThrough } = await import("node:stream");
+  const { root } = fixture(t);
+  fs.writeFileSync(path.join(root, "oversize.ts"), " ".repeat(1025));
+  const input = new PassThrough(), output = new PassThrough();
+  let text = "";
+  output.on("data", (chunk) => { text += chunk.toString(); });
+  serve(input, output);
+  input.write(JSON.stringify({ id: 1, method: "open", params: { root, resources: { maxFileBytes: 1024 } } }) + "\n");
+  input.end(JSON.stringify({ id: 2, method: "symbols", params: { file: "oversize.ts" } }) + "\n");
+  await new Promise((resolve) => setImmediate(resolve));
+  const responses = text.trim().split("\n").map(JSON.parse);
+  assert.equal(responses[1].id, 2);
+  assert.equal(responses[1].error.code, "resource_limit_exceeded");
+  assert.equal(responses[1].error.path, "oversize.ts");
+  assert.equal(responses[1].error.observed, 1025);
+});
+
+
+test("explicit missing project sources fail instead of disappearing", (t) => {
+  const { root, worker } = fixture(t);
+  fs.writeFileSync(path.join(root, "tsconfig.json"), JSON.stringify({ files: ["a.ts", "missing.ts"] }));
+  assert.throws(() => worker.handle("symbols", { file: "a.ts" }), (error) => error.details.code === "source_unavailable" && error.details.path === "missing.ts");
+});
+
+test("large JavaScript source keeps JSDoc diagnostics and incremental changes", (t) => {
+  const { root, worker } = fixture(t);
+  const file = path.join(root, "generated.js");
+  const text = "/** @type {number} */\nexport const value = 42;\n/*" + "x".repeat(9 * 1024 * 1024) + "*/\n";
+  fs.writeFileSync(file, text);
+  const started = performance.now();
+  assert.deepEqual(worker.handle("diagnostics", { file: "generated.js" }), []);
+  const before = fs.statSync(file);
+  fs.writeFileSync(file, text.replace("= 42", '= "x"'));
+  fs.utimesSync(file, before.atime, before.mtime);
+  assert.ok(worker.handle("diagnostics", { file: "generated.js" }).some((d) => d.code === 2322));
+  t.diagnostic(JSON.stringify({ language: "javascript", bytes: Buffer.byteLength(text), elapsedMs: performance.now() - started }));
+});
+
+test("navigation follows imports across configured project directories", (t) => {
+  const { root, worker } = fixture(t);
+  for (const name of ["left", "right"]) {
+    fs.mkdirSync(path.join(root, name));
+    fs.writeFileSync(path.join(root, name, "tsconfig.json"), JSON.stringify({ compilerOptions: { composite: true }, include: ["*.ts"] }));
+  }
+  fs.writeFileSync(path.join(root, "right", "value.ts"), "export const shared = 42;\n");
+  fs.writeFileSync(path.join(root, "left", "use.ts"), 'import { shared } from "../right/value";\nexport const result = shared;\n');
+  const location = worker.handle("definition", { file: "left/use.ts", line: 1, character: 25 });
+  assert.equal(location.length, 1);
+  assert.equal(location[0].file, path.join(root, "right", "value.ts"));
+  assert.equal(location[0].range.start.line, 0);
+  const refs = worker.handle("references", { file: "left/use.ts", line: 1, character: 25 });
+  assert.equal(refs.length, 3);
+  assert.equal(refs.filter((item) => item.file === path.join(root, "right", "value.ts")).length, 1);
+});
+
+
+test("project-reference graphs fail explicitly rather than returning incomplete navigation", (t) => {
+  const { root, worker } = fixture(t);
+  fs.mkdirSync(path.join(root, "dependency"));
+  fs.writeFileSync(path.join(root, "dependency", "tsconfig.json"), JSON.stringify({ compilerOptions: { composite: true }, files: ["value.ts"] }));
+  fs.writeFileSync(path.join(root, "dependency", "value.ts"), "export const dependency = 1;\n");
+  fs.writeFileSync(path.join(root, "tsconfig.json"), JSON.stringify({ files: ["a.ts"], references: [{ path: "./dependency" }] }));
+  assert.throws(() => worker.handle("symbols", { file: "a.ts" }), (error) => error.details.code === "unsupported_project_references" && error.details.path === "tsconfig.json");
+});
+
+
+test("version metadata eviction cannot substitute another source hash", (t) => {
+  const { root, worker } = fixture(t);
+  const first = path.join(root, "a.ts"), second = path.join(root, "b.ts");
+  const expected = worker.version(first);
+  assert.notEqual(worker.version(second), expected);
+  worker.versions.delete(first);
+  assert.ok(worker.snapshots.has(first));
+  assert.equal(worker.version(first), expected);
 });

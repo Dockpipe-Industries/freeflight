@@ -1,5 +1,6 @@
 """Semantic contract test; invoked by DockPipe, requires built worker path and dotnet."""
 import json
+import os
 import hashlib
 import pathlib
 import queue
@@ -8,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 
 worker = pathlib.Path(sys.argv[2]).resolve()
 if sys.argv[1] == "--native":
@@ -164,6 +166,99 @@ try:
         (root / "Calls.cs").unlink()
         assert len(call("workspaceSymbols", query="Derived")["result"]) == 1
 
+
+    # Controlled generated source crosses both historical limits without private code.
+    with tempfile.TemporaryDirectory(prefix="freeflight-roslyn-large-") as folder:
+        root = pathlib.Path(folder).resolve()
+        started = time.monotonic()
+        for index in range(3):
+            declaration = f"public class Large{index} {{ public static int Value => 42; }}\n"
+            generated = "public class GeneratedConstants {\n" + "".join(f"public const int GeneratedValue{i:05d} = {i};\n" for i in range(55000)) + "}\n" if index == 0 else ""
+            (root / f"Large{index}.cs").write_text(declaration + generated + "/*" + "x" * (22 * 1024 * 1024) + "*/", encoding="utf-8")
+        use = "public class Use { public int Read() => Large0.Value; }\n"
+        (root / "Use.cs").write_text(use, encoding="utf-8")
+        sizes = {p.name: p.stat().st_size for p in root.glob("*.cs")}
+        started = time.monotonic()
+        opened = call("open", root=str(root))
+        assert opened["result"]["files"] == 4, opened
+        opened_seconds = time.monotonic() - started
+        queried = time.monotonic()
+        definition = call("definition", file="Use.cs", line=0, character=use.index("Value"))["result"]
+        assert len(definition) == 1 and pathlib.Path(definition[0]["file"]).name == "Large0.cs", definition
+        assert definition[0]["range"]["start"] == {"line": 0, "character": 40}, definition
+        references = call("references", file="Large0.cs", line=0, character=40)["result"]
+        assert len(references) == 1 and pathlib.Path(references[0]["file"]).name == "Use.cs", references
+        assert call("diagnostics", file="Large0.cs")["result"] == []
+        assert {x["name"] for x in call("symbols", file="Large2.cs")["result"]} == {"Large2", "Value"}
+        # Settle filesystem notifications, then establish and measure a warm snapshot.
+        time.sleep(0.2)
+        call("definition", file="Use.cs", line=0, character=use.index("Value"))
+        before = call("capabilities")["result"]["refreshStats"]
+        warm = call("definition", file="Use.cs", line=0, character=use.index("Value"))
+        after = call("capabilities")["result"]["refreshStats"]
+        assert warm["result"] == definition
+        assert after["bytesRead"] - before["bytesRead"] == sizes["Use.cs"], (before, after)
+        assert after["reusedSnapshots"] - before["reusedSnapshots"] == 3, (before, after)
+        print(json.dumps({"fixture": "roslyn-warm-query", "sourceBytesRead": after["bytesRead"] - before["bytesRead"], "unchangedLargeSnapshotsReused": 3}))
+        # The directly queried file is always validated, even with preserved length/mtime.
+        stamp = (root / "Use.cs").stat()
+        (root / "Use.cs").write_text(use.replace("Large0", "Large1"), encoding="utf-8")
+        os.utime(root / "Use.cs", ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+        changed = call("definition", file="Use.cs", line=0, character=use.index("Value"))["result"]
+        assert pathlib.Path(changed[0]["file"]).name == "Large1.cs", changed
+        # Exercise bounded watcher bookkeeping with more distinct paths than its cache.
+        generation = call("capabilities")["result"]["refreshStats"]["invalidationGeneration"]
+        for index in range(4200):
+            (root / f"event-{index}.txt").write_text("event")
+        deadline = time.monotonic() + 10
+        while call("capabilities")["result"]["refreshStats"]["invalidationGeneration"] <= generation and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert call("capabilities")["result"]["refreshStats"]["invalidationGeneration"] > generation, "watcher cache overflow did not invalidate"
+        before = call("capabilities")["result"]["refreshStats"]["bytesRead"]
+        assert "result" in call("definition", file="Use.cs", line=0, character=use.index("Value"))
+        after = call("capabilities")["result"]["refreshStats"]["bytesRead"]
+        assert after - before == sum(sizes.values()), (before, after, sizes)
+        # Periodic content revalidation bounds missed/delayed watcher notifications.
+        time.sleep(5.1)
+        before = call("capabilities")["result"]["refreshStats"]["bytesRead"]
+        assert "result" in call("definition", file="Use.cs", line=0, character=use.index("Value"))
+        after = call("capabilities")["result"]["refreshStats"]["bytesRead"]
+        assert after - before == sum(sizes.values()), (before, after, sizes)
+        print(json.dumps({"fixture": "roslyn-large-source", "bytes": sum(sizes.values()), "largestFileBytes": max(sizes.values()), "openSeconds": round(opened_seconds, 3), "checksIncludingFallbackWaitSeconds": round(time.monotonic()-queried, 3)}))
+    with tempfile.TemporaryDirectory(prefix="freeflight-roslyn-policy-") as folder:
+        root = pathlib.Path(folder).resolve()
+        sample = root / "Boundary.cs"
+        sample.write_bytes(b"class Boundary {}" + b" " * (1024 - len(b"class Boundary {}")))
+        policy = dict(maxFileBytes=1024, maxWorkspaceBytes=2048, maxFiles=2, maxDirectoryEntries=2)
+        assert "result" in call("open", root=str(root), resources=policy)
+        assert "error" in call("symbols", file="Boundary.cs", resources=policy)
+        sample.write_bytes(sample.read_bytes() + b" ")
+        rejected = call("symbols", file="Boundary.cs")["error"]
+        assert rejected["code"] == "resource_limit_exceeded" and rejected["resource"] == "maxFileBytes", rejected
+        assert rejected["path"] == "Boundary.cs" and rejected["observed"] == 1025 and rejected["limit"] == 1024, rejected
+        assert "resources.maxFileBytes" in rejected["remediation"]
+        sample.write_bytes(sample.read_bytes()[:-1])
+        assert call("symbols", file="Boundary.cs")["result"][0]["name"] == "Boundary"
+        (root / "Second.cs").write_bytes(b"class Second { Boundary field; }" + b" " * (1024 - len(b"class Second { Boundary field; }")))
+        assert "result" in call("open", root=str(root), resources=policy)
+        second = root / "Second.cs"
+        stamp = second.stat()
+        second.write_bytes(second.read_bytes()[:-2] + b"//")
+        os.utime(second, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+        preview = call("rename", file="Boundary.cs", line=0, character=6, newName="Renamed")["result"]
+        second_edit = next(edit for edit in preview["edits"] if pathlib.Path(edit["file"]).name == "Second.cs")
+        assert second_edit["expectedSha256"] == hashlib.sha256(second.read_bytes()).hexdigest(), second_edit
+        low_total = dict(policy, maxWorkspaceBytes=2047)
+        rejected = call("open", root=str(root), resources=low_total)["error"]
+        assert rejected["resource"] == "maxWorkspaceBytes" and rejected["observed"] == 2048 and rejected["limit"] == 2047, rejected
+        assert rejected["path"] in ("Boundary.cs", "Second.cs")
+        rejected = call("open", root=str(root), resources=dict(policy, maxFiles=1))["error"]
+        assert rejected["resource"] == "maxFiles" and rejected["observed"] == 2, rejected
+        rejected = call("open", root=str(root), resources=dict(policy, maxDirectoryEntries=1))["error"]
+        assert rejected["resource"] == "maxDirectoryEntries" and rejected["observed"] == 2, rejected
+        for invalid in (None, [], {"unknown": 1}, {"maxFiles": True}, {"maxFiles": 1.5}, {"maxFiles": 0}, {"maxFileBytes": 268435457}, {"maxWorkspaceBytes": 2147483649}, {"maxFileBytes": 2049, "maxWorkspaceBytes": 2048}):
+            assert "error" in call("open", root=str(root), resources=invalid), invalid
+        assert "result" in call("open", root=str(root), resources=policy), "failed open must allow recovery"
 
     print("Roslyn semantic navigation, implementations, types, signatures, hierarchies, limits, preview, refresh, boundary, no-MSBuild, malformed input, and cancellation checks passed")
 finally:

@@ -56,6 +56,58 @@ class ProtocolTests(unittest.TestCase):
         self.assertTrue(tools[0]["annotations"]["readOnlyHint"])
         self.assertFalse(tools[2]["annotations"]["readOnlyHint"])
 
+    def test_resource_configuration_validation(self):
+        for policy in ([], None, {"maxFileBytes": 0}, {"maxFileBytes": True},
+                       {"maxFileBytes": 1.5}, {"maxFileBytes": "32"},
+                       {"maxWorkspaceBytes": 2147483649}, {"maxFiles": -1},
+                       {"maxDirectoryEntries": 2000001}, {"unknown": 1},
+                       {"maxFileBytes": 100, "maxWorkspaceBytes": 99}):
+            config = self.root / "invalid.json"
+            config.write_text(json.dumps({"roots": [], "engines": {}, "resources": policy}))
+            result = subprocess.run([BINARY, "--config", str(config)], input="",
+                                    capture_output=True, text=True, timeout=5)
+            self.assertNotEqual(result.returncode, 0, policy)
+            self.assertEqual(result.stdout, "")
+
+    def test_operator_resource_forwarding_and_structured_failure(self):
+        worker = self.root / "resource_worker.py"
+        worker.write_text('''import json, sys
+policy = None
+for line in sys.stdin:
+    request = json.loads(line)
+    method = request['method']
+    if method == 'capabilities': result = {'operations': ['inspect', 'fail']}
+    elif method == 'open':
+        policy = request['params']['resources']
+        result = {}
+    elif method == 'fail':
+        print(json.dumps({'id': request['id'], 'error': {
+            'code': 'resource_limit_exceeded', 'message': 'Source budget exceeded',
+            'resource': 'maxFileBytes', 'path': 'Generated.cs', 'observed': 1025,
+            'limit': policy['maxFileBytes'], 'remediation': 'Adjust operator configuration'}}), flush=True)
+        continue
+    else: result = policy
+    print(json.dumps({'id': request['id'], 'result': result}), flush=True)
+''')
+        self.config.write_text(json.dumps({"roots": [str(self.root)],
+            "resources": {"maxFileBytes": 1024},
+            "engines": {"fixture": [sys.executable, str(worker)]}}))
+        self.restart(["--config", str(self.config)])
+        def query(operation, arguments=None):
+            return self.tool("semantic.query", {"root": str(self.root), "language": "fixture",
+                "operation": operation, "arguments": arguments or {}})
+        self.assertEqual(query("inspect")["structuredContent"], {
+            "maxFileBytes": 1024, "maxWorkspaceBytes": 536870912,
+            "maxFiles": 50000, "maxDirectoryEntries": 500000})
+        self.assertTrue(query("inspect", {"resources": {"maxFileBytes": 9999}})["isError"])
+        failed = query("fail")
+        self.assertTrue(failed["isError"])
+        error = failed["structuredContent"]["error"]
+        self.assertEqual(error["code"], "resource_limit_exceeded")
+        self.assertEqual((error["path"], error["observed"], error["limit"]),
+                         ("Generated.cs", 1025, 1024))
+        self.assertEqual(query("inspect")["structuredContent"]["maxFileBytes"], 1024)
+
     def restart(self, args, cwd=None):
         self.process.stdin.close()
         self.process.wait(timeout=5)

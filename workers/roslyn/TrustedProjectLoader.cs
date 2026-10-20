@@ -13,7 +13,7 @@ namespace FreeFlight.Roslyn;
 internal static class TrustedProjectLoader
 {
     public static async Task<SolutionInfo> Load(string root, string? requested,
-        Func<string, string> checkPath, CancellationToken token)
+        Func<string, string> checkPath, ResourcePolicy resources, CancellationToken token)
     {
         if (!MSBuildLocator.IsRegistered)
         {
@@ -83,11 +83,11 @@ internal static class TrustedProjectLoader
             foreach (var document in project.Documents)
             {
                 var path = checkPath(document.FilePath ?? throw new InvalidOperationException("Document has no path"));
-                if (++count > 10000) throw new InvalidOperationException("Trusted workspace exceeds 10000 source documents");
+                ResourcePolicy.Check("maxFiles", root, path, ++count, resources.MaxFiles);
                 var length = new FileInfo(path).Length;
                 totalBytes += length;
-                if (length > 2 * 1024 * 1024 || totalBytes > 64L * 1024 * 1024)
-                    throw new InvalidOperationException("Trusted workspace exceeds source size limits");
+                ResourcePolicy.Check("maxFileBytes", root, path, length, resources.MaxFileBytes);
+                ResourcePolicy.Check("maxWorkspaceBytes", root, path, totalBytes, resources.MaxWorkspaceBytes);
                 // FileTextLoader does not execute code. SourceEngine replaces text with a
                 // bounded byte snapshot before any compilation or semantic request.
                 sources.Add(DocumentInfo.Create(document.Id, document.Name, document.Folders,

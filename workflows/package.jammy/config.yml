@@ -1,0 +1,13 @@
+name: package.jammy
+description: Verify native archives against Ubuntu 22.04 ABI limits and clean Ubuntu 22.04 and Fedora 44 runtimes; never publish.
+vault: none
+docker_preflight: false
+steps:
+  - id: policy
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/package.jammy/assets/test_check.py
+  - id: compatibility
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/package.jammy/assets/check.py

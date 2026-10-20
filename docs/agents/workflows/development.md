@@ -21,3 +21,21 @@ master; never push implementation directly to the three promotion branches.
 Keep master default. Preserve prior commits without force pushes. Security-sensitive
 branch protection changes require separately approved settings.
 
+
+The promotion.check workflow permits authentic Dependabot dependency-only PRs to
+dev: GitHub bot actor/author IDs, same-repository head, recognized bot branch and
+bounded allowed-file diff are required. Action and PackageReference replacements
+preserve identity, position and surrounding build policy. Ordinary development
+still uses js/dev -> dev -> staging -> master. No protection or qualification check
+is bypassed. A maintainer-created replacement or maintainer-triggered bot event
+does not impersonate Dependabot; it remains outside this exception.
+
+Lockfile JSON is accepted as dependency metadata, not proof of integrity or registry
+trust. Locked installs, vulnerability checks, semantic tests and full platform CI
+remain required. Incompatible major upgrades stay held.
+
+GitHub's `target-branch` setting routes version-update PRs to dev once the
+configuration reaches the default branch. Security updates still use the default
+branch under [GitHub's documented service behavior](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#target-branch).
+This repository does not disable security updates or automatically bypass the
+protected-branch policy for them.

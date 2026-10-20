@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iostream>
 #include <mutex>
+#include <set>
 #include <thread>
 #ifdef _WIN32
 #include <windows.h>
@@ -51,6 +52,7 @@ struct Job {
     Json params;
     bool modern;
     std::stop_source stop;
+    Json clientRoots = nullptr;
 };
 } // namespace
 
@@ -61,16 +63,16 @@ int runMain(const std::vector<std::string> &argv) {
             std::cout << "FreeFlight 0.1.0\n";
             return 0;
         }
-        if (argc != 3 ||
-            (std::string(argv[1]) != "--config" && std::string(argv[1]) != "--workspace")) {
-            std::cerr << "Usage: freeflight --workspace /absolute/root | --config "
-                         "/absolute/freeflight.json\n";
+        if (argc != 1 && (argc != 3 || (std::string(argv[1]) != "--config" &&
+                                        std::string(argv[1]) != "--workspace"))) {
+            std::cerr << "Usage: freeflight [--workspace /absolute/root | --config "
+                         "/absolute/freeflight.json]\n";
             return 2;
         }
-        if (!freeflight::pathFromUtf8(argv[2]).is_absolute())
+        if (argc > 1 && !freeflight::pathFromUtf8(argv[2]).is_absolute())
             throw std::runtime_error("Configuration or workspace path must be absolute");
         Json config;
-        if (std::string(argv[1]) == "--config") {
+        if (argc > 1 && std::string(argv[1]) == "--config") {
             std::ifstream input(freeflight::pathFromUtf8(argv[2]));
             config = Json::parse(input, boundedJsonDepth);
         } else {
@@ -84,12 +86,12 @@ int runMain(const std::vector<std::string> &argv) {
             const auto roslyn = library / "roslyn" / "FreeFlight.Roslyn";
 #endif
             const auto worker = library / "typescript" / "worker.mjs";
-            if (!std::filesystem::exists(node) || !std::filesystem::exists(worker) ||
-                !std::filesystem::exists(roslyn))
+            if (argc > 1 && (!std::filesystem::exists(node) || !std::filesystem::exists(worker) ||
+                             !std::filesystem::exists(roslyn)))
                 throw std::runtime_error(
                     "Incomplete runtime bundle; use --config for development builds");
             config = {
-                {"roots", {argv[2]}},
+                {"roots", argc == 1 ? Json::array() : Json::array({argv[2]})},
                 {"engines",
                  {{"typescript", {freeflight::pathToUtf8(node), freeflight::pathToUtf8(worker)}},
                   {"javascript", {freeflight::pathToUtf8(node), freeflight::pathToUtf8(worker)}},
@@ -122,19 +124,70 @@ int runMain(const std::vector<std::string> &argv) {
         bool closing = false;
         bool initialized = false;
         bool initializationSent = false;
+        Json deferredRoots = nullptr;
+        bool deferredInvalidation = false;
+        bool legacyRoots = false;
+        bool legacyRootChanges = false;
+        std::string rootsRequest;
+        unsigned long rootsSequence = 0;
+        auto requestRoots = [&] {
+            rootsRequest = "freeflight-roots-" + std::to_string(++rootsSequence);
+            send({{"jsonrpc", "2.0"}, {"id", rootsRequest}, {"method", "roots/list"}});
+        };
+        auto validRoots = [](const Json &value) {
+            if (!value.is_object() || !value.contains("roots") || !value["roots"].is_array() ||
+                value["roots"].size() > 32)
+                return false;
+            std::set<std::string> seen;
+            for (const auto &root : value["roots"]) {
+                if (!root.is_object() || !root.contains("uri") || !root["uri"].is_string())
+                    return false;
+                const auto uri = root["uri"].get<std::string>();
+                if (!uri.starts_with("file://") || uri.size() > 8192 || !seen.insert(uri).second ||
+                    (root.contains("name") &&
+                     (!root["name"].is_string() || root["name"].get<std::string>().size() > 1024)))
+                    return false;
+            }
+            return true;
+        };
         std::jthread executor([&] {
             while (true) {
                 std::shared_ptr<Job> job;
+                bool invalidateRoots = false;
                 {
                     std::unique_lock lock(queueMutex);
-                    ready.wait(lock, [&] { return closing || !queue.empty(); });
-                    if (closing && queue.empty())
+                    ready.wait(lock, [&] {
+                        return closing || !queue.empty() || !deferredRoots.is_null();
+                    });
+                    if (closing && queue.empty() && deferredRoots.is_null())
                         return;
-                    job = queue.front();
-                    queue.pop_front();
+                    if (!deferredRoots.is_null()) {
+                        invalidateRoots = deferredInvalidation;
+                        deferredInvalidation = false;
+                        job = std::make_shared<Job>(Job{nullptr,
+                                                        {{"name", "workspace.clientRoots"}},
+                                                        false,
+                                                        {},
+                                                        std::move(deferredRoots)});
+                        deferredRoots = nullptr;
+                    } else {
+                        job = queue.front();
+                        queue.pop_front();
+                    }
+                    // Dispatch is serialized with cancellation acceptance. A job
+                    // cancelled while queued must never reach lifecycle mutations,
+                    // client-roots updates, or worker construction.
+                    if (job->stop.stop_requested()) {
+                        pending.erase(job->id.dump());
+                        continue;
+                    }
                 }
                 Json response;
                 try {
+                    if (invalidateRoots)
+                        server.clientRoots(Json::array());
+                    if (!job->clientRoots.is_null())
+                        server.clientRoots(job->clientRoots);
                     auto value = server.call(job->params.at("name").get<std::string>(),
                                              job->params.value("arguments", Json::object()),
                                              job->stop.get_token());
@@ -149,7 +202,7 @@ int runMain(const std::vector<std::string> &argv) {
                 }
                 // Cancellation and delivery share a lock, preventing a post-cancel reply.
                 std::lock_guard guard(queueMutex);
-                if (!job->stop.stop_requested())
+                if (!job->id.is_null() && !job->stop.stop_requested())
                     result(job->id, response, job->modern);
                 pending.erase(job->id.dump());
             }
@@ -178,6 +231,23 @@ int runMain(const std::vector<std::string> &argv) {
                 error(nullptr, -32700, "Parse error");
                 continue;
             }
+            // Legacy server-request replies use the opposite JSON-RPC direction.
+            // Only the latest outstanding ID can update candidates; never treat
+            // arbitrary client-supplied result objects as filesystem authority.
+            if (request.is_object() && request.value("jsonrpc", Json()) == "2.0" &&
+                !request.contains("method") && request.contains("id") &&
+                (request.contains("result") || request.contains("error"))) {
+                if (!rootsRequest.empty() && request["id"] == rootsRequest) {
+                    rootsRequest.clear();
+                    std::lock_guard guard(queueMutex);
+                    deferredRoots = request.contains("result") && !request.contains("error") &&
+                                            validRoots(request["result"])
+                                        ? request["result"]["roots"]
+                                        : Json::array();
+                    ready.notify_one();
+                }
+                continue;
+            }
             if (!request.is_object() || request.value("jsonrpc", Json()) != "2.0" ||
                 !request.contains("method") || !request["method"].is_string()) {
                 error(nullptr, -32600, "Invalid request");
@@ -196,8 +266,23 @@ int runMain(const std::vector<std::string> &argv) {
                 continue;
             }
             if (!request.contains("id")) {
-                if (method == "notifications/initialized" && initializationSent)
+                if (method == "notifications/initialized" && initializationSent && !initialized) {
                     initialized = true;
+                    if (legacyRoots)
+                        requestRoots();
+                }
+                if (method == "notifications/roots/list_changed" && initialized &&
+                    legacyRootChanges) {
+                    // Revoke associations before awaiting refresh; an unresponsive
+                    // client must not leave stale candidate sessions active.
+                    {
+                        std::lock_guard guard(queueMutex);
+                        deferredRoots = Json::array();
+                        deferredInvalidation = true;
+                        ready.notify_one();
+                    }
+                    requestRoots();
+                }
                 if (method == "notifications/cancelled" && params.contains("requestId")) {
                     std::lock_guard guard(queueMutex);
                     if (auto found = pending.find(params["requestId"].dump());
@@ -220,6 +305,13 @@ int runMain(const std::vector<std::string> &argv) {
                     continue;
                 }
             }
+            {
+                std::lock_guard guard(queueMutex);
+                if (pending.contains(id.dump())) {
+                    error(id, -32600, "Duplicate in-flight id");
+                    continue;
+                }
+            }
             if (method == "server/discover") {
                 if (!modern) {
                     error(id, -32602, "Protocol metadata required");
@@ -239,6 +331,11 @@ int runMain(const std::vector<std::string> &argv) {
                 }
                 initializationSent = true;
                 initialized = false;
+                legacyRoots = params["capabilities"].contains("roots") &&
+                              params["capabilities"]["roots"].is_object();
+                legacyRootChanges = legacyRoots && params["capabilities"]["roots"].value(
+                                                       "listChanged", Json()) == true;
+                rootsRequest.clear();
                 const auto requested = params["protocolVersion"].get<std::string>();
                 const auto negotiated =
                     requested == "2025-06-18" ? requested : std::string("2025-11-25");
@@ -260,10 +357,40 @@ int runMain(const std::vector<std::string> &argv) {
                     continue;
                 }
                 const auto name = params["name"].get<std::string>();
-                if (name != "workspace.discover" && name != "engine.capabilities" &&
+                if (name != "workspace.discover" && name != "workspace.list" &&
+                    name != "workspace.open" && name != "workspace.close" &&
+                    name != "workspace.clientRoots" && name != "engine.capabilities" &&
                     name != "semantic.query") {
                     error(id, -32602, "Unknown tool");
                     continue;
+                }
+                Json roots = nullptr;
+                if (name == "workspace.clientRoots") {
+                    if (!params.value("arguments", Json::object()).empty()) {
+                        error(id, -32602, "workspace.clientRoots accepts no arguments");
+                        continue;
+                    }
+                    const bool supportsRoots = modern && meta[capabilitiesKey].contains("roots") &&
+                                               meta[capabilitiesKey]["roots"].is_object();
+                    if (modern && params.contains("inputResponses")) {
+                        if (!supportsRoots || !params["inputResponses"].is_object() ||
+                            !params["inputResponses"].contains("roots") ||
+                            !validRoots(params["inputResponses"]["roots"])) {
+                            error(id, -32602, "Invalid roots inputResponses");
+                            continue;
+                        }
+                        roots = params["inputResponses"]["roots"]["roots"];
+                    } else if (supportsRoots) {
+                        send({{"jsonrpc", "2.0"},
+                              {"id", id},
+                              {"result",
+                               {{"resultType", "input_required"},
+                                {"inputRequests", {{"roots", {{"method", "roots/list"}}}}},
+                                {"_meta", {{"io.modelcontextprotocol/serverInfo", identity}}}}}});
+                        continue;
+                    } else if (!modern && legacyRoots && rootsRequest.empty()) {
+                        requestRoots();
+                    }
                 }
                 std::lock_guard guard(queueMutex);
                 if (pending.contains(id.dump())) {
@@ -274,7 +401,7 @@ int runMain(const std::vector<std::string> &argv) {
                     error(id, -32603, "Request capacity exceeded");
                     continue;
                 }
-                auto job = std::make_shared<Job>(Job{id, params, modern, {}});
+                auto job = std::make_shared<Job>(Job{id, params, modern, {}, roots});
                 pending[id.dump()] = job;
                 queue.push_back(job);
                 ready.notify_one();

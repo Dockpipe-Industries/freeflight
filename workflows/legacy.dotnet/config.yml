@@ -1,0 +1,17 @@
+name: legacy.dotnet
+description: Qualify explicitly trusted non-SDK .NET Framework 4.7, 4.8 and 4.8.1 C# projects on Windows.
+vault: none
+docker_preflight: false
+steps:
+  - id: framework-47
+    kind: host
+    cwd: repo
+    cmd: python3 -B tests/legacy-dotnet.py --framework 4.7
+  - id: framework-48
+    kind: host
+    cwd: repo
+    cmd: python3 -B tests/legacy-dotnet.py --framework 4.8
+  - id: framework-481
+    kind: host
+    cwd: repo
+    cmd: python3 -B tests/legacy-dotnet.py --framework 4.8.1

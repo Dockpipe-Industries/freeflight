@@ -249,6 +249,13 @@ def main():
         roslyn = lib / ("roslyn/FreeFlight.Roslyn" + suffix)
         if not (lib / "roslyn/BuildHost-netcore/Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.dll").is_file():
             raise RuntimeError("Trusted-mode MSBuild host missing from publish output")
+        if system == "win":
+            host = lib / "roslyn/BuildHost-net472"
+            for name in ("Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.exe",
+                         "Microsoft.CodeAnalysis.Workspaces.MSBuild.BuildHost.exe.config",
+                         "Microsoft.CodeAnalysis.Workspaces.MSBuild.Contracts.dll", "Microsoft.Build.Locator.dll"):
+                if not (host / name).is_file():
+                    raise RuntimeError("Windows Framework build host missing from publish output: " + name)
         for executable in (bundle / ("bin/freeflight" + suffix), bundled_node, roslyn):
             if not executable.is_file() or (system != "win" and not os.access(executable, os.X_OK)):
                 raise RuntimeError("Expected executable missing: " + str(executable))
@@ -259,7 +266,7 @@ def main():
         copy_file(stage / "node_modules/typescript/LICENSE.txt", notices / "typescript-LICENSE")
         copy_file(REPO / "bin/.local/build/_deps/json-src/LICENSE.MIT", notices / "nlohmann-json-LICENSE")
         lock = json.loads((REPO / "workers/roslyn/packages.lock.json").read_text())
-        for package, info in lock["dependencies"]["net10.0"].items():
+        for package, info in lock["dependencies"]["net11.0"].items():
             package_root = nuget / package.lower() / info["resolved"]
             metadata = package_root / (package.lower() + ".nuspec")
             copy_file(metadata, notices / "nuget" / package / metadata.name)
@@ -279,6 +286,18 @@ def main():
         checks.extend(["native Roslyn safe-source semantic suite", "native Roslyn trusted-project suite (external SDK)"])
         run([os.environ.get("PYTHON", "python3"), "-B", REPO / "tests/trusted_bundle.py", binary])
         checks.append("packaged MCP startup trust, warning classification, project selection and exact cross-project navigation")
+        if system == "win":
+            for framework in ("4.7", "4.8", "4.8.1"):
+                run([os.environ.get("PYTHON", "python3"), "-B", REPO / "tests/legacy-dotnet.py",
+                     "--framework", framework, "--binary", binary])
+            run([os.environ.get("PYTHON", "python3"), "-B", REPO / "tests/legacy-dotnet.py",
+                 "--framework", "4.8", "--sdk-style", "--binary", binary])
+            checks.append("packaged Windows non-SDK Framework 4.7/4.8/4.8.1 and SDK-style net48 semantics")
+        if system == "linux" and arch == "x64":
+            run(["dockpipe", "--workflow", "integration.external.baseline"])
+            checks.append("checksum-pinned Linux preview reproduces external Test SDK compiler-input boundary failure")
+        run([os.environ.get("PYTHON", "python3"), "-B", REPO / "tests/external_inputs.py", binary])
+        checks.append("packaged external Test SDK compiler inputs, read-only boundary and nested-solution regression")
         if run(["git", "-C", REPO, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip() != source_commit:
             raise RuntimeError("Source commit changed during package qualification")
         source_dirty = source_dirty or bool(run(["git", "-C", REPO, "status", "--porcelain", "--untracked-files=normal"], capture_output=True, text=True).stdout.strip())

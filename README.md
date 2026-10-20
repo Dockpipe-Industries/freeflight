@@ -36,15 +36,30 @@ under `bin/.local/`. Native toolchain instructions and configuration are in
 
 ## Run
 
-For a verified complete native bundle:
+The development branch's configure-once source-folder workflow is **unreleased**.
+For a complete bundle built from this branch, create `/absolute/freeflight.json`:
 
-```sh
-/absolute/freeflight/bin/freeflight --workspace /absolute/project
+```json
+{"trustedRoots":["/absolute/source-a","/absolute/source-b"]}
 ```
 
-Development builds use `--config /absolute/freeflight.json` to select explicitly
-trusted worker executables. Only roots authorized at startup can be opened.
-Do not treat a configured worker as sandboxed: it runs with the user's OS identity.
+Then configure the MCP client to launch:
+
+```sh
+/absolute/freeflight/bin/freeflight --config /absolute/freeflight.json
+```
+
+Each folder grants access and trusted C# design-time project loading to descendant
+repositories. MSBuild targets/imports can execute repository code: trust only your
+chosen source folders. A compatible SDK and restored dependencies remain required.
+Bundled workers need no separate paths or MCP configurations. File queries route
+lazily; project ambiguity is resolved through workspace tools.
+
+The published [trusted-loading preview](https://github.com/Dockpipe-Industries/freeflight/releases/tag/v0.1.0-preview.20261020.trusted.1997d38)
+still needs its documented `roots` plus `trustedRoots` configuration; it does not
+have this new routing. Follow the exact release's instructions. The alternative
+`--workspace /absolute/project` remains safe-source. See [workspace setup](docs/workspaces.md)
+for compatibility, tool-level selection and reload behavior.
 
 Published Linux previews are verified; production release and Registry publication
 remain pending. DockPipe Registry integration is separate work; there is no duplicate

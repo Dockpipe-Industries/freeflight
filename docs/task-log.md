@@ -627,3 +627,161 @@ still stop for review. Unique timeline evidence, same-repository branch identity
 qualified-source ancestry and identical-tree gates remain. Regression fixtures
 include the observed public PR #28 record shape and wrong-repository/commit/parent
 cases. Publication remains pending fresh qualification and protected promotion.
+
+
+### Trusted preview publication and source-folder follow-up (2026-10-20)
+
+Source 1997d38 passed hosted release verification 39379428880 after normal protected
+promotion through PRs #29, #30 and #31. The public prerelease
+`v0.1.0-preview.20261020.trusted.1997d38` and all four assets were anonymously
+retrieved and verified. Linux x64 archive SHA256:
+`ab4d7f2312b56ed54870f688384f86b2dde470a42889f3820657c4384aa21048`.
+No production website was activated by that promotion.
+
+The follow-up implements a single startup `trustedRoots` array as both access and
+trusted project-loading permission. Existing `roots` policies remain compatible.
+File routing examines only ancestors to identify a repository or project boundary;
+startup does not scan or evaluate every repository. Workspace-wide requests require
+an explicit workspace selection. Ambiguous solutions/projects expose candidate paths
+and their workspace root, resolved with `workspace.open`, not MCP config changes.
+
+DockPipe core.build/core.test and lint/repo.check pass locally. The packaged MCP
+fixture verifies two source roots, a nested Architecture.sln, identical symbol names
+in different repositories, new projects without restart, changed-file diagnostics,
+TS/JS navigation, explicit ambiguity selection and unauthorized/symlink boundaries.
+The official SDK client and existing worker semantic/cancellation/resource checks
+also pass. Evidence is retained under bin/.local/source-roots-package*.log.
+This is local macOS ARM64 evidence; new hosted platform qualification and a report
+checkpoint precede any promotion/publication. Client configuration and private
+repositories remain untouched; website work and performance experiments are excluded.
+
+### Windows routing fixture encoding (2026-10-20)
+
+Hosted run 39381056310 exposed a Windows-only failure in the new protocol fixture:
+its Python echo worker decoded UTF-8 JSON through the default Windows text encoding,
+corrupting the Unicode workspace name. The fixture now explicitly configures both
+streams as UTF-8, matching existing worker fixtures. The exact path assertion remains
+unchanged. This correction changes no server/worker implementation. Local DockPipe
+core.test passes; fresh hosted Windows qualification is required. Original CodeQL
+run 39381056453 passed. No promotion/publication is authorized by this test correction.
+
+### Read-only external compiler inputs (2026-10-20, unreleased)
+
+The reported Linux preview failure remained applicable after source-folder routing:
+trusted graph construction applied the workspace path check to every compiler source.
+An authored nested-solution fixture reproduces the old bundle's Path escapes workspace
+failure with Test SDK 16.0.1 and 17.8.0; ordinary sibling-reference controls load.
+Independent MSBuild Compile-item evaluation identifies each SDK Program source as
+its sole external input. The old error itself does not report the rejected path;
+the receipt preserves this distinction instead of overstating the evidence.
+
+Trusted graph loading now catalogues exact external compiler sources for bounded
+read-only analysis. Query roots and editable paths remain unchanged. Shared external
+sources retain/update all compilation contexts. Rename that would touch an external
+source refuses the complete preview. Symlinks/reparse components are rejected;
+Unix nonblocking/no-follow opens reject nonseekable inputs without waiting on a FIFO.
+Structured rejection details include operation and path without source contents.
+
+DockPipe workers.roslyn and complete native package qualification pass locally on
+macOS ARM64, including both real Test SDK versions, automatic trustedRoots routing,
+explicit nested selection/reload, legacy startup project, exact generated-source
+navigation, semantic refresh in two contexts, external rename/query refusal,
+symlink/FIFO tests, existing safe-source/trusted tests and official SDK compatibility.
+Artifacts: freeflight-osx-arm64-9115485187654f4f.tar.gz and
+freeflight-osx-arm64-fe6471cd983e100e.mcpb (local only). Logs/receipts remain under
+bin/.local/external-*.log and bin/.local/reports/external-input-*.json.
+
+Local Linux container execution was unavailable because the existing Docker daemon
+was not running; no daemon/infrastructure reconfiguration was attempted. Ubuntu22 CI
+runs the existing package.native workflow, which now invokes DockPipe
+integration.external.baseline on Linux x64 against the checksum-pinned public
+1997d38 preview before testing the corrected fixture. Other native matrices run the
+corrected fixture through the same package.native operation. Hosted evidence is pending at
+this commit. No private project, dependency, MCP config or active session changed;
+no promotion/publication is included in this fix. Operator verification against the
+original Linux solution and failing test project remains an acceptance step.
+
+The initial development push was rejected because the existing GitHub credential
+cannot update workflow YAML. It did not update the remote branch. The unpublished
+commit was amended to leave CI YAML unchanged and invoke the baseline from existing
+DockPipe package.native composition instead. No credential scope was expanded.
+
+## 2026-10-20 — Consolidated dependency compatibility review
+
+The user requested an isolated consolidated draft PR. The review branch starts at
+`a446d375906134ad88ff38fad0720d21bae5e9ba`, preserving the qualified external compiler
+input repair. TypeScript 6.0.3 retains the classic JavaScript Language Service API
+and passes all 34 current worker tests on macOS ARM64 with Node 24.22.0 through
+`dockpipe --workflow workers.typescript`. The pinned manifest and lockfile use the
+official registry tarball and SHA-512 integrity. Combined qualification is pending.
+
+PR #6 (`0b9be272f755910fb793c1a0b9e16c59232abf7f`) remains held: TypeScript 7.0.2
+exports version metadata at its root and separate unstable native APIs, not the
+classic Language Service consumed by this worker. No backend migration is included.
+PR #18 (`f2e4c0e2ebd64a0483da79e276d2529dd42509e3`) remains held: the official
+StringTools 18.11.0 buildTransitive target explicitly warns that net10.0 is unsupported
+and requests net11.0. Job 118403733498 confirms build/basic worker tests pass but
+`integration.real` rejects that unsupported framework warning during trusted loading.
+Retain StringTools 17.14.28 with the aligned Microsoft.Build 17.14.28 references,
+ExcludeAssets=runtime and PrivateAssets=all; no warning suppression or target bump.
+
+PR #19 (`5297978a530e56933cb214cb608ffb9003b2e25d`) has ten successful checks. Its
+five setup-python replacements use the verified v7.0.0 commit
+`5fda3b95a4ea91299a34e894583c3862153e4b97`. Those changes are prepared locally for
+combined testing but publication is pending the existing workflow-write permission
+boundary. No credential or permission change, merge, closure or release is authorized.
+
+Local combined qualification completed on macOS ARM64 with Node 24.22.0, .NET
+SDK 10.0.402 / runtime 10.0.13: core tests, 34 TypeScript tests, Roslyn safe/trusted
+suites, real MCP integration, real-project integration, official MCP SDK, lint,
+strict dependency audits (no findings) and registry schema validation passed.
+The native package exercised both external compiler-input fixtures (Test SDK
+16.0.1 and 17.8.0), including routing, read-only definitions and selection/reload;
+both passed. Local site compilation lacks Qt/WASM tooling; hosted site jobs remain
+required. A separate current-baseline TypeScript 7.0.2 probe passed 6/34 and failed
+28/34 tests (missing classic API, including ts.sys).
+
+Draft PR #32 targets js/dev and is textually mergeable. Hosted five-platform/site
+qualification is pending; promotion policy and CodeQL passed on its initial head.
+No remote js/dev changes were made. The unpublished setup-python patch remains a
+separate local deliverable pending an authorized workflow writer.
+
+## Approved .NET 11 RC2 combined qualification (2026-10-20)
+
+The user explicitly requested .NET 11 RC2 in draft PR #32. The worker now targets
+net11.0 with pinned SDK 11.0.100-rc.2.26504.105 (prerelease explicitly enabled),
+StringTools 18.11.0 and TypeScript 6.0.3. Original net8/net10 project fixtures and
+legacy Framework targets remain unchanged. This supersedes the earlier StringTools
+hold; TypeScript 7 remains held because 28/34 current API tests fail.
+
+On macOS ARM64, the complete DockPipe check and package.native workflows passed
+with .NET 11 RC2, including locked restore, zero-warning build, trusted real-project
+loading, audits, self-contained package semantics and both external Test SDK input
+fixtures (16.0.1 and 17.8.0). Both Roslyn build hosts remain in the native package.
+Windows qualification now additionally verifies packaged non-SDK 4.7/4.8/4.8.1 and
+SDK-style net48; these new Windows cases await hosted execution. Receipts explicitly
+distinguish the in-process Locator from Roslyn's remote build-host selection.
+
+The user confirmed saving workflow permission on the existing token. The consolidated
+workflow changes include the five setup-python v7 replacements and CI's exact RC2
+SDK pin. No authentication routing or credentials are replaced by this work.
+The preceding .NET 10 head 3a8ff3f passed all ten hosted checks, including all five
+platforms, both sites and CodeQL. A fresh hosted run must qualify this RC2 revision.
+
+RC2 hosted qualification exposed an old-preview baseline mismatch: SDK 11 writes
+MSBuild binary logs newer than the checksum-pinned historical preview can read.
+Linux ARM64 and macOS RC2 qualification passed, while x64 baseline control failed
+before reaching the intended external-input rejection. CI now provisions SDK
+10.0.402 alongside RC2, and only the historical baseline fixture pins 10.0.402 in
+its disposable global.json and asserts that selection. Corrected fixtures remain
+on RC2. No rejection assertion is weakened. Both current packaged external-input
+cases pass locally after making setup/server working directories explicit.
+
+## Authorized corrected preview publication (2026-10-20)
+
+After fresh verification of all ten successful checks at ace0907, the user approved
+merging PR #32 and publishing the corrected preview. PR #32 merged to js/dev as
+7c73efd. VERSION/server metadata now explicitly identify 0.1.0-preview.20261020.rc2
+so existing release automation marks the publication prerelease. Qualification,
+js/dev -> dev -> staging -> master promotion and public-byte verification remain
+mandatory. No bot PR closure, website deployment or Registry publication is included.

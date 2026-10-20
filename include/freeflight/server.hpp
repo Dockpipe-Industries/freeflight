@@ -3,11 +3,19 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <stop_token>
 #include <string>
 
 namespace freeflight {
 using Json = nlohmann::json;
+
+class EngineError : public std::runtime_error {
+  public:
+    explicit EngineError(Json detail)
+        : std::runtime_error(detail.dump()), detail(std::move(detail)) {}
+    Json detail;
+};
 
 class Server {
   public:
@@ -25,6 +33,7 @@ class Server {
     std::vector<std::filesystem::path> roots_;
     std::vector<std::filesystem::path> active_;
     Json candidates_ = Json::array();
+    Json resources_;
     std::map<std::filesystem::path, std::string> associations_;
     std::map<std::string, std::vector<std::string>> commands_;
     std::map<std::string, Engine> engines_;

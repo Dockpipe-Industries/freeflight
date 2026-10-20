@@ -7,3 +7,7 @@ steps:
     kind: host
     cwd: repo
     cmd: python3 -B tests/integration.py
+  - id: resource-contract
+    kind: host
+    cwd: repo
+    cmd: python3 -B tests/resources.py

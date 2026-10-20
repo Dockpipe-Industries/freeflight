@@ -1,8 +1,10 @@
-# Unreleased: one trusted source-folder configuration
+# Preview candidate: 0.1.0-preview.20261020.rc2
 
 This change follows the published
 [`v0.1.0-preview.20261020.trusted.1997d38`](https://github.com/Dockpipe-Industries/freeflight/releases/tag/v0.1.0-preview.20261020.trusted.1997d38)
-trusted-loading preview. **The new configuration and routing are not published.**
+trusted-loading preview. The corrected preview candidate adds the qualified external compiler-input repair,
+.NET 11 RC2 runtime, StringTools 18.11.0, TypeScript 6.0.3 and setup-python 7.
+Publication is authorized and will follow exact-source qualification and promotion.
 That preview still requires both `roots` and `trustedRoots`; use its release notes
 when configuring it. No active client configuration or user session is changed by
 this work. Qualification and promotion must precede a replacement distribution.
@@ -108,3 +110,14 @@ The synthetic Test SDK regression does not establish compatibility with a privat
 solution. After a qualified Linux bundle is available, its operator must repeat the
 previous failing solution/test-project load and the ordinary-project navigation
 control without modifying the project or broadening workspace authorization.
+
+## Preview qualification and limitations
+
+The dependency/runtime implementation passed all ten checks at ace0907 in PR #32.
+The explicit preview VERSION and matching server metadata require a fresh js/dev
+qualification; release automation publishes those tested bytes after promotion.
+.NET 11 RC2 is a release candidate. Controlled net8/net10 C# and Windows Framework
+4.7/4.8/4.8.1 plus SDK-style net48 are qualified; this is not universal legacy
+project support. The real Biztraak solution remains unverified. No active MCP
+configuration or user session is changed by publishing this preview. TypeScript 7
+is held because it lacks the classic Language Service API required by this worker.

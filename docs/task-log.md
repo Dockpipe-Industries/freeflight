@@ -776,3 +776,12 @@ before reaching the intended external-input rejection. CI now provisions SDK
 its disposable global.json and asserts that selection. Corrected fixtures remain
 on RC2. No rejection assertion is weakened. Both current packaged external-input
 cases pass locally after making setup/server working directories explicit.
+
+## Authorized corrected preview publication (2026-10-20)
+
+After fresh verification of all ten successful checks at ace0907, the user approved
+merging PR #32 and publishing the corrected preview. PR #32 merged to js/dev as
+7c73efd. VERSION/server metadata now explicitly identify 0.1.0-preview.20261020.rc2
+so existing release automation marks the publication prerelease. Qualification,
+js/dev -> dev -> staging -> master promotion and public-byte verification remain
+mandatory. No bot PR closure, website deployment or Registry publication is included.

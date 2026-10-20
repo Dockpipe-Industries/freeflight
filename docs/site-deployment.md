@@ -86,8 +86,9 @@ Offline tests cover static bytes, source/product boundaries, rollback, additive
 plans, private ingress rendering and coordinator sequencing with fake providers.
 They do not establish live Terraform/provider compatibility, host installation,
 certificate coverage, private HTTPS readiness or GitHub credential availability.
-Terraform validation and Linux bootstrap integration still require suitable tooling
-and a disposable fixture; no live infrastructure command has been run.
+Backend-disabled Terraform schema validation has passed with the locked provider
+versions and no credentials or state access. Disposable Linux bootstrap integration
+remains outstanding; no live infrastructure command has been run.
 
 Provider/state inspection needs a separately approved bounded read scope. The
 existing Cloud backend is shared platform state; reading it may materialize

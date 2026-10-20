@@ -273,3 +273,10 @@ Windows retains payload/scope and infrastructure policy tests. Cloud extension
 commit 3f80112 is local-only and unpushed. Terraform validation and disposable Linux
 bootstrap validation have not run; live setup remains blocked pending those checks,
 provider/state access approval and review. No deployment result is claimed.
+
+Follow-up validation: Terraform 1.13.5 (official checksum-pinned, task-local) passed
+backend-disabled schema validation of the authored Cloud extension with the pinned
+DigitalOcean 2.104.0 and TLS 4.1.0 providers. Only the disposable scratch lockfile
+received macOS package hashes; the authored lock was unchanged. No state, credentials,
+plan or apply was used. Hosted Windows exposed an unconditional Unix `pwd` import;
+it is now deferred until actual Linux host installation. Fresh hosted CI is required.

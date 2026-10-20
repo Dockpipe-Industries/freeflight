@@ -109,7 +109,13 @@ def verify_semantics(binary):
             reader.join(timeout=5)
             process.stdout.close()
             process.stderr.close()
-        return ["legacy MCP initialization", "TypeScript TS2322", "JavaScript increment symbol", "Roslyn CS0029", "Roslyn Widget symbol", "graceful shutdown"]
+        # Reuse the pinned official SDK staged by mcp.compatibility. Execute it
+        # with this bundle's Node, and let the server discover only bundled workers.
+        bundle = binary.parent.parent
+        bundled_node = bundle / "lib/freeflight/node" / ("node.exe" if os.name == "nt" else "bin/node")
+        run([bundled_node, REPO / "bin/.local/client/client.mjs"], cwd=REPO,
+            env=dict(os.environ, FREEFLIGHT_BINARY=str(binary)))
+        return ["legacy MCP initialization", "TypeScript TS2322", "JavaScript increment symbol", "Roslyn CS0029", "Roslyn Widget symbol", "graceful shutdown", "official MCP SDK bundled semantic qualification"]
 
 
 SCHEMA_SHA256 = "3a0ac9d845711a1b9b17dfa5a52f8b60628239d6a86a9db417206a9efc78592d"

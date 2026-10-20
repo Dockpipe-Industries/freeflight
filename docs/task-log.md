@@ -257,3 +257,202 @@ recovery assertions remain. Local DockPipe core.build, core.test (2/2), lint and
 repo.check passed. The alert is not dismissed; hosted reanalysis must clear it.
 Acceptance milestones now distinguish implemented/tested work from publication,
 gateway lifecycle and broad language/project fidelity still pending.
+
+Candidate 2c29369a3a5132d14204d7153f05985b5bea7a64 passed push CI
+39335341348, CodeQL 39335341377, and the separate CodeQL alert check. Alert #4
+was marked fixed without dismissal, then its bot thread was resolved. Promotion
+PRs #2, #1 and #3 merged normally; master 70af9b1780ae516b71a94e967da077f5ba54a18b
+has identical tree 56d04adba67d3d7cd73d0910e3d213b6bf6edd9f.
+
+Verification-only release run 39337332446 stopped before publication because the
+artifact API rejected Accept: application/octet-stream (HTTP 415). A read-only
+reproduction confirmed that header fails while application/vnd.github+json returns
+the expected HTTPS artifact redirect. No tag or release was created. The API
+adapter needs a focused correction and another protected qualification/promotion.
+
+A pinned macOS trial was downloaded from CI 39335341348, with GitHub ZIP digest,
+inner archive digest and every installed file checksum verified. Source provenance
+is clean 2c29369. Bundled Node 24.22.0 ran official MCP SDK 1.32.1 against the
+packaged FreeFlight 0.1.0 and a disposable fixture: exact TS2322, definition range,
+two references, JavaScript increment symbol, Roslyn CS0029/Widget symbol and clean
+shutdown passed. Trial/configuration/receipt files are isolated under
+bin/.local/trial-2c29369; no client configuration or existing workspace was modified.
+
+The API collector now uses GitHub JSON Accept for all API calls; binary mode only
+controls response consumption. Six offline regressions cover request headers,
+binary/JSON handling, POST encoding and credential-stripping/host-restricted
+redirects. DockPipe release.policy passes 41 tests; workflow validation, repo.check
+and diff checks pass. No permission, pin, provenance or promotion rule changed.
+
+
+The Linux-download priority adds official MCP SDK semantic qualification to
+package.native for both assembled and freshly extracted bundles, using their own
+Node and internal workers. Local package.native passed. Hosted Linux qualification
+and public preview upload remain pending; no download is advertised yet.
+
+GitHub API 2026-03-10 also removed merge_commit_sha from all PR payloads. The
+collector now normalizes authoritative merged timeline commit IDs with exact
+repository/timestamp validation and bounded pagination. DockPipe release.policy
+passes 46 tests. A read-only rehearsal verified all 11 source artifacts, 8 native
+archives, 7 supplementary artifacts and promotion chain #2 -> #1 -> #3. No tag,
+release, permissions or promotion gates changed.
+
+
+Linux x64 preview v0.1.0-preview.20261019.1ecf18d was published from clean source
+1ecf18d. Push CI 39338684956 and PR CI 39338692303 passed all native/site targets;
+CodeQL passed. All three published assets were anonymously downloaded and hashes
+verified. Native archive SHA256 is
+b144080a4488925ccb562fccf4712c4672b01302212dd7429865f5d913b92f2f.
+
+Follow-up ELF inspection proves this Ubuntu24.04-built core needs GLIBC_2.38 and
+GLIBCXX_3.4.32, incompatible with stock Ubuntu22.04's glibc2.35. A separately
+qualified22.04 candidate is pending. The local Docker daemon is unavailable and
+was not started; runtime execution must use isolated hostedCI. Branch-protection
+readback confirms strict checks, admin enforcement, resolved conversations, no
+force/deletion on master/staging/dev; zero approving reviews required. js/dev has
+no branch protection.
+
+Automatic approval review denied marking PR12 ready, treating draft-to-ready as
+an external workflow commitment needing explicit approval. No bypass or retry
+performed. Production promotion remains paused pending that approval.
+
+
+Ubuntu22.04 candidate b22a53a passed job118359090816 in pushCI39340039835,
+including exact bundled semantic tests inside a pinned clean Ubuntu22.04 container
+with no network/host runtimes and unprivileged user65532. All18 ELF requirements
+passed (core GLIBC2.34/GLIBCXX3.4.30). Published separate preview
+v0.1.0-preview.20261019.jammy.b22a53a; all4assets anonymously downloaded and
+SHA256 verified. Archive7253390795ee026cec2581f6a7184a4d0912fb0e65fcd3adec982462d1826668.
+Prior incompatible preview notes link this replacement baseline. PopOS/Fedora/
+Bazzite runtime testing remains pending; no host-image or client settings changed.
+Current-client-root ergonomics assessment found MCP2026 roots deprecated and
+informational; no authorization expansion or workspaceAPI change implemented.
+
+
+Fedora44 clean-runtime qualification was added to the existing DockPipe Jammy
+packaging gate, using the same native archive and a separately pinned official
+Fedora image. It reuses bundled officialSDK tests under unprivileged/network-none
+execution, records RPMversions and binds evidence to the exact archive/source.
+Bazzite remains explicitly untested. Local release.policy passes52tests and
+repo.check passes; actual Fedora runtime execution awaits hostedCI.
+
+Follow-up verification: source009a9c1 passed pushCI39341090754 and PRCI39341094941
+on all five native targets and both site configurations; both CodeQL runs passed.
+Downloaded artifact12228657320 matches its GitHub outer digest. Its tar archive
+005cd976a380d0c60a0d92cf3ea91d1f84607efaf7d4b438457f1d4f0d733fa8 passed exact
+source/tree, native/MCPB payload, license, ABI and clean Ubuntu22/Fedora44 semantic
+receipt checks. This candidate was not published; public b22a53a remains unchanged.
+
+Workspace lifecycle follow-up is in progress: dormant no-argument startup, explicit
+open/list/close inside immutable startup permissions, optional informational client
+roots and candidate-associated session revocation. No unrestricted access policy
+is introduced. MCP2026 roots are deprecated, so this is isolated compatibility
+support; ordinary project tools do not depend on it. Cross-platform qualification
+is required before publishing this new UX. Fresh branch-protection readback
+confirmed strict/admin-enforced checks on master/staging/dev, eight required
+contexts, zero required reviews, no force/deletion, and no inherited rulesets;
+js/dev remains unprotected. No protection changes were made.
+
+Local workspace lifecycle qualification passed: DockPipe format/core.build/lint,
+16 protocol tests plus process tests, official MCP SDK clients with/without roots,
+real TS/Roslyn integration and the explicitly trusted own-project C# test. The
+native macOS ARM64 tar/MCPB package also passed extracted semantic and workspace
+lifecycle checks (local dirty-source test artifacts, not publication candidates).
+Legacy roots-change notifications invalidate associations before refresh; stale,
+malformed and unresponsive replies are tested. Canonical path alias handling was
+preserved. Exact-head hosted qualification remains required for these changes.
+
+Independent review caught queued cancelled lifecycle calls still mutating state
+and MRTR roots discovery bypassing duplicate in-flight ID validation. Dispatch now
+skips cancelled jobs before state changes and validates IDs before early results.
+A controlled-worker regression proves cancelled open/close/root updates preserve
+state and release request IDs. Windows CI at78a6f46 also exposed locale decoding
+in the synthetic Python worker; its IPC is now explicitly UTF-8 and the exact
+Unicode assertion is unchanged. Local 17 protocol tests, process tests, lint and
+official MCP SDK compatibility pass; the correction still requires hosted CI.
+
+## 2026-10-19 — Dependabot integration-branch correction
+
+The user requested all FreeFlight Dependabot ecosystems target `dev`. Updated
+GitHub Actions, npm and NuGet configuration on `js/dev`; promotion remains through
+the existing reviewed branch sequence. No dependency versions were changed and
+no dependency PR was merged. Existing PRs #4–#11 are under individual review for
+base-change contamination, compatibility and exact-head CI before disposition.
+The separately qualified workspace UX remains commit `a617399`; this configuration
+change must not be confused with an already published artifact.
+
+## 2026-10-20 — Dependabot review and retargeting evidence
+
+PRs #4, #5, #6, #7, #9, #10 and #11 were verified to contain only one dependency
+commit relative to dev and retargeted to dev without changing their heads.
+#6 is a draft: isolated DockPipe TypeScript qualification passed 2/17 tests and
+failed 15 because TypeScript 7 no longer exports the classic Language Service API.
+#10 is a draft: locked restore passed, but Locator 1.11.2's MSBL001 check rejects
+the copied Microsoft.NET.StringTools runtime assembly. #11 is a draft: locked
+restore fails NU1608 because Roslyn Workspaces.MSBuild 4.14 requires Common 4.14
+while CSharp.Workspaces 5.9 requires Common 5.9. No checks were suppressed.
+
+#8 could not be safely retargeted: its ancestry adds six unrelated development
+commits and an 18-file diff. Draft replacement #13 preserves only upload-artifact
+7.0.2's pinned action changes in the two existing dev workflows; #8 is closed
+unmerged and its original branch remains intact. #13's promotion gate fails as
+expected because the existing policy allows only js/dev into dev; compilation
+is skipped by that gate. The other bot PRs' previous CI runs were cancelled,
+except #8, whose green old-base run does not qualify #13. No dependency PR is
+merge-ready. CodeQL init/analyze versions also require coordinated review for #7.
+
+The target configuration is committed on js/dev and takes effect for future
+Dependabot updates only after promotion to the default branch. No protected branch
+was directly updated, no promotion exception or protection setting was changed,
+and no dependency upgrade was merged. Reconciling dependency PRs into dev with
+the js/dev-only promotion policy remains an explicit pending decision.
+
+Separately, workspace UX commit a617399 passed push and PR CI/CodeQL. Its exact
+Ubuntu 22.04 artifact, freeflight-linux-x64-35f6ef0b42563319.tar.gz, has SHA-256
+b4e491d48a7b2b4dcc24b5ddd8256adc71668a5c31a0f445061df891a46e4028.
+Independent archive inspection and clean Ubuntu 22.04/Fedora 44 runtime receipts
+verify workspace switching, dormant startup and client-root revocation. It remains
+unpublished; the public b22a53a compatibility preview and its notes are unchanged.
+
+## 2026-10-20 — Narrow Dependabot promotion validator
+
+Explicit follow-up authorization permits genuine Dependabot dependency-only PRs
+into dev while retaining the normal promotion chain. Added DockPipe promotion.check
+and positive/negative cases covering authentic identity, spoofed actor/author,
+foreign head/base, invalid branch, unrelated ancestry/files, action commands and
+permissions, package scripts/sources and dependency relocation. Independent review
+found action/PackageReference swapping between unchanged steps/conditions; full
+normalized-source positional comparison and regressions now reject both. Local
+DockPipe development.test passes 11 promotion tests plus three lifecycle tests.
+Repository protection settings and release qualification remain unchanged.
+
+Reviewed action updates against primary upstream release documentation: checkout
+7.0.1, setup-node 7.1.0, setup-dotnet 6.0.0, upload-artifact 7.0.2 and coordinated
+CodeQL init/analyze 4.39.0 retain the existing inputs and SHA pinning. Explicitly
+disable setup-node's automatic package-manager cache; retain upload-artifact's
+default ZIP archive behavior required by release evidence verification. Dependabot
+groups only the coupled CodeQL actions and Roslyn packages to avoid split upgrades.
+Full hosted qualification is pending; no dependency PR is merged.
+
+The supported Roslyn repairs are applied together on js/dev: both Workspaces
+packages 5.9.0, Locator 1.11.2, and StringTools excluded from runtime alongside
+MSBuild assemblies. Combined safe/trusted worker tests and self-contained macOS
+ARM64 tests pass locally. TypeScript 7 remains incompatible and held.
+
+## 2026-10-20 — Hosted dependency and legacy qualification
+
+Implementation a6456c2 passed all five native push-CI jobs and both website jobs
+in run 39346076164; both CodeQL runs passed. Windows qualification exercised
+non-SDK C# projects targeting 4.7, 4.8 and 4.8.1 through actual C++ MCP, selected
+SDK 10.0.402 / runtime 10.0.13 / MSBuild 18.9.15.50611, and emitted targeting-pack
+hashes plus exact semantic assertions. Downloaded artifact 12230623607's ZIP
+SHA-256 af7ce89f80ccce7c7981f01ff8590e3be841b6786cd019522665884b72b4d20b
+was verified independently. Intermediate framework versions and additional legacy
+project types remain unqualified. Updated earlier dependency-version prose to match
+the repaired manifests. No dependency PR was merged.
+
+The new upload-artifact action retained the required ZIP semantics. Independently
+verified Linux tar freeflight-linux-x64-64b8711f25d8ceae.tar.gz has SHA-256
+43030e2d097924f35e018489d7ebf707fd22575735edd33ccdc97ffd15db067a and matches
+the native/MCPB source receipts and clean Ubuntu/Fedora tests. It is not published.
+DockPipe Flatpak run 39342951155 completed successfully at 15eafc8.

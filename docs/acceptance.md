@@ -1,7 +1,16 @@
 # Release acceptance checklist
 
-Status: native and website qualification passed at 2798588; promotion remains blocked
-by a CodeQL finding in the crash-test helper. No production release is approved yet.
+Evidence snapshot: 2026-10-19. Candidate 1ecf18d passed all four native targets,
+both website environments and CodeQL. Its Ubuntu 24.04 x64 preview was published
+and anonymously downloaded with matching checksums. That core requires glibc 2.38
+and cannot run on stock Ubuntu 22.04; a separate Jammy preview at b22a53a passed native/clean-container tests and
+was published with verified anonymous downloads. Pop!_OS itself is not tested. PR #12 remains draft after automatic approval review rejected the
+ready-for-review transition; production promotion awaits explicit approval.
+For subsequent status, consult the linked GitHub Actions and Releases records.
+Source009a9c1 subsequently passed all five native targets, both site configurations
+and CodeQL, including the same Linux bundle in clean Ubuntu22.04 and Fedora44
+containers. That newer candidate was verified after download but not published.
+Runtime workspace UX changes after that source require fresh qualification.
 
 ## Verified milestones (2026-10-19)
 
@@ -9,20 +18,23 @@ Broad acceptance items below remain unchecked where any required portion is pend
 
 | Scope | Verified evidence | Still pending |
 | --- | --- | --- |
-| C++ core | All four hosted native targets; protocol/process CTest 2/2; independent official MCP SDK client | Crash-test helper CodeQL finding; next-head requalification; broader clients |
+| C++ core | Five hosted native targets at009a9c1; protocol/process CTest 2/2; independent official MCP SDK client | New workspace lifecycle qualification; broader clients |
 | TS/JS | 17 worker tests; real-worker definitions/references/diagnostics and incremental changes | Large real repositories and broad configuration fidelity |
 | C# | Safe-source semantics/security/cancellation; explicit trusted two-project SDK fixture and actual Roslyn project through C++ MCP, exact cross-project results | Broad solutions/multi-targeting; analyzers unsupported |
-| Standalone | Linux x64/ARM64, Windows x64 and macOS ARM64 native/MCPB extraction, hashes and semantics at 2798588 | Publication and next-head qualification |
+| Standalone | Linux x64/ARM64, Windows x64 and macOS ARM64 native/MCPB extraction, hashes and semantics; public Ubuntu22.04 preview b22a53a; clean Fedora44 container candidate009a9c1 | Production publication; Pop!_OS and Bazzite host/client qualification |
 | DockPipe | Draft DockPipe PR #168, registry search/version/history and config contract tests plus live discovery | Installation/lifecycle/gateway integration |
-| Security audit | Four-platform dependency scans; both site image scans; 11 fail-closed audit-policy tests | CodeQL alert #4 in crash-test helper; ongoing monitoring |
-| Branch policy | Implementation on js/dev; master default; protections applied and read back | PR #2 promotion blocked by CodeQL alert and unresolved bot thread |
+| Security audit | Four-platform dependency scans; both site image scans; 11 fail-closed audit-policy tests | Alert #4 fixed without dismissal; ongoing monitoring |
+| Branch policy | Implementation on js/dev; master default; protections applied and read back | PRs #2, #1 and #3 merged; PR #12 promotion awaits explicit approval |
 
-CI push run [39334371543](https://github.com/Dockpipe-Industries/freeflight/actions/runs/39334371543)
-and PR run [39334378171](https://github.com/Dockpipe-Industries/freeflight/actions/runs/39334378171)
-passed all platform and site jobs. The CodeQL analysis workflow completed, but its
-separate alert check failed; a completed scanner is not a clean security result.
+CI push run [39335341348](https://github.com/Dockpipe-Industries/freeflight/actions/runs/39335341348)
+and CodeQL [39335341377](https://github.com/Dockpipe-Industries/freeflight/actions/runs/39335341377)
+qualified 2c29369. The separate CodeQL alert check passed and the fixed bot thread
+was resolved. All required checks also passed for both subsequent promotions.
+Release verification [39337332446](https://github.com/Dockpipe-Industries/freeflight/actions/runs/39337332446)
+failed before publication on HTTP 415 from the artifact API.
 
-No production release, registry listing or website deployment has been performed.
+No production release, Registry listing or website deployment had been performed
+at this snapshot. These records are historical evidence, not a live release feed.
 
 ## Mandatory instruction prerequisite (latest amendment)
 - [x] Pause implementation/builds and preserve existing code when gate was requested.
@@ -44,6 +56,7 @@ No production release, registry listing or website deployment has been performed
 - [x] Official MCP stdio initialization/discovery/invocation/errors/cancellation/shutdown.
 - [x] Workspace authorization, discovery, projects/solutions, language routing and reuse.
 - [x] Lazy worker processes, supervision/recovery, structured logs and one configuration.
+- [ ] Configure-once runtime open/list/close, dormant startup and optional client-root compatibility qualified on all supported platforms.
 - [ ] Bounded memory/concurrency, incremental updates and filesystem change handling.
 
 ## C — Language intelligence
@@ -99,3 +112,14 @@ no new package manager, unrestricted grants or shared secret leakage.
 Final report must include repository/branches, architecture, dependencies/build,
 language capabilities, competitor comparison, standalone install, DockPipe package,
 gateway, website, CI, tests/benchmarks, and exact unmet criteria/blockers.
+
+## Windows legacy .NET amendment (2026-10-20)
+
+- [x] Intended C# .NET Framework support floor recorded as 4.7 through 4.8.1.
+- [x] Controlled non-SDK two-project fixture and Windows-only trusted project semantic tests authored.
+- [x] Windows CI verifies representative 4.7, 4.8 and 4.8.1 project loading, exact navigation, reference count and incremental diagnostics (a6456c2, run 39346076164).
+- [ ] Broader project types and intermediate targeting-pack versions qualified.
+
+Safe-source analysis does not establish legacy project compatibility. No user's
+project target is changed; test target substitutions occur only in disposable copies
+of the authored fixture. Legacy MSBuild evaluation remains explicit and trusted.

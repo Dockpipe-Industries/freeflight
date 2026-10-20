@@ -33,7 +33,8 @@ class Redirect(HTTPRedirectHandler):
 def request(path, method='GET', data=None, binary=False):
     url = path if path.startswith('https://') else API + path
     require(urlparse(url).hostname in {'api.github.com', 'uploads.github.com'}, 'Unexpected API host')
-    headers = {'Accept': 'application/octet-stream' if binary else 'application/vnd.github+json',
+    # Binary selects response handling, not the media type of the GitHub API request.
+    headers = {'Accept': 'application/vnd.github+json',
                'X-GitHub-Api-Version': '2026-03-10'}
     if isinstance(data, dict):
         data = json.dumps(data).encode()
@@ -57,6 +58,39 @@ def digest(path):
     return result.hexdigest()
 
 
+def promotion_evidence(pulls):
+    """Recover merge commits from timeline events under the pinned 2026 API."""
+    result = []
+    for pull in pulls:
+        base, head = pull.get('base', {}), pull.get('head', {})
+        if not pull.get('merged_at') or (base.get('ref'), head.get('ref')) not in {
+                ('dev', 'js/dev'), ('staging', 'dev'), ('master', 'staging')} or any(
+                (side.get('repo') or {}).get('full_name') != REPO for side in (base, head)):
+            continue
+        number = pull.get('number')
+        require(type(number) is int and number > 0, 'Invalid promotion PR number')
+        events = []
+        for page in range(1, 11):
+            batch = request('/issues/' + str(number) + '/timeline?per_page=100&page=' + str(page))
+            require(isinstance(batch, list), 'Invalid promotion timeline response')
+            events.extend(event for event in batch if event.get('event') == 'merged')
+            if len(batch) < 100:
+                break
+        else:
+            raise ValueError('Promotion timeline exceeds bounded query; review manually')
+        require(len(events) == 1, 'Exactly one authoritative merge event required')
+        event = events[0]
+        sha = event.get('commit_id', '')
+        require(isinstance(sha, str) and re.fullmatch('[a-f0-9]{40}', sha)
+                and event.get('created_at') == pull['merged_at']
+                and event.get('commit_url') == API + '/commits/' + sha,
+                'Merge event commit, repository or timestamp mismatch')
+        # 2026-03-10 removed merge_commit_sha from every PR response. Keep the
+        # policy's internal normalized field plus its authoritative source evidence.
+        result.append({**pull, 'merge_commit_sha': sha, 'merge_event': event})
+    return result
+
+
 def collect():
     run_id = os.environ['QUALIFICATION_RUN']
     require(re.fullmatch('[1-9][0-9]*', run_id), 'Numeric qualification run ID required')
@@ -78,6 +112,7 @@ def collect():
                 break
         else:
             raise ValueError('Promotion history exceeds bounded query; review manually')
+    pulls = promotion_evidence(pulls)
     listing = request('/actions/runs/' + run_id + '/artifacts?per_page=100')
     require(listing['total_count'] <= 100, 'Unexpected artifact count')
     artifacts = [a for a in listing['artifacts'] if a['name'].startswith('native-') or a['name'] in EXTRAS]

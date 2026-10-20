@@ -23,7 +23,7 @@ MCP revisions implemented are 2026-07-28 and legacy 2025-11-25/2025-06-18.
 Modern requests use per-request metadata and `server/discover`; legacy clients
 use `initialize` then `notifications/initialized`. Streamable HTTP is pending.
 
-Roslyn 4.14.0 (MIT) runs inside .NET 10 with default AdhocWorkspace safe-source
+Roslyn 5.9.0 (MIT) runs inside .NET 10 with default AdhocWorkspace safe-source
 loading. Explicit startup-only `--trusted-msbuild` enables MSBuildWorkspace project
 evaluation, which can execute repository targets/imports and requires a compatible
 .NET SDK. It must only be used for trusted projects. TypeScript 5.9.3 (Apache-2.0)

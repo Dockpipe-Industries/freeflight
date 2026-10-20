@@ -28,6 +28,8 @@ One standalone distribution; no duplicate FreeFlight-specific DockPipe package.
 Keep general DockPipe changes in a separate scoped branch and draft PR. No security
 settings, credential generation or persistent permission expansion without approval.
 Promote js/dev -> dev -> staging -> master only with verified gates.
+Authentic dependency-only Dependabot proposals may target dev through the tested
+promotion.check exception; ordinary implementation still follows the promotion chain.
 All ongoing implementation belongs on js/dev. Never push implementation directly
 to dev, staging or master. Promote through draft pull requests in that order.
 Protection settings require action-time approval; do not confuse this policy with

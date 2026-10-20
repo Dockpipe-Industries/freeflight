@@ -1,0 +1,17 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lib", "Lib\Lib.csproj", "{29E63BA1-88F3-4541-9F51-11C6F137F281}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "App", "App\App.csproj", "{A5566AB8-317C-439D-B42B-0741B2754036}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{29E63BA1-88F3-4541-9F51-11C6F137F281}.Debug|Any CPU.ActiveCfg = Debug|AnyCPU
+		{29E63BA1-88F3-4541-9F51-11C6F137F281}.Debug|Any CPU.Build.0 = Debug|AnyCPU
+		{A5566AB8-317C-439D-B42B-0741B2754036}.Debug|Any CPU.ActiveCfg = Debug|AnyCPU
+		{A5566AB8-317C-439D-B42B-0741B2754036}.Debug|Any CPU.Build.0 = Debug|AnyCPU
+	EndGlobalSection
+EndGlobal

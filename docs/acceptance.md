@@ -112,3 +112,14 @@ no new package manager, unrestricted grants or shared secret leakage.
 Final report must include repository/branches, architecture, dependencies/build,
 language capabilities, competitor comparison, standalone install, DockPipe package,
 gateway, website, CI, tests/benchmarks, and exact unmet criteria/blockers.
+
+## Windows legacy .NET amendment (2026-10-20)
+
+- [x] Intended C# .NET Framework support floor recorded as 4.7 through 4.8.1.
+- [x] Controlled non-SDK two-project fixture and Windows-only trusted project semantic tests authored.
+- [ ] Windows CI verifies representative 4.7, 4.8 and 4.8.1 project loading, exact navigation, reference count and incremental diagnostics.
+- [ ] Broader project types and intermediate targeting-pack versions qualified.
+
+Safe-source analysis does not establish legacy project compatibility. No user's
+project target is changed; test target substitutions occur only in disposable copies
+of the authored fixture. Legacy MSBuild evaluation remains explicit and trusted.

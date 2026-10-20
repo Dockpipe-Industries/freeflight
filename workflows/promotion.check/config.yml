@@ -1,0 +1,9 @@
+name: promotion.check
+description: Validate branch promotion and narrowly scoped authentic Dependabot proposals.
+vault: none
+docker_preflight: false
+steps:
+  - id: validate
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/promotion.check/assets/policy.py

@@ -608,3 +608,22 @@ and rejection paths. This automation-only correction requires fresh hosted
 qualification and normal promotion; it does not change the language runtime.
 Local NuGet/npm proof and profiling tooling remain excluded. Existing preview
 artifacts and tags are preserved; no client configuration or private project changed.
+
+### Promotion event recording delay (2026-10-20)
+
+Collector correction ad8acd5 passed full push/PR CI and CodeQL and promoted through
+PRs #26, #27 and #28. The targeted production website rerun resolved a stuck
+required-check record without bypassing protections. Hosted release verification
+39376995721 then rejected PR #28's merge evidence: merged_at was 05:49:54Z and the
+single timeline merge event was recorded at 05:49:55Z. The event's SHA and URL
+correctly identify feb3393; its canonical commit response has ea139ac and the exact
+PR head 013811b as ordered parents. Failed logs and original records were retained.
+
+The follow-up accepts nonnegative event-recording delay up to a conservative
+60-second audit limit and corroborates the merge through the canonical commit API:
+exact SHA/repository URL, two canonical parents, and the PR head as second parent.
+This is not a claim that GitHub guarantees that latency bound; larger/invalid delays
+still stop for review. Unique timeline evidence, same-repository branch identity,
+qualified-source ancestry and identical-tree gates remain. Regression fixtures
+include the observed public PR #28 record shape and wrong-repository/commit/parent
+cases. Publication remains pending fresh qualification and protected promotion.

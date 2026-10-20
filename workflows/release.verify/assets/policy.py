@@ -34,12 +34,42 @@ def check_run(run, path, source=None):
     return run['head_sha']
 
 
-def check_promotion(source, master, pulls, ancestor, tree):
+def platforms(channel):
+    require(channel in ('production', 'staging'), 'Unknown release channel')
+    if channel == 'production':
+        return PLATFORMS
+    return {name: rid for name, rid in PLATFORMS.items() if rid != 'linux-x64'} | {
+        'preview-ubuntu-22.04-linux-x64': 'linux-x64'}
+
+
+def release_context():
+    channel = os.environ.get('FREEFLIGHT_RELEASE_CHANNEL', 'production')
+    require(channel in ('production', 'staging'), 'Unknown release channel')
+    branch = 'staging' if channel == 'staging' else 'master'
+    event = 'push' if channel == 'staging' else 'workflow_dispatch'
+    require(os.environ.get('GITHUB_EVENT_NAME') == event and
+            os.environ.get('GITHUB_REF') == 'refs/heads/' + branch and
+            os.environ.get('GITHUB_REPOSITORY') == REPO, 'Invalid release event, branch or repository')
+    return channel, branch
+
+
+def staging_tag(version, run_id, source):
+    require(re.fullmatch(r'\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?', version), 'Invalid staging version')
+    require(type(run_id) is int and run_id > 0 and re.fullmatch('[a-f0-9]{40}', source), 'Invalid staging identity')
+    separator = '.' if '-' in version else '-'
+    return 'v' + version + separator + 'staging.' + str(run_id) + '.' + source[:12]
+
+
+def check_promotion(source, master, pulls, ancestor, tree, channel='production'):
     require(ancestor(source, master), 'Qualified source is not ancestor of promoted master')
     require(tree(source) == tree(master), 'Promoted master differs from qualified source tree')
     target = master
     chain = []
-    for base, head in [('master', 'staging'), ('staging', 'dev'), ('dev', 'js/dev')]:
+    require(channel in ('production', 'staging'), 'Unknown promotion channel')
+    edges = [('staging', 'dev'), ('dev', 'js/dev')]
+    if channel == 'production':
+        edges.insert(0, ('master', 'staging'))
+    for base, head in edges:
         eligible = [p for p in pulls if p.get('merged_at') and p.get('base', {}).get('ref') == base
                     and p.get('head', {}).get('ref') == head
                     and p['base'].get('repo', {}).get('full_name') == REPO
@@ -156,9 +186,8 @@ def check_extra_links(receipts, site_hashes):
 
 
 def main():
-    require(os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch' and
-            os.environ.get('GITHUB_REF') == 'refs/heads/master' and
-            os.environ.get('GITHUB_REPOSITORY') == REPO, 'Release verification requires a master dispatch in the canonical repository')
+    channel, branch = release_context()
+    selected_platforms = platforms(channel)
     root = Path(__file__).resolve().parents[3]
     candidate = Path(os.environ['FREEFLIGHT_RELEASE_CANDIDATE']).resolve()
     evidence = json.loads((candidate / 'evidence.json').read_text())
@@ -168,9 +197,9 @@ def main():
     require(git('rev-parse', 'HEAD') == master == evidence['master'], 'Dispatch checkout or current master changed')
     ancestor = lambda a, b: subprocess.run(['git', 'merge-base', '--is-ancestor', a, b], capture_output=True).returncode == 0
     chain = check_promotion(source, master, evidence['pulls'], ancestor,
-                            lambda commit: git('rev-parse', commit + '^{tree}'))
+                            lambda commit: git('rev-parse', commit + '^{tree}'), channel)
     artifacts = evidence['artifacts']
-    require(len(artifacts) == len(PLATFORMS) + len(EXTRAS) and {a['name'] for a in artifacts} == set(PLATFORMS) | EXTRAS, 'All native, website, container, source and audit artifacts required')
+    require(len(artifacts) == len(selected_platforms) + len(EXTRAS) and {a['name'] for a in artifacts} == set(selected_platforms) | EXTRAS, 'All native, website, container, source and audit artifacts required')
     for artifact in artifacts:
         require(artifact.get('expired') is False and artifact.get('workflow_run', {}).get('id') == evidence['run']['id'] and
                 artifact['workflow_run'].get('head_sha') == source, 'Artifact run identity mismatch or expired artifact')
@@ -180,10 +209,16 @@ def main():
     paths = sorted(p for p in (candidate / 'artifacts').rglob('*') if p.name.endswith(('.tar.gz', '.mcpb')))
     version = (root / 'VERSION').read_text().strip()
     config = {'version': version, 'tag': 'v' + version, 'mode': 'draft',
-              'expectedRids': sorted(PLATFORMS.values()), 'registryRid': 'osx-arm64',
+              'expectedRids': sorted(selected_platforms.values()), 'registryRid': 'osx-arm64',
               'artifacts': [str(p) for p in paths]}
     prepared = prepare.prepare(config, root / 'bin/.local/release-prepared')
     report = json.loads((prepared / 'release-manifest.json').read_text())
+    report.update(channel=channel, sourceCommit=source, promotedCommit=master,
+                  qualificationRun=evidence['run']['id'], codeqlRun=evidence['codeql']['id'])
+    if channel == 'staging':
+        report['tag'] = staging_tag(version, evidence['run']['id'], source)
+        for artifact in report['artifacts']:
+            artifact['candidateUrl'] = prepare.REPO_URL + '/releases/download/' + report['tag'] + '/' + artifact['filename']
     for artifact in report['artifacts']:
         require(artifact['verification']['sourceCommit'] == source and
                 artifact['verification']['sourceTree'] == git('rev-parse', master + '^{tree}'), 'Embedded provenance differs from hosted qualified source')
@@ -203,12 +238,23 @@ def main():
             site_hashes[environment] = hashlib.sha256(site.read('release.json')).hexdigest()
     check_extra_links(extra_receipts, site_hashes)
     report['additionalAssets'] = extras
+    if channel == 'staging':
+        jammy = candidate / 'artifacts/preview-ubuntu-22.04-linux-x64/jammy-compatibility.json'
+        receipt = json.loads(jammy.read_text())
+        linux = next(a for a in report['artifacts'] if a['rid'] == 'linux-x64' and a['format'] == 'tar.gz')
+        require(receipt.get('sourceCommit') == source and receipt.get('sourceTree') == git('rev-parse', master + '^{tree}')
+                and receipt.get('status') == 'qualified-on-ubuntu-22.04'
+                and receipt.get('artifact') == linux['filename'] and receipt.get('sha256') == linux['sha256'],
+                'Jammy compatibility receipt mismatch')
+        extras.append({'filename': jammy.name, 'source': str(jammy),
+                       'sha256': hashlib.sha256(jammy.read_bytes()).hexdigest(), 'verification': receipt})
     (prepared / 'release-manifest.json').write_text(json.dumps(report, indent=2) + '\n')
     with (prepared / 'SHA256SUMS').open('a') as sums:
         for item in sorted(extras, key=lambda item: item['filename']):
             sums.write(item['sha256'] + '  ' + item['filename'] + '\n')
     result = {'prepared': str(prepared), 'master': master, 'source': source, 'promotionPulls': chain,
-              'runId': evidence['run']['id'], 'codeqlRunId': evidence['codeql']['id'], 'config': config}
+              'runId': evidence['run']['id'], 'codeqlRunId': evidence['codeql']['id'], 'config': config,
+              'channel': channel, 'branch': branch}
     (candidate / 'verified.json').write_text(json.dumps(result, indent=2) + '\n')
     print('Complete release candidate verified; no tag or release created')
 

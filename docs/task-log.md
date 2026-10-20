@@ -809,3 +809,18 @@ container/audit/source artifacts for 6e7b9a5 and emitted a non-authorizing prepa
 receipt. Five rejection tests cover unpromoted source, prerelease production,
 wrong-environment archives, changed archives and symlink inputs. repo.check passed.
 No production candidate has been prepared or activated.
+
+## Pipeline-only staging delivery implementation (2026-10-20)
+
+The owner explicitly rejected browser/manual uploads and requested staging delivery
+through pipelines. PR #35 now adds a staging-push publisher, a published-asset site
+collector, and DockPipe bundle/send/receiver workflows with scoped activation,
+exact-byte/source probes and rollback. A separate manual production-site workflow
+requires stable published release identity and matching master ancestry/tree.
+The staging policy does not weaken the production promotion chain or dispatch gate.
+Unique staging tags preserve earlier releases; master is not promoted.
+
+The receiver requires its own approved identity, pinned host key and installed
+fixed command; those grants are not created by this code. DNS/HTTPS routing was
+approved for staging, but operator access and receiver identity/setup remain
+unavailable. Offline tests establish rejection/rollback behavior, not deployment.

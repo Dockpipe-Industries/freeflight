@@ -91,6 +91,26 @@ def promotion_evidence(pulls):
     return result
 
 
+def extract_native_artifact(archive, directory):
+    """Accept only native package files, including upload-artifact's packages/ root."""
+    with zipfile.ZipFile(archive) as bundle:
+        members = bundle.infolist()
+        require(0 < len(members) <= 16, 'Unexpected package artifact entries')
+        seen = set()
+        selected = []
+        for member in members:
+            name = member.filename.removeprefix('packages/')
+            require(re.fullmatch(r'freeflight-[a-z0-9-]+\.(?:tar\.gz|mcpb)(?:\.sha256)?', name)
+                    and name not in seen and not member.is_dir() and member.file_size <= 2 * 1024 ** 3
+                    and (member.external_attr >> 16) & 0o170000 in (0, 0o100000), 'Unsafe artifact entry')
+            seen.add(name)
+            selected.append((member, name))
+        # Validate the entire layout before writing any extracted files.
+        for member, name in selected:
+            with bundle.open(member) as stream, (directory / name).open('xb') as output:
+                shutil.copyfileobj(stream, output)
+
+
 def collect():
     run_id = os.environ['QUALIFICATION_RUN']
     require(re.fullmatch('[1-9][0-9]*', run_id), 'Numeric qualification run ID required')
@@ -138,17 +158,7 @@ def collect():
             additional.mkdir(exist_ok=True)
             archive.rename(additional / (artifact['name'] + '.zip'))
             continue
-        with zipfile.ZipFile(archive) as bundle:
-            seen = set()
-            require(len(bundle.infolist()) <= 16, 'Unexpected package artifact entries')
-            for member in bundle.infolist():
-                name = member.filename
-                require(re.fullmatch(r'freeflight-[a-z0-9-]+\.(?:tar\.gz|mcpb)(?:\.sha256)?', name)
-                        and name not in seen and not member.is_dir() and member.file_size <= 2 * 1024 ** 3
-                        and (member.external_attr >> 16) & 0o170000 != 0o120000, 'Unsafe artifact entry')
-                seen.add(name)
-                with bundle.open(member) as stream, (directory / name).open('wb') as output:
-                    shutil.copyfileobj(stream, output)
+        extract_native_artifact(archive, directory)
         archive.unlink()
     (candidate / 'evidence.json').write_text(json.dumps({'run': run, 'codeql': codeql, 'master': master,
                                                        'pulls': pulls, 'artifacts': artifacts}, indent=2))

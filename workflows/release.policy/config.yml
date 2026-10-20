@@ -23,3 +23,11 @@ steps:
     kind: host
     cwd: repo
     cmd: python3 -B workflows/package.jammy/assets/test_check.py
+  - id: site-delivery-preparation
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/site.deploy.prepare/assets/test_prepare.py
+  - id: site-activation-and-rollback
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/site.deploy.receive/assets/test_receive.py

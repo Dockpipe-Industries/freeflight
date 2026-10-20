@@ -16,7 +16,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'workflows/release.verify/assets'))
-from policy import PLATFORMS, EXTRAS, REPO, check_run, require
+from policy import PLATFORMS, EXTRAS, REPO, check_run, require, platforms, release_context
 
 API = 'https://api.github.com/repos/' + REPO
 
@@ -31,11 +31,11 @@ class Redirect(HTTPRedirectHandler):
         return result
 
 
-def request(path, method='GET', data=None, binary=False):
+def request(path, method='GET', data=None, binary=False, asset=False):
     url = path if path.startswith('https://') else API + path
     require(urlparse(url).hostname in {'api.github.com', 'uploads.github.com'}, 'Unexpected API host')
     # Binary selects response handling, not the media type of the GitHub API request.
-    headers = {'Accept': 'application/vnd.github+json',
+    headers = {'Accept': 'application/octet-stream' if asset else 'application/vnd.github+json',
                'X-GitHub-Api-Version': '2026-03-10'}
     if isinstance(data, dict):
         data = json.dumps(data).encode()
@@ -111,7 +111,7 @@ def promotion_evidence(pulls):
     return result
 
 
-def extract_native_artifact(archive, directory):
+def extract_native_artifact(archive, directory, jammy=False):
     """Accept only native package files, including upload-artifact's packages/ root."""
     with zipfile.ZipFile(archive) as bundle:
         members = bundle.infolist()
@@ -120,7 +120,8 @@ def extract_native_artifact(archive, directory):
         selected = []
         for member in members:
             name = member.filename.removeprefix('packages/')
-            require(re.fullmatch(r'freeflight-[a-z0-9-]+\.(?:tar\.gz|mcpb)(?:\.sha256)?', name)
+            require((re.fullmatch(r'freeflight-[a-z0-9-]+\.(?:tar\.gz|mcpb)(?:\.sha256)?', name)
+                     or (jammy and member.filename == 'jammy-compatibility.json'))
                     and name not in seen and not member.is_dir() and member.file_size <= 2 * 1024 ** 3
                     and (member.external_attr >> 16) & 0o170000 in (0, 0o100000), 'Unsafe artifact entry')
             seen.add(name)
@@ -131,7 +132,34 @@ def extract_native_artifact(archive, directory):
                 shutil.copyfileobj(stream, output)
 
 
+def select():
+    """Choose tested source bytes, never rebuild on the promotion merge."""
+    channel, branch = release_context()
+    require(channel == 'staging', 'Automatic selection is staging-only')
+    target = os.environ['GITHUB_SHA']
+    require(request('/git/ref/heads/' + branch)['object']['sha'] == target, 'Staging moved before selection')
+    tree = subprocess.check_output(['git', 'rev-parse', target + '^{tree}'], text=True).strip()
+    for page in range(1, 11):
+        runs = request('/actions/workflows/ci.yml/runs?branch=js%2Fdev&event=push&status=completed&per_page=100&page=' + str(page))['workflow_runs']
+        for run in runs:
+            if run.get('conclusion') != 'success':
+                continue
+            source = check_run(run, '.github/workflows/ci.yml')
+            if subprocess.run(['git', 'merge-base', '--is-ancestor', source, target], capture_output=True).returncode:
+                continue
+            if subprocess.check_output(['git', 'rev-parse', source + '^{tree}'], text=True).strip() == tree:
+                with open(os.environ['GITHUB_ENV'], 'a') as output:
+                    output.write('QUALIFICATION_RUN=' + str(run['id']) + '\n')
+                print('Selected successful exact-tree qualification run ' + str(run['id']))
+                return
+        if len(runs) < 100:
+            break
+    raise ValueError('No successful exact-tree js/dev push qualification; promote qualified source first')
+
+
 def collect():
+    channel, branch = release_context()
+    selected_platforms = platforms(channel)
     run_id = os.environ['QUALIFICATION_RUN']
     require(re.fullmatch('[1-9][0-9]*', run_id), 'Numeric qualification run ID required')
     run = request('/actions/runs/' + run_id)
@@ -141,10 +169,10 @@ def collect():
     require(codeqls, 'No successful exact-source CodeQL push run')
     codeql = max(codeqls, key=lambda r: r['id'])
     check_run(codeql, '.github/workflows/codeql.yml', source)
-    master = request('/git/ref/heads/master')['object']['sha']
+    master = request('/git/ref/heads/' + branch)['object']['sha']
     require(master == os.environ['GITHUB_SHA'], 'Master moved after dispatch')
     pulls = []
-    for base in ('dev', 'staging', 'master'):
+    for base in (('dev', 'staging') if channel == 'staging' else ('dev', 'staging', 'master')):
         for page in range(1, 11):
             batch = request('/pulls?state=closed&base=' + base + '&per_page=100&page=' + str(page))
             pulls.extend(batch)
@@ -155,8 +183,8 @@ def collect():
     pulls = promotion_evidence(pulls)
     listing = request('/actions/runs/' + run_id + '/artifacts?per_page=100')
     require(listing['total_count'] <= 100, 'Unexpected artifact count')
-    artifacts = [a for a in listing['artifacts'] if a['name'].startswith('native-') or a['name'] in EXTRAS]
-    require(len(artifacts) == len(PLATFORMS) + len(EXTRAS) and {a['name'] for a in artifacts} == set(PLATFORMS) | EXTRAS, 'Missing/duplicate release artifacts')
+    artifacts = [a for a in listing['artifacts'] if a['name'] in selected_platforms or a['name'] in EXTRAS]
+    require(len(artifacts) == len(selected_platforms) + len(EXTRAS) and {a['name'] for a in artifacts} == set(selected_platforms) | EXTRAS, 'Missing/duplicate release artifacts')
     candidate = ROOT / 'bin/.local/release-candidate'
     candidate.mkdir(parents=True, exist_ok=False)
     for artifact in artifacts:
@@ -178,7 +206,7 @@ def collect():
             additional.mkdir(exist_ok=True)
             archive.rename(additional / (artifact['name'] + '.zip'))
             continue
-        extract_native_artifact(archive, directory)
+        extract_native_artifact(archive, directory, jammy=artifact['name'] == 'preview-ubuntu-22.04-linux-x64')
         archive.unlink()
     (candidate / 'evidence.json').write_text(json.dumps({'run': run, 'codeql': codeql, 'master': master,
                                                        'pulls': pulls, 'artifacts': artifacts}, indent=2))
@@ -188,18 +216,23 @@ def collect():
 
 def publish():
     require(os.environ.get('RELEASE_MODE') == 'publish', 'Explicit publish mode required')
-    require(os.environ.get('GITHUB_REF') == 'refs/heads/master' and os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch'
-            and os.environ.get('GITHUB_REPOSITORY') == REPO, 'Publication requires canonical master dispatch')
+    channel, branch = release_context()
     # Repeat all DockPipe gates immediately before writes; no rebuild or repacking.
     subprocess.run(['dockpipe', '--workflow', 'release.verify'], check=True)
     candidate = Path(os.environ['FREEFLIGHT_RELEASE_CANDIDATE'])
     verified = json.loads((candidate / 'verified.json').read_text())
-    require(request('/git/ref/heads/master')['object']['sha'] == verified['master'], 'Master moved during qualification')
+    require(request('/git/ref/heads/' + branch)['object']['sha'] == verified['master'], 'Promoted branch moved during qualification')
     check_run(request('/actions/runs/' + str(verified['runId'])), '.github/workflows/ci.yml', verified['source'])
     check_run(request('/actions/runs/' + str(verified['codeqlRunId'])), '.github/workflows/codeql.yml', verified['source'])
     prepared = Path(verified['prepared'])
     report = json.loads((prepared / 'release-manifest.json').read_text())
     tag = report['tag']
+    require(verified['channel'] == channel and verified['branch'] == branch, 'Release channel changed')
+    if channel == 'production':
+        require(re.fullmatch(r'\d+\.\d+\.\d+', report['version']), 'Production publication requires stable VERSION')
+    files = [(Path(a['source']), a['sha256']) for a in report['artifacts']]
+    files += [(Path(a['source']), a['sha256']) for a in report['additionalAssets']]
+    files += [(prepared / name, digest(prepared / name)) for name in ('SHA256SUMS', 'release-manifest.json')]
     for endpoint in ('/releases/tags/' + tag, '/git/ref/tags/' + tag):
         try:
             request(endpoint)
@@ -208,26 +241,33 @@ def publish():
         else:
             raise ValueError('Existing release/tag: stop and reconcile; never overwrite automatically')
     release = request('/releases', 'POST', {'tag_name': tag, 'target_commitish': verified['master'],
-        'name': 'FreeFlight ' + report['version'], 'draft': True, 'prerelease': '-' in report['version'],
+        'name': 'FreeFlight ' + ('staging ' if channel == 'staging' else '') + report['version'],
+        'draft': True, 'prerelease': channel == 'staging', 'make_latest': 'false' if channel == 'staging' else 'true',
         'body': 'Complete native bundles qualified by CI run ' + str(verified['runId']) +
                 ' and CodeQL run ' + str(verified['codeqlRunId']) + '. Source ' + verified['source'] +
                 '. Promotion PRs: ' + ', '.join('#' + str(n) for n in verified['promotionPulls']) +
-                '. No automatic MCP Registry publication.'})
+                '. No automatic MCP Registry publication. ' +
+                ('Staging preview for testing; master is unchanged. Linux x64 uses the Ubuntu 22.04 baseline. '
+                 'Archive version remains ' + report['version'] + '; the tag identifies the qualified run. '
+                 'Use the matching archive and SHA256SUMS, extract separately, and configure trustedRoots for chosen source folders. '
+                 'Actual private-project acceptance remains unverified.' if channel == 'staging' else '')})
     (candidate / 'publication-attempt.json').write_text(json.dumps({'releaseId': release['id'], 'tag': tag, 'status': 'draft-created'}, indent=2))
-    files = [(Path(a['source']), a['sha256']) for a in report['artifacts']]
-    files += [(Path(a['source']), a['sha256']) for a in report['additionalAssets']]
-    files += [(prepared / name, digest(prepared / name)) for name in ('SHA256SUMS', 'release-manifest.json')]
     for path, expected in files:
         require(digest(path) == expected, 'Local asset changed after qualification')
         with path.open('rb') as stream:
             asset = request('https://uploads.github.com/repos/' + REPO + '/releases/' + str(release['id']) + '/assets?name=' + quote(path.name), 'POST', stream)
         require(asset.get('state') == 'uploaded' and asset.get('digest') == 'sha256:' + expected,
                 'Uploaded asset digest mismatch; draft retained for reconciliation')
-    result = request('/releases/' + str(release['id']), 'PATCH', {'draft': False})
+    result = request('/releases/' + str(release['id']), 'PATCH',
+                     {'draft': False, 'prerelease': channel == 'staging',
+                      'make_latest': 'false' if channel == 'staging' else 'true'})
     require(result.get('draft') is False, 'Publication outcome uncertain; inspect existing release')
     print('GitHub Release published: ' + result['html_url'])
     (candidate / 'publication-attempt.json').write_text(json.dumps({'releaseId': release['id'], 'tag': tag, 'status': 'published', 'url': result['html_url']}, indent=2))
+    if os.environ.get('GITHUB_OUTPUT'):
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+            output.write('release_tag=' + tag + '\nrelease_url=' + result['html_url'] + '\n')
 
 
 if __name__ == '__main__':
-    {'collect': collect, 'publish': publish}[sys.argv[1]]()
+    {'select': select, 'collect': collect, 'publish': publish}[sys.argv[1]]()

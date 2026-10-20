@@ -618,3 +618,65 @@ test("version metadata eviction cannot substitute another source hash", (t) => {
   assert.ok(worker.snapshots.has(first));
   assert.equal(worker.version(first), expected);
 });
+
+test("retained explicit projects reconcile imported file add, removal and rename", (t) => {
+  const { root, worker } = fixture(t);
+  const config = path.join(root, "tsconfig.json"), dependency = path.join(root, "dependency.ts");
+  fs.writeFileSync(config, JSON.stringify({ compilerOptions: { strict: true, moduleResolution: "node" }, files: ["a.ts"] }));
+  fs.writeFileSync(path.join(root, "a.ts"), 'import { value } from "./dependency";\nexport const result: number = value;\n');
+  const diagnostics = () => worker.handle("diagnostics", { file: "a.ts" }).map((item) => item.code);
+  assert.deepEqual(diagnostics(), [2307]);
+  fs.writeFileSync(dependency, "export const value = 42;\n");
+  assert.deepEqual(diagnostics(), []);
+  const definition = worker.handle("definition", { file: "a.ts", line: 1, character: 31 });
+  assert.equal(definition.length, 1);
+  assert.equal(definition[0].file, dependency);
+  assert.deepEqual(definition[0].range.start, { line: 0, character: 13 });
+  const retained = worker.projects.get(config).service, reads = worker.diskReads, hashes = worker.contentHashes;
+  assert.deepEqual(diagnostics(), []);
+  assert.equal(worker.projects.get(config).service, retained);
+  assert.equal(worker.diskReads - reads, 1);
+  assert.equal(worker.contentHashes - hashes, 1);
+  fs.renameSync(dependency, path.join(root, "renamed.ts"));
+  assert.deepEqual(diagnostics(), [2307]);
+  fs.renameSync(path.join(root, "renamed.ts"), dependency);
+  assert.deepEqual(diagnostics(), []);
+  fs.unlinkSync(dependency);
+  assert.deepEqual(diagnostics(), [2307]);
+  fs.writeFileSync(dependency, "export const value = 42;\n");
+  assert.deepEqual(diagnostics(), []);
+});
+
+test("package resolution metadata changes replace stale retained resolutions", (t) => {
+  const { root, worker } = fixture(t);
+  fs.writeFileSync(path.join(root, "tsconfig.json"), JSON.stringify({ compilerOptions: { strict: true, moduleResolution: "node" }, files: ["a.ts"] }));
+  fs.writeFileSync(path.join(root, "a.ts"), 'import { value } from "pkg";\nexport const result: number = value;\n');
+  const directory = path.join(root, "node_modules", "pkg"), manifest = path.join(directory, "package.json");
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(manifest, JSON.stringify({ types: "a.d.ts" }));
+  fs.writeFileSync(path.join(directory, "a.d.ts"), "export declare const value: number;\n");
+  fs.writeFileSync(path.join(directory, "b.d.ts"), "export declare const value: string;\n");
+  assert.deepEqual(worker.handle("diagnostics", { file: "a.ts" }), []);
+  const stamp = fs.statSync(manifest);
+  fs.writeFileSync(manifest, JSON.stringify({ types: "b.d.ts" }));
+  fs.utimesSync(manifest, stamp.atime, stamp.mtime);
+  assert.deepEqual(worker.handle("diagnostics", { file: "a.ts" }).map((item) => item.code), [2322]);
+});
+
+test("inherited compiler settings and preserved-mtime related sources refresh", (t) => {
+  const { root, worker } = fixture(t);
+  const inherited = path.join(root, "base.json"), related = path.join(root, "value.ts");
+  fs.writeFileSync(path.join(root, "tsconfig.json"), JSON.stringify({ extends: "./base.json", files: ["a.ts"] }));
+  fs.writeFileSync(inherited, JSON.stringify({ compilerOptions: { strict: false } }));
+  fs.writeFileSync(path.join(root, "a.ts"), 'import { value } from "./value";\nexport const result: number = value;\nexport function identity(input) { return input; }\n');
+  fs.writeFileSync(related, "export declare const value: number;\n");
+  assert.deepEqual(worker.handle("diagnostics", { file: "a.ts" }), []);
+  fs.writeFileSync(inherited, JSON.stringify({ compilerOptions: { strict: true } }));
+  assert.deepEqual(worker.handle("diagnostics", { file: "a.ts" }).map((item) => item.code), [7006]);
+  const retained = worker.projects.get(path.join(root, "tsconfig.json")).service;
+  const stamp = fs.statSync(related);
+  fs.writeFileSync(related, "export declare const value: string;\n");
+  fs.utimesSync(related, stamp.atime, stamp.mtime);
+  assert.deepEqual(worker.handle("diagnostics", { file: "a.ts" }).map((item) => item.code), [2322, 7006]);
+  assert.equal(worker.projects.get(path.join(root, "tsconfig.json")).service, retained);
+});

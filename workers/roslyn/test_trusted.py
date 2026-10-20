@@ -48,6 +48,12 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
         assert call("capabilities")["result"]["fidelity"] == "trusted-msbuild"
         opened = call("open", root=str(root), project="App/App.csproj")
         assert opened["result"]["projects"] == 2, opened
+        # Initial project documents use inert placeholders; every source must have
+        # its guarded snapshot installed before the following cross-project queries.
+        initial = call("capabilities")["result"]["refreshStats"]
+        assert initial["bytesRead"] == sum(path.stat().st_size for path in
+            (root / "Lib/Widget.cs", root / "App/Consumer.cs")), initial
+        assert initial["reusedSnapshots"] == 0, initial
         diagnostics = call("diagnostics", file="App/Consumer.cs")
         assert diagnostics["result"] == [], diagnostics
         definition = call("definition", file="App/Consumer.cs", line=1, character=57)["result"]

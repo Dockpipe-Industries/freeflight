@@ -200,6 +200,12 @@ try:
         assert after["bytesRead"] - before["bytesRead"] == sizes["Use.cs"], (before, after)
         assert after["reusedSnapshots"] - before["reusedSnapshots"] == 3, (before, after)
         print(json.dumps({"fixture": "roslyn-warm-query", "sourceBytesRead": after["bytesRead"] - before["bytesRead"], "unchangedLargeSnapshotsReused": 3}))
+        before = call("capabilities")["result"]["refreshStats"]
+        found = call("workspaceSymbols", query="Large0")["result"]
+        after = call("capabilities")["result"]["refreshStats"]
+        assert len(found) == 1 and found[0]["name"] == "Large0", found
+        assert after["bytesRead"] == before["bytesRead"], (before, after)
+        assert after["reusedSnapshots"] - before["reusedSnapshots"] == 4, (before, after)
         # The directly queried file is always validated, even with preserved length/mtime.
         stamp = (root / "Use.cs").stat()
         (root / "Use.cs").write_text(use.replace("Large0", "Large1"), encoding="utf-8")
@@ -219,12 +225,52 @@ try:
         after = call("capabilities")["result"]["refreshStats"]["bytesRead"]
         assert after - before == sum(sizes.values()), (before, after, sizes)
         # Periodic content revalidation bounds missed/delayed watcher notifications.
+        dependency = root / "Large1.cs"
+        stamp = dependency.stat()
+        dependency.write_bytes(dependency.read_bytes().replace(b"Value =>", b"Other =>", 1))
+        os.utime(dependency, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
         time.sleep(5.1)
         before = call("capabilities")["result"]["refreshStats"]["bytesRead"]
-        assert "result" in call("definition", file="Use.cs", line=0, character=use.index("Value"))
+        diagnostics = call("diagnostics", file="Use.cs")["result"]
+        assert len(diagnostics) == 1 and diagnostics[0]["code"] == "CS0117", diagnostics
+        assert "Value" in diagnostics[0]["message"], diagnostics
         after = call("capabilities")["result"]["refreshStats"]["bytesRead"]
         assert after - before == sum(sizes.values()), (before, after, sizes)
         print(json.dumps({"fixture": "roslyn-large-source", "bytes": sum(sizes.values()), "largestFileBytes": max(sizes.values()), "openSeconds": round(opened_seconds, 3), "checksIncludingFallbackWaitSeconds": round(time.monotonic()-queried, 3)}))
+    with tempfile.TemporaryDirectory(prefix="freeflight-roslyn-structure-") as folder:
+        root = pathlib.Path(folder).resolve()
+        usage = "class Use { public int Read() => Target.Value; }"
+        dependency_source = "class Target { public static int Value => 42; }"
+        (root / "Use.cs").write_text(usage)
+        dependency = root / "Target.cs"
+        dependency.write_text(dependency_source)
+        assert call("open", root=str(root))["result"]["files"] == 2
+        def target_definition():
+            return call("definition", file="Use.cs", line=0, character=usage.index("Value"))["result"]
+        assert target_definition()[0]["file"] == str(dependency)
+        moved = root / "Moved.cs"
+        dependency.rename(moved)
+        found = target_definition()
+        assert len(found) == 1 and found[0]["file"] == str(moved), found
+        assert found[0]["range"]["start"] == dict(line=0, character=dependency_source.index("Value")), found
+        moved.unlink()
+        diagnostics = call("diagnostics", file="Use.cs")["result"]
+        assert len(diagnostics) == 1 and diagnostics[0]["code"] == "CS0103", diagnostics
+        added = root / "Added.cs"
+        added.write_text(dependency_source)
+        found = target_definition()
+        assert len(found) == 1 and found[0]["file"] == str(added), found
+        assert call("diagnostics", file="Use.cs")["result"] == []
+        stamp = added.stat()
+        added.write_text(dependency_source.replace("Value", "Other"))
+        os.utime(added, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+        # Explicit worker reopen (MCP workspace.close then workspace.open) reloads
+        # all content, independently of event delivery or preserved metadata.
+        assert call("open", root=str(root))["result"]["files"] == 2
+        diagnostics = call("diagnostics", file="Use.cs")["result"]
+        assert len(diagnostics) == 1 and diagnostics[0]["code"] == "CS0117", diagnostics
+        assert "Value" in diagnostics[0]["message"], diagnostics
+        print("Roslyn source add/remove/rename and preserved-metadata dependency reload passed")
     with tempfile.TemporaryDirectory(prefix="freeflight-roslyn-policy-") as folder:
         root = pathlib.Path(folder).resolve()
         sample = root / "Boundary.cs"

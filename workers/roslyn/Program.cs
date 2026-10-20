@@ -405,7 +405,9 @@ internal sealed class SourceEngine : IDisposable
                 nextDocuments.Add(file, id);
                 solution = solution.AddDocument(id, Path.GetFileName(file), source, filePath: file);
             }
-            else if (!(await solution.GetDocument(id)!.GetTextAsync(token)).ContentEquals(source)) solution = solution.WithDocumentText(id, source);
+            else if (!fingerprints.ContainsKey(file) ||
+                !(await solution.GetDocument(id)!.GetTextAsync(token)).ContentEquals(source))
+                solution = solution.WithDocumentText(id, source);
         }
         if (!workspace.TryApplyChanges(solution)) throw new InvalidOperationException("Could not update workspace");
         snapshots.Clear();

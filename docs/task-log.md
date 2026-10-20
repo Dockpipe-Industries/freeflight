@@ -730,3 +730,18 @@ five setup-python replacements use the verified v7.0.0 commit
 `5fda3b95a4ea91299a34e894583c3862153e4b97`. Those changes are prepared locally for
 combined testing but publication is pending the existing workflow-write permission
 boundary. No credential or permission change, merge, closure or release is authorized.
+
+Local combined qualification completed on macOS ARM64 with Node 24.22.0, .NET
+SDK 10.0.402 / runtime 10.0.13: core tests, 34 TypeScript tests, Roslyn safe/trusted
+suites, real MCP integration, real-project integration, official MCP SDK, lint,
+strict dependency audits (no findings) and registry schema validation passed.
+The native package exercised both external compiler-input fixtures (Test SDK
+16.0.1 and 17.8.0), including routing, read-only definitions and selection/reload;
+both passed. Local site compilation lacks Qt/WASM tooling; hosted site jobs remain
+required. A separate current-baseline TypeScript 7.0.2 probe passed 6/34 and failed
+28/34 tests (missing classic API, including ts.sys).
+
+Draft PR #32 targets js/dev and is textually mergeable. Hosted five-platform/site
+qualification is pending; promotion policy and CodeQL passed on its initial head.
+No remote js/dev changes were made. The unpublished setup-python patch remains a
+separate local deliverable pending an authorized workflow writer.

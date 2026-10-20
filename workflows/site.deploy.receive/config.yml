@@ -1,0 +1,9 @@
+name: site.deploy.receive
+description: Host-installed restricted receiver; activate only its operator-configured FreeFlight service and roll back failures.
+vault: none
+docker_preflight: false
+steps:
+  - id: receive
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/site.deploy.receive/assets/receive.py --receive /etc/freeflight-site/receiver.json

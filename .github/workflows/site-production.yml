@@ -1,0 +1,51 @@
+name: Production site activation
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Published stable FreeFlight release tag matching master
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: freeflight-production-site
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/master' && github.repository == 'Dockpipe-Industries/freeflight'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+      - uses: ./.github/actions/setup-dockpipe
+      - name: Verify published stable production bytes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          FREEFLIGHT_DEPLOY_ENVIRONMENT: production
+          FREEFLIGHT_DEPLOY_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: python3 -B .github/site/delivery.py
+      - name: Activate approved production site
+        env:
+          FREEFLIGHT_DEPLOY_ENVIRONMENT: production
+          SITE_DEPLOY_ENABLED: ${{ vars.FREEFLIGHT_SITE_DEPLOY_ENABLED }}
+          SITE_DEPLOY_HOST: ${{ vars.FREEFLIGHT_SITE_DEPLOY_HOST }}
+          SITE_DEPLOY_SSH_PORT: ${{ vars.FREEFLIGHT_SITE_DEPLOY_SSH_PORT }}
+          SITE_DEPLOY_KNOWN_HOSTS: ${{ vars.FREEFLIGHT_SITE_DEPLOY_KNOWN_HOSTS }}
+          SITE_DEPLOY_PRIVATE_KEY: ${{ secrets.FREEFLIGHT_SITE_DEPLOY_PRIVATE_KEY }}
+        run: dockpipe --workflow site.deploy.send
+      - name: Retain delivery evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: production-site-delivery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bin/.local/site-pipeline/*.json
+          if-no-files-found: warn

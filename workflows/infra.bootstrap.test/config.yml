@@ -1,0 +1,9 @@
+name: infra.bootstrap.test
+description: Exercise real static bootstrap and SSH delivery only on a disposable GitHub Ubuntu runner.
+vault: none
+docker_preflight: false
+steps:
+  - id: disposable-host
+    kind: host
+    cwd: repo
+    cmd: sudo --preserve-env=GITHUB_ACTIONS,GITHUB_REPOSITORY,RUNNER_ENVIRONMENT,RUNNER_OS python3 -B workflows/infra.bootstrap.test/assets/test.py

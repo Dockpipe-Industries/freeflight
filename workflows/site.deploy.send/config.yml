@@ -1,0 +1,9 @@
+name: site.deploy.send
+description: Send qualified bytes only to an installed FreeFlight-specific receiver using pinned SSH trust.
+vault: none
+docker_preflight: false
+steps:
+  - id: send
+    kind: host
+    cwd: repo
+    cmd: bash workflows/site.deploy.send/assets/send.sh

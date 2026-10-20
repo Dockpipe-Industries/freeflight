@@ -1,0 +1,9 @@
+name: infra.terraform.validate
+description: Validate isolated authored Cloud Terraform with backend disabled and no provider credentials.
+vault: none
+docker_preflight: false
+steps:
+  - id: offline-schema
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/infra.terraform.validate/assets/validate.py

@@ -1,5 +1,13 @@
 # Qualified GitHub Release workflow
 
+Staging is separate: `.github/workflows/staging.yml` publishes a uniquely identified
+prerelease automatically after a qualified staging promotion, without master.
+It uses the compatible Ubuntu 22.04 Linux x64 artifact and the exact other native
+and site bytes from the matching successful `js/dev` push run. Its deployment job
+uses the dedicated FreeFlight receiver described in [site-deployment.md](site-deployment.md).
+The existing manual master workflow below remains for stable production releases.
+Production site activation is a separate manual stable-release-gated workflow.
+
 The manual `Qualified release` workflow runs only from the canonical repository's
 `master` branch after normal promotion. See [Actions](https://github.com/Dockpipe-Industries/freeflight/actions/workflows/release.yml)
 and [Releases](https://github.com/Dockpipe-Industries/freeflight/releases) for live

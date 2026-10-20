@@ -80,3 +80,15 @@ to accommodate a different sender probe.
 
 No shared package extraction, provider access, state read, credential transfer,
 host installation or activation has occurred as part of this comparison.
+
+## Implemented code alignment
+
+The subsequent code change replaces the privileged receiver with unprivileged
+static activation and adds `workflows/infra.up`. The isolated Cloud extension
+contains `freeflight.tf`, `freeflight-up.ts`, `freeflight-routing.ts` and offline
+routing/coordinator tests. It imports existing Cloud SSH, provider and apply helpers;
+private Cloud implementation has not been copied into this public repository.
+The FreeFlight bundle/receiver use the same bounded static-delivery pattern with a
+separate fixed product allowlist. See `site-deployment.md` for the implemented
+contract and remaining execution gates. The earlier architecture hold now applies
+to live validation and approval, not absence of replacement code.

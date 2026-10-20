@@ -834,3 +834,13 @@ proposes manual setup and privileged container activation. The manual installati
 procedure is withdrawn pending the documented shared implementation alignment.
 No provider/state reads, Cloud edits, infrastructure mutation or PR promotion
 occurred. Existing policy tests do not establish architectural acceptance.
+
+## Unprivileged static delivery implementation (2026-10-20)
+
+Replaced Docker/Compose activation with a bounded static bundle, fixed allowlist,
+unprivileged receiver, atomic link switching and verified rollback. CI uses local
+health; coordinated bootstrap owns operator-private HTTPS readiness. Added a
+plan-first DockPipe entry point and pure additive infrastructure policy. Prepared
+an isolated, unpushed Cloud extension reusing its SSH/provider/exact-plan apply
+helpers, state-owned release identity and additive tunnel configuration. Provider,
+state and host operations were not run. No credentials or permissions changed.

@@ -264,3 +264,12 @@ The subsequent Cloud architecture comparison places deployment on hold: its
 manual privileged receiver setup is withdrawn pending alignment with Cloud's
 state-owned identities and unprivileged static delivery. Test success is not
 evidence of deployment readiness, infrastructure setup or publication.
+
+The static alignment replacement passes 88 local release/delivery/infrastructure
+policy tests and four isolated Cloud routing/coordinator tests. A retained qualified
+CI site artifact also passed the new bounded static bundle decoder. Five POSIX
+filesystem activation tests apply to the Linux receiver and run on Linux/macOS;
+Windows retains payload/scope and infrastructure policy tests. Cloud extension
+commit 3f80112 is local-only and unpushed. Terraform validation and disposable Linux
+bootstrap validation have not run; live setup remains blocked pending those checks,
+provider/state access approval and review. No deployment result is claimed.

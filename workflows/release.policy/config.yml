@@ -31,3 +31,7 @@ steps:
     kind: host
     cwd: repo
     cmd: python3 -B workflows/site.deploy.receive/assets/test_receive.py
+  - id: additive-infrastructure-policy
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/infra.up/assets/test_plan.py

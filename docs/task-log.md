@@ -850,3 +850,8 @@ until privileged host installation. Added DockPipe infra.terraform.validate and
 completed credential-free, backend-disabled Terraform schema validation. Existing
 Docker daemon is stopped and was not started; disposable Linux bootstrap validation
 remains a separate CI fixture gate. Architecture is unchanged following owner acceptance.
+
+With explicit workflow-push approval, added the disposable Ubuntu bootstrap CI job.
+The first run passed all real host/SSH/rollback/isolation checks (job 118835315216,
+run 39482701813). No fixture was executed on the operator Mac or staging host.
+Remaining native/site qualification is monitored separately from deployment gates.

@@ -1,4 +1,4 @@
-"""Operator-only additive static receiver installation; never invoked by CI."""
+"""Operator bootstrap; CI may exercise it only inside the guarded disposable-host fixture."""
 import base64
 import ipaddress
 import json

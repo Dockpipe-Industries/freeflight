@@ -84,11 +84,12 @@ are superseded, not prerequisites for this architecture.
 
 Offline tests cover static bytes, source/product boundaries, rollback, additive
 plans, private ingress rendering and coordinator sequencing with fake providers.
-They do not establish live Terraform/provider compatibility, host installation,
-certificate coverage, private HTTPS readiness or GitHub credential availability.
+They do not establish live provider connectivity, live host installation, certificate coverage, private HTTPS
+readiness or GitHub credential availability.
 Backend-disabled Terraform schema validation has passed with the locked provider
-versions and no credentials or state access. Disposable Linux bootstrap integration
-remains outstanding; no live infrastructure command has been run.
+versions and no credentials or state access. The disposable Ubuntu CI bootstrap fixture has passed real installation, restricted
+SSH delivery, private ingress and rollback checks while preserving an existing site.
+No live infrastructure command has been run.
 
 Provider/state inspection needs a separately approved bounded read scope. The
 existing Cloud backend is shared platform state; reading it may materialize

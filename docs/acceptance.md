@@ -280,3 +280,11 @@ DigitalOcean 2.104.0 and TLS 4.1.0 providers. Only the disposable scratch lockfi
 received macOS package hashes; the authored lock was unchanged. No state, credentials,
 plan or apply was used. Hosted Windows exposed an unconditional Unix `pwd` import;
 it is now deferred until actual Linux host installation. Fresh hosted CI is required.
+
+Disposable Ubuntu bootstrap job 118835315216 passed in CI run 39482701813 at
+source e75b42c. The real installation and repeat setup, restricted SSH command/user/
+forwarding rejection, exact static serving, private ingress, first-install failure,
+upgrade rollback, failed-rollback lock retention and pre-existing site/admin-policy
+preservation all passed. Keys were ephemeral test fixtures on a disposable runner;
+no staging credentials or infrastructure were involved. This validates the local
+host contract, not live provider/state/TLS readiness or deployment authorization.

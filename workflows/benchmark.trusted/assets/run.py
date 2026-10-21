@@ -141,6 +141,8 @@ def qualify(config):
         command([sys.executable,'-B',str(Path(__file__).with_name('mutations.py')),DOTNET,v['dll'],str(OUT/variant/'mutations'),config['fixtures']['433']['root']],variant+'-mutations.log')
         if platform.system() == 'Darwin' and (OUT/variant/'source/workers/roslyn/DarwinMetadataBatch.cs').is_file():
             command([sys.executable,'-B',str(Path(__file__).with_name('metadata_tests.py')),DOTNET,str(OUT/variant/'source'),str(OUT/variant/'metadata-proof')],variant+'-metadata-proof.log')
+        if platform.system() == 'Darwin' and 'ReadCompilerBytes(' in (OUT/variant/'source/workers/roslyn/Program.cs').read_text():
+            command([sys.executable,'-B',str(Path(__file__).with_name('expiry_tests.py')),DOTNET,str(OUT/variant/'source'),str(OUT/variant/'expiry-proof')],variant+'-expiry-proof.log')
     save('qualification.json',dict(status='passed',variants=list(config['variants']),suites=['test_worker.py','test_trusted.py','mutations.py'],testHashes={name:digest(REPO/'workers/roslyn'/name) for name in ('test_worker.py','test_trusted.py')}))
 
 

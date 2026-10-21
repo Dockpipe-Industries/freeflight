@@ -57,7 +57,10 @@ def instrument(path):
         replace('\n        if ((info.Attributes & FileAttributes.ReparsePoint)', '\n        if ((BenchProfile.Leaf(info) & FileAttributes.ReparsePoint)')
     replace('            using var stream = OpenCompilerInput(file);', '            var openStart = Stopwatch.GetTimestamp();\n            using var stream = OpenCompilerInput(file);\n            BenchProfile.Add("open", openStart);')
     replace('IncrementalHash.CreateHash(HashAlgorithmName.SHA256)', 'BenchProfile.CreateHash()')
-    replace('await stream.ReadAsync(buffer.AsMemory(), token)', 'await BenchProfile.Read(stream, buffer, token)')
+    if 'await ReadCompilerBytes(' in s:
+        replace('await ReadCompilerBytes(stream, buffer, token, OperatingSystem.IsMacOS() && !externalCompilerInputs.Contains(file))', 'await BenchProfile.ReadSelected(stream, buffer, token, OperatingSystem.IsMacOS() && !externalCompilerInputs.Contains(file))')
+    else:
+        replace('await stream.ReadAsync(buffer.AsMemory(), token)', 'await BenchProfile.Read(stream, buffer, token)')
     if 'batch.TryGet(file, parent, token, out var metadata)' in s:
         replace('batch.TryGet(file, parent, token, out var metadata)', 'BenchProfile.Batch(batch, file, parent, token, out var metadata)')
     replace('hash.AppendData(buffer, 0, count);', 'BenchProfile.Append(hash, buffer, count);')
@@ -98,6 +101,8 @@ internal sealed class BenchProfile : EventListener
     public static bool Batch(DarwinMetadataBatch batch, string file, string parent, CancellationToken token, out DarwinMetadataBatch.Metadata metadata)
     { var start=Stopwatch.GetTimestamp(); try{return batch.TryGet(file,parent,token,out metadata);} finally{Add("bulkMetadata",start);} }
     public static IncrementalHash CreateHash() { var start=Stopwatch.GetTimestamp(); try{return IncrementalHash.CreateHash(HashAlgorithmName.SHA256);} finally{Add("hashCreate",start);} }
+    public static async ValueTask<int> ReadSelected(FileStream stream, byte[] buffer, CancellationToken token, bool inline)
+    { var start=Stopwatch.GetTimestamp(); try { if(!inline)return await stream.ReadAsync(buffer.AsMemory(),token); token.ThrowIfCancellationRequested();return stream.Read(buffer,0,buffer.Length); } finally{Add("readIo",start);} }
     public static async ValueTask<int> Read(FileStream stream, byte[] buffer, CancellationToken token) { var start=Stopwatch.GetTimestamp(); try{return await stream.ReadAsync(buffer.AsMemory(),token);} finally{Add("readIo",start);} }
     public static void Append(IncrementalHash hash, byte[] buffer, int count) { var start=Stopwatch.GetTimestamp(); try{hash.AppendData(buffer,0,count);} finally{Add("hashAppend",start);} }
     public static async ValueTask Write(MemoryStream memory, byte[] buffer, int count, CancellationToken token) { var start=Stopwatch.GetTimestamp(); try{await memory.WriteAsync(buffer.AsMemory(0,count),token);} finally{Add("bufferWrite",start);} }

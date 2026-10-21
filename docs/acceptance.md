@@ -386,3 +386,24 @@ beat Glider on tiny queries or unpaced search; expiry, extra allocation and the
 worker-only paced-search regression remain documented. Linux/Windows native
 qualification and other filesystem qualification are not claimed. Local only.
 See [complete evidence, failures, session tails and commands](fresh-metadata-batching.md).
+
+## Expiry scheduling and Glider behavior (2026-10-21)
+
+The bounded macOS internal-read candidate preserves the source/hash/validation
+contract while avoiding a second thread-pool work item per read. Pinned runtime IL
+and focused cancellation/error-order proofs passed, along with existing native
+security/mutation and five failed-refresh guards per variant. Worker qualification
+passed 2,400 ordinary and 800 diagnostic responses; the native shipped/candidate/
+Glider comparison passed 7,200 steady-state checks in 36 fresh processes. Full-graph
+post-idle median improved 180.55 to 158.33 ms versus shipped; Glider was 3.47 ms.
+Worker p90/search regressions and all tails remain in the evidence. No universal win.
+
+Twelve multi-case and twelve quiescent fresh-process behavior sessions passed.
+Glider synchronized one file after a metadata-preserving edit from a zero-event
+state, on both graph sizes; repeated/distinct queries remained similarly fast.
+Both products briefly returned old dependency results before watcher invalidation.
+The main measured gap is FreeFlight's mandatory whole-graph refresh work, not slow
+outline semantics. Skipping unchanged non-target validation would change the
+existing contract and was not implemented. All work remains local. See
+[expiry qualification](expiry-read-scheduling.md) and
+[comparative behavior, limitations and design boundary](glider-behavior.md).

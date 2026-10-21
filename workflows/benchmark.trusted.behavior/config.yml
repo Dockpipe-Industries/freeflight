@@ -1,0 +1,9 @@
+name: benchmark.trusted.behavior
+description: Compare pinned products' freshness, watcher and repeated-query behavior on disposable fixtures.
+vault: none
+docker_preflight: false
+steps:
+  - id: compare
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/behavior.py

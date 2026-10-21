@@ -156,3 +156,5 @@ Same-machine product comparison: [Glider head-to-head](glider-head-to-head.md).
 Glider-target experiments: [retained candidate and measurements](glider-target-iteration.md).
 
 Fresh metadata batching: [API proof, qualification and limits](fresh-metadata-batching.md).
+
+Expiry and comparative behavior: [bounded read scheduling](expiry-read-scheduling.md), [Glider evidence and contract boundary](glider-behavior.md).

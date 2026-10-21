@@ -380,6 +380,18 @@ internal sealed class SourceEngine : IDisposable
         }
     }
 
+    // The pinned Darwin runtime queues a synchronous read for ReadAsync; it checks
+    // cancellation before that read and does not interrupt an in-flight syscall.
+    // Invoke already runs on a worker task, so avoid a second work item per chunk.
+    // Keep the same bounded read, pre-read token check and subsequent accounting /
+    // cancellation checks. External inputs and other platforms retain ReadAsync.
+    private static ValueTask<int> ReadCompilerBytes(FileStream stream, byte[] buffer, CancellationToken token, bool inline)
+    {
+        if (!inline) return stream.ReadAsync(buffer.AsMemory(), token);
+        token.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(stream.Read(buffer, 0, buffer.Length));
+    }
+
     private async Task Refresh(CancellationToken token, string? forceFile = null, bool forceAll = false)
     {
         // Admission-only sharing within this trusted refresh. Content reads below
@@ -476,7 +488,7 @@ internal sealed class SourceEngine : IDisposable
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             var buffer = readBuffer ??= new byte[8192];
             int count;
-            while ((count = await stream.ReadAsync(buffer.AsMemory(), token)) != 0)
+            while ((count = await ReadCompilerBytes(stream, buffer, token, OperatingSystem.IsMacOS() && !externalCompilerInputs.Contains(file))) != 0)
             {
                 ResourcePolicy.Check("maxFileBytes", root!, file, memory.Length + count, resources.MaxFileBytes);
                 bytes += count;

@@ -1098,3 +1098,15 @@ Runtime, active MCP, Biztraak, remote branches and services remain untouched.
 Closing staged `repo.check` and Python syntax checks passed. The six-condition log
 audit correctly accepts the four ordinary logs and rejects both diagnostic crashes.
 Production `src`, `include` and `workers` have no diff against d8232ec.
+
+## Deterministic shutdown repair (2026-10-21)
+
+Forced capture/completion/disposal/cancel interleavings reproduce the defect in
+the actual ordinary Program and generated diagnostic Program. Added a small
+request cancellation lifetime lease, retaining callback exceptions and avoiding
+locks across callbacks. Before/after EOF, shutdown and explicit cancel proofs
+passed their expected outcomes, plus five adversarial lifetime contracts. Hardened
+worker test teardown exit checks while retaining crash-log rejection. Full local
+worker/security/mutation, 16-case incremental and transaction qualification passed
+in `shutdown-lifetime-v1`. No freshness/validation/recovery contract changed.
+Prior failures remain retained; ordinary benchmark control qualification follows.

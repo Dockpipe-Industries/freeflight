@@ -32,7 +32,7 @@ internal static class Program
             Console.Error.WriteLine("WARNING: trusted MSBuild mode can execute repository code during project evaluation. This process is not a sandbox. No restore or production build is requested.");
         using var engine = new SourceEngine(trustedMsbuild, commandLine.Contains("--incremental-validation", StringComparer.Ordinal));
         using var gate = new SemaphoreSlim(1);
-        var active = new ConcurrentDictionary<string, CancellationTokenSource>();
+        var active = new ConcurrentDictionary<string, RequestCancellation>();
         var jobs = new List<Task>();
         var outputGate = new object();
         void Reply(object value)
@@ -67,7 +67,7 @@ internal static class Program
                 if (method == "shutdown") break;
                 if (active.Count >= 32) throw new InvalidOperationException("Worker request queue is full");
                 var key = id.GetRawText();
-                var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+                var cts = new RequestCancellation(TimeSpan.FromSeconds(60));
                 if (!active.TryAdd(key, cts)) { cts.Dispose(); throw new ArgumentException("Duplicate request id"); }
                 jobs.RemoveAll(t => t.IsCompleted);
                 jobs.Add(Task.Run(async () =>

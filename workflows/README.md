@@ -85,3 +85,8 @@ through the existing MCP driver, with fixed/rotating operation order and separat
 generated-source native diagnostics. It retains paired session ratios, live
 recovery events and correlated core/worker/client costs. See
 [usage and interpretation limits](../docs/native-mcp-attribution.md).
+
+`benchmark.shutdown` forces the captured-cancellation/disposal race against pinned
+before and current source, in ordinary and generated diagnostic builds, then checks
+callback lifetime contracts. It is a correctness proof, not a timing run. See
+[commands and retained failures](../docs/shutdown-lifetime.md).

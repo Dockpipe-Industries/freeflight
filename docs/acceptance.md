@@ -457,3 +457,14 @@ logs; four ordinary conditions pass this audit, both diagnostic conditions fail.
 All evidence and the overriding `qualification-review.json` remain local. No
 production fix, parallel recovery or publication was attempted. See
 [attribution, mixed timings, failure and next proof obligations](native-mcp-attribution.md).
+
+## Cancellation lifetime correction (2026-10-21)
+
+The shutdown/cancel race is confirmed in ordinary production source as well as
+diagnostic builds. A lifetime lease prevents source disposal during cancellation
+without holding a lock across callbacks. All six forced before cases reproduce
+the defect; all six fixed cases pass, plus five callback/disposal contracts.
+Both worker harnesses now check EOF exit status. The broad worker qualification,
+16 incremental faults and transactional failure cases pass; earlier diagnostic
+failures remain recorded. Native/ordinary timing follow separately. See
+[source reasoning, receipts and repeat commands](shutdown-lifetime.md).

@@ -273,4 +273,4 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
         print("Trusted MSBuild project settings, cross-project definition/references, diagnostics, refresh and boundary tests passed")
     finally:
         process.stdin.close()
-        process.wait(timeout=15)
+        assert process.wait(timeout=15) == 0, "trusted worker failed during EOF shutdown"

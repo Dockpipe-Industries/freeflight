@@ -127,6 +127,19 @@ See https://emscripten.org/docs/introducing_emscripten/emscripten_license.html.
 
 ## Design and source-backed documentation review
 
+The follow-up typography review inspected actual browser-rendered Nucleon and
+DockPipe Cloud QML applications, built locally from Nucleon `654d66d4` and Cloud
+`5ca7fbd2`. The comparison builds used the existing Qt 6.12 / Emscripten 5.0.5
+Mac toolchain; they do not qualify those repositories' pinned Linux release kits.
+FreeFlight now embeds the same unmodified Inter and DejaVu Sans Mono font assets,
+retains their licenses in `NOTICES.txt`, and uses Qt Basic controls with consistent
+46-pixel primary actions. Its light-blue and dark-blue palettes remain independent.
+
+Credential-free loopback profiling did not reproduce a prolonged startup: the
+initial three-site samples reached loader completion in 217–442 ms, with repeated
+loads mostly 91–127 ms. These are local Chromium/software-rendering observations,
+not production network, full-stack cold-start, or input-latency acceptance results.
+
 The local correction provides light-blue and dark-blue palettes with System/Light/Dark
 selection, saved in browser local storage. The Qt landing page uses a bounded hero,
 workflow panel and feature columns; small screens stack the content.

@@ -5,6 +5,29 @@ const browser=await chromium.launch({channel:'chromium',args:['--enable-webgl','
 const receipt=await(await fetch(url+'/release.json')).json();
 const company=receipt.environment==='production'?'https://dockpipe.com/#company':'https://staging.dockpipe.com/#company';
 const evidence=[],errors=[];
+async function captureWorkflowPanel(page, width) {
+ const screenshot = await page.screenshot();
+ const glyphPixels = await page.evaluate(async ({encoded, width}) => {
+  const response = await fetch('data:image/png;base64,' + encoded);
+  const image = await createImageBitmap(await response.blob());
+  const canvas = document.createElement('canvas');
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const context = canvas.getContext('2d');
+  context.drawImage(image, 0, 0);
+  // Interior text areas for the two fixed test viewports; exclude borders and controls.
+  const area = width > 760 ? [850, 280, 400, 240] : [40, 700, 300, 100];
+  const pixels = context.getImageData(...area).data;
+  let count = 0;
+  for (let index = 0; index < pixels.length; index += 4) {
+   if (pixels[index] > 120 && pixels[index + 1] > 120 && pixels[index + 2] > 120) count++;
+  }
+  image.close();
+  return count;
+ }, {encoded: screenshot.toString('base64'), width});
+ if (glyphPixels < 500) throw Error('Workflow panel text disappeared during Qt rendering');
+ return screenshot;
+}
 try{
  const robots=await(await fetch(url+'/robots.txt')).text();
  if(receipt.environment==='staging' && !robots.includes('Disallow: /'))throw Error('Staging indexing');
@@ -23,12 +46,12 @@ try{
   await page.goto(url,{waitUntil:'networkidle'});await page.waitForFunction(()=>!document.getElementById('loading'),null,{timeout:60000});
   await page.waitForTimeout(500);
   const canvas=page.locator('canvas').first();const bounds=await canvas.boundingBox();if(!bounds||bounds.width<width-40)throw Error('Viewport');
-  await page.screenshot({path:output+'/'+name+'-light.png'});
+  await writeFile(output+'/'+name+'-light.png', await captureWorkflowPanel(page,width));
   // Exercise the real Qt theme control, then prove its saved value survives reload.
   const inner=Math.min(1180,width-(width<760?36:96));
   await page.mouse.click((width+inner)/2-50,width<760?42:44);await page.keyboard.press('End');await page.keyboard.press('Enter');
   await page.waitForFunction(()=>localStorage.getItem('freeflight-theme')==='dark');
-  await page.waitForTimeout(250);await page.screenshot({path:output+'/'+name+'-dark.png'});
+  await page.waitForTimeout(250);await writeFile(output+'/'+name+'-dark.png', await captureWorkflowPanel(page,width));
   await page.reload({waitUntil:'networkidle'});await page.waitForFunction(()=>!document.getElementById('loading'),null,{timeout:60000});
   if(await page.evaluate(()=>document.documentElement.dataset.theme)!=='dark')throw Error('Theme persistence');
   // The actual Qt Docs navigation must open the semantic reader.

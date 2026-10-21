@@ -140,6 +140,13 @@ initial three-site samples reached loader completion in 217–442 ms, with repea
 loads mostly 91–127 ms. These are local Chromium/software-rendering observations,
 not production network, full-stack cold-start, or input-latency acceptance results.
 
+Repeated browser captures exposed an intermittent blank workflow example while
+the rest of the Qt page remained visible. Compositing that fixed-color panel as
+one Qt layer retained its text in twelve repeated desktop/mobile light/dark loads.
+The browser smoke check now verifies visible glyph pixels inside the panel in
+both themes, in addition to saving screenshots. This is a repaint correction,
+not evidence of a startup-speed improvement.
+
 The local correction provides light-blue and dark-blue palettes with System/Light/Dark
 selection, saved in browser local storage. The Qt landing page uses a bounded hero,
 workflow panel and feature columns; small screens stack the content.

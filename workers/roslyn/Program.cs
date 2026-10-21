@@ -421,6 +421,7 @@ internal sealed class SourceEngine : IDisposable
                 nextSnapshots.Remove(removed);
             }
         }
+        byte[]? readBuffer = null;
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
@@ -453,7 +454,7 @@ internal sealed class SourceEngine : IDisposable
             using var stream = OpenCompilerInput(file);
             using var memory = new MemoryStream();
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            var buffer = new byte[8192];
+            var buffer = readBuffer ??= new byte[8192];
             int count;
             while ((count = await stream.ReadAsync(buffer.AsMemory(), token)) != 0)
             {
@@ -467,6 +468,11 @@ internal sealed class SourceEngine : IDisposable
             memory.Position = 0;
             nextFingerprints[file] = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
             nextSnapshots[file] = new FileSnapshot(memory.Length, modified, dirty, generation, now);
+            // A freshly read exact-byte match cannot change Roslyn text. Keep the
+            // refreshed snapshot/hash staged, but avoid allocating/decoding it again.
+            if (fingerprints.TryGetValue(file, out var previousHash) &&
+                previousHash == nextFingerprints[file] && documents.ContainsKey(file))
+                continue;
             var source = SourceText.From(memory, encoding: Encoding.UTF8);
             if (!documents.TryGetValue(file, out var id))
             {

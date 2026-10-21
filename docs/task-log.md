@@ -876,3 +876,10 @@ remained disabled and no site was activated. Disposable Ubuntu migration CI pass
 The first Windows run exposed POSIX mode assumptions in the filesystem fixture;
 that fixture is now explicitly POSIX-only while byte/hash rejection tests run on
 all platforms. Actual installer/migration coverage remains in Ubuntu CI.
+
+Promotion push qualification exposed Nginx's asynchronous reload in the disposable
+hostname fixture: the first request could reach an old worker. The prepared fixture
+correction polls the required new-host 200 and old-host 404 outcomes for at most
+five seconds without repeating any mutation. Both outcomes remain mandatory.
+Publication of this test-only correction is pending explicit approval; no new
+qualification result is claimed.

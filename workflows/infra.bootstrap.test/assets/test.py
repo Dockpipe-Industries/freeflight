@@ -87,10 +87,17 @@ def main():
     run(['nginx', '-t'])
     run(['systemctl', 'reload', 'nginx'])
     migrate({'hashes': hashes})
-    assert_true(http(18081, '/healthz', {'Host': NEW, 'X-DockPipe-Client-IP': '192.0.2.7'})[0] == 200,
-                'New hostname was not activated at the origin')
-    assert_true(http(18081, '/healthz', {'Host': OLD, 'X-DockPipe-Client-IP': '192.0.2.7'})[0] == 404,
-                'Old hostname remained accepted')
+    # systemctl reload returns after signaling Nginx; replacement workers become
+    # ready asynchronously. Poll both required outcomes without repeating a mutation.
+    deadline = time.monotonic() + 5
+    while True:
+        new_status = http(18081, '/healthz', {'Host': NEW, 'X-DockPipe-Client-IP': '192.0.2.7'})[0]
+        old_status = http(18081, '/healthz', {'Host': OLD, 'X-DockPipe-Client-IP': '192.0.2.7'})[0]
+        if (new_status, old_status) == (200, 404) or time.monotonic() >= deadline:
+            break
+        time.sleep(0.05)
+    assert_true(new_status == 200, 'New hostname did not become ready: HTTP ' + str(new_status))
+    assert_true(old_status == 404, 'Old hostname remained accepted: HTTP ' + str(old_status))
     for path, digest in original.items():
         assert_true(hashlib.sha256(path.read_bytes()).hexdigest() == digest, 'Existing service configuration changed')
     assert_true(http(18082)[1] == b'existing-site-untouched', 'Existing service changed during install')

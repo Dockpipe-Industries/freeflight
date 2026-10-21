@@ -543,9 +543,9 @@ internal sealed class SourceEngine : IDisposable
             }
             // Cached ancestor checks authorize snapshot admission, never a read.
             // Preserve full validation immediately before opening source bytes.
-            if (incrementalValidation)
+            if (incrementalValidation && !UseHandleAdmission(file))
                 CheckCompilerInput(file);
-            else if (checkedAncestors is not null && !externalCompilerInputs.Contains(file))
+            else if (checkedAncestors is not null && !externalCompilerInputs.Contains(file) && !UseHandleAdmission(file))
                 CheckPath(file);
             // Bounded read even when the file grows after enumeration.
             using var stream = OpenCompilerInput(file);
@@ -664,8 +664,16 @@ internal sealed class SourceEngine : IDisposable
     [DllImport("libc", EntryPoint = "open", SetLastError = true)]
     private static extern int OpenNonBlocking([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int flags);
 
+    private bool UseHandleAdmission(string path) => trustedMsbuild && OperatingSystem.IsMacOS() && !externalCompilerInputs.Contains(path);
+
     private FileStream OpenCompilerInput(string path)
     {
+        if (UseHandleAdmission(path))
+            return DarwinSourceHandle.Open(path, root!, () =>
+            {
+                CheckPath(path);
+                return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            });
         if (!externalCompilerInputs.Contains(path) || OperatingSystem.IsWindows())
             return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         // A declared FIFO must not block open before cancellation can be observed.

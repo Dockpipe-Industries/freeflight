@@ -56,7 +56,8 @@ def instrument(path):
         parent = '        var parent = knownParent ?? Path.GetDirectoryName(file)!;' if 'var parent = knownParent' in s else '        var parent = Path.GetDirectoryName(file)!;'
         replace(parent, '        using var scope = BenchProfile.Scope("snapshotPath");\n'+parent)
         replace('\n        if ((info.Attributes & FileAttributes.ReparsePoint)', '\n        if ((BenchProfile.Leaf(info) & FileAttributes.ReparsePoint)')
-    replace('            using var stream = OpenCompilerInput(file);', '            var openStart = Stopwatch.GetTimestamp();\n            using var stream = OpenCompilerInput(file);\n            BenchProfile.Add("open", openStart);')
+    open_call = '            using var stream = OpenCompilerInput(file, recover);' if 'OpenCompilerInput(file, recover)' in s else '            using var stream = OpenCompilerInput(file);'
+    replace(open_call, '            var openStart = Stopwatch.GetTimestamp();\n'+open_call+'\n            BenchProfile.Add("open", openStart);')
     replace('IncrementalHash.CreateHash(HashAlgorithmName.SHA256)', 'BenchProfile.CreateHash()')
     if 'await ReadCompilerBytes(' in s:
         replace('await ReadCompilerBytes(stream, buffer, token, OperatingSystem.IsMacOS() && !externalCompilerInputs.Contains(file))', 'await BenchProfile.ReadSelected(stream, buffer, token, OperatingSystem.IsMacOS() && !externalCompilerInputs.Contains(file))')

@@ -143,6 +143,8 @@ def qualify(config):
         command([sys.executable,'-B',str(Path(__file__).with_name('mutations.py')),DOTNET,v['dll'],str(OUT/variant/'mutations'),config['fixtures']['433']['root']],variant+'-mutations.log')
         if platform.system() == 'Darwin' and (OUT/variant/'source/workers/roslyn/DarwinMetadataBatch.cs').is_file():
             command([sys.executable,'-B',str(Path(__file__).with_name('metadata_tests.py')),DOTNET,str(OUT/variant/'source'),str(OUT/variant/'metadata-proof')],variant+'-metadata-proof.log')
+        if platform.system() == 'Darwin' and (OUT/variant/'source/workers/roslyn/DarwinSourceHandle.cs').is_file():
+            command([sys.executable,'-B',str(Path(__file__).with_name('serial_handle_tests.py')),DOTNET,str(OUT/variant/'source'),str(OUT/variant/'serial-handle-proof')],variant+'-serial-handle-proof.log')
         if platform.system() == 'Darwin' and 'ReadCompilerBytes(' in (OUT/variant/'source/workers/roslyn/Program.cs').read_text():
             command([sys.executable,'-B',str(Path(__file__).with_name('expiry_tests.py')),DOTNET,str(OUT/variant/'source'),str(OUT/variant/'expiry-proof')],variant+'-expiry-proof.log')
     if 'FindCompilationDeclarations(' in (OUT/'candidate/source/workers/roslyn/SemanticQueries.cs').read_text():

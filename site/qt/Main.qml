@@ -114,6 +114,8 @@ ApplicationWindow {
                     }
                     Rectangle {
                         Layout.fillWidth: true; Layout.preferredWidth: 460; implicitHeight: 350; radius: 12; color: "#101e32"; border.color: "#354c6b"
+                        // Keep the fixed-color example composited together during palette changes.
+                        layer.enabled: true
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 24; spacing: 16
                             RowLayout { Layout.fillWidth: true; Label { text: "YOUR MCP WORKFLOW"; color: "#a6bcdc"; font.pixelSize: 10; font.letterSpacing: 1.5 } Item { Layout.fillWidth: true } Label { text: "●  ●  ●"; color: "#6483ac"; font.pixelSize: 10 } }

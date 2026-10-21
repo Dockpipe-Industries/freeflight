@@ -290,3 +290,11 @@ legacy 4.7/4.8/4.8.1 fixtures plus SDK-style net48 against the packaged executab
 The SDK-style disposable fixture explicitly restores before server startup; the
 server never restores it. Hosted Windows qualification is required before claiming
 these added cases pass.
+
+## Local incremental validation prototype
+
+Strict validation remains the default. An operator may explicitly add
+`--incremental-validation` alongside `--trusted-msbuild` for watcher-assisted
+non-target refresh with a five-second full content recovery deadline. See
+[the freshness contract and qualification](../../docs/incremental-validation.md).
+This is a distinct freshness mode, not an equivalent strict-mode optimization.

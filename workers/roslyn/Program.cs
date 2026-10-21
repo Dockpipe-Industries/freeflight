@@ -25,12 +25,12 @@ internal static class Program
             detectEncodingFromByteOrderMarks: false, bufferSize: 4096, leaveOpen: true);
         using var output = new StreamWriter(Console.OpenStandardOutput(), utf8,
             bufferSize: 4096, leaveOpen: true) { AutoFlush = true, NewLine = "\n" };
-        if (commandLine.Any(argument => argument != "--trusted-msbuild"))
-            throw new ArgumentException("Only --trusted-msbuild is accepted");
+        if (commandLine.Any(argument => argument != "--trusted-msbuild" && argument != "--incremental-validation"))
+            throw new ArgumentException("Only --trusted-msbuild and --incremental-validation are accepted");
         var trustedMsbuild = commandLine.Contains("--trusted-msbuild", StringComparer.Ordinal);
         if (trustedMsbuild)
             Console.Error.WriteLine("WARNING: trusted MSBuild mode can execute repository code during project evaluation. This process is not a sandbox. No restore or production build is requested.");
-        using var engine = new SourceEngine(trustedMsbuild);
+        using var engine = new SourceEngine(trustedMsbuild, commandLine.Contains("--incremental-validation", StringComparer.Ordinal));
         using var gate = new SemaphoreSlim(1);
         var active = new ConcurrentDictionary<string, CancellationTokenSource>();
         var jobs = new List<Task>();
@@ -115,6 +115,7 @@ internal sealed class SourceEngine : IDisposable
     private long invalidationGeneration;
     private long changeSequence;
     private long bytesRead;
+    private long readFiles;
     private long reusedSnapshots;
     private sealed record FileSnapshot(long Length, long Modified, long Dirty, long Generation, long ValidatedAt, string Parent);
 
@@ -161,8 +162,21 @@ internal sealed class SourceEngine : IDisposable
     private readonly HashSet<string> externalCompilerInputs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<DocumentId>> externalDocuments = new(StringComparer.Ordinal);
     private readonly bool trustedMsbuild;
+    private readonly bool incrementalValidation;
+    private readonly Dictionary<string, FileInfo> trustedPathIndex = new(StringComparer.Ordinal);
+    private long committedBytes;
+    private long recoveredGeneration = -1;
+    private long recoveredAt;
+    private long fullRecoveries;
+    private long incrementalRefreshes;
     private string Mode => trustedMsbuild ? "trusted-msbuild" : "safe-source";
-    public SourceEngine(bool trustedMsbuild) => this.trustedMsbuild = trustedMsbuild;
+    public SourceEngine(bool trustedMsbuild, bool incrementalValidation = false)
+    {
+        if (incrementalValidation && !trustedMsbuild)
+            throw new ArgumentException("Incremental validation requires trusted MSBuild mode");
+        this.trustedMsbuild = trustedMsbuild;
+        this.incrementalValidation = incrementalValidation;
+    }
     private string? selectedProject;
     private List<LoadWarning> loadWarnings = [];
     private ProjectId? projectId;
@@ -172,7 +186,7 @@ internal sealed class SourceEngine : IDisposable
 
     public async Task<object> Invoke(string method, JsonElement args, CancellationToken token)
     {
-        if (method != "open" && new[] { "mode", "project", "trustedMsbuild", "trusted-msbuild", "csharp" }.Any(name => args.TryGetProperty(name, out _)))
+        if (method != "open" && new[] { "mode", "project", "trustedMsbuild", "trusted-msbuild", "csharp", "incrementalValidation", "incremental-validation" }.Any(name => args.TryGetProperty(name, out _)))
             throw new ArgumentException("Project selection and trust cannot be changed by semantic requests");
         if (method != "open" && args.TryGetProperty("resources", out _))
             throw new ArgumentException("Resource settings may only be supplied by the core when opening a workspace");
@@ -187,7 +201,8 @@ internal sealed class SourceEngine : IDisposable
             loadWarnings,
             degradedFidelity = !trustedMsbuild || loadWarnings.Count > 0,
             edits = "preview-only",
-            refreshStats = new { bytesRead, reusedSnapshots, invalidationGeneration }
+            validationMode = incrementalValidation ? "incremental-with-recovery" : "strict",
+            refreshStats = new { bytesRead, readFiles, reusedSnapshots, invalidationGeneration, fullRecoveries, incrementalRefreshes }
         };
         if (method == "open")
         {
@@ -202,6 +217,10 @@ internal sealed class SourceEngine : IDisposable
             workspace.ClearSolution();
             documents.Clear();
             trustedPaths.Clear();
+            trustedPathIndex.Clear();
+            committedBytes = 0;
+            recoveredGeneration = -1;
+            recoveredAt = 0;
             trustedDirectoryMembers.Clear();
             fingerprints.Clear();
             projectId = null;
@@ -242,6 +261,7 @@ internal sealed class SourceEngine : IDisposable
                 foreach (var entry in loadedDocuments) documents.Add(entry.Key, entry.Value);
                 trustedPaths.AddRange(documents.Keys.Select(path => new FileInfo(path)));
                 trustedPaths.Sort((left, right) => StringComparer.Ordinal.Compare(left.FullName, right.FullName));
+                foreach (var info in trustedPaths) trustedPathIndex.Add(info.FullName, info);
                 foreach (var info in trustedPaths)
                 {
                     if (externalCompilerInputs.Contains(info.FullName)) continue;
@@ -392,13 +412,49 @@ internal sealed class SourceEngine : IDisposable
         return ValueTask.FromResult(stream.Read(buffer, 0, buffer.Length));
     }
 
+    // The catalogue is immutable until reopen. Unknown paths may be directories,
+    // project membership changes or aliases: recover conservatively rather than
+    // guessing whether their descendants can affect an existing compilation.
+    private List<FileInfo> SelectIncrementalFiles(KeyValuePair<string, long>[] changes,
+        string? forceFile, ref bool recover, CancellationToken token)
+    {
+        if (recover) return trustedPaths;
+        var selected = new HashSet<string>(externalCompilerInputs, StringComparer.Ordinal);
+        if (forceFile is not null)
+        {
+            if (!trustedPathIndex.ContainsKey(forceFile))
+                throw new ArgumentException("File is not in the C# workspace");
+            selected.Add(forceFile);
+        }
+        foreach (var change in changes)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!trustedPathIndex.ContainsKey(change.Key))
+            {
+                recover = true;
+                return trustedPaths;
+            }
+            selected.Add(change.Key);
+        }
+        return selected.Order(StringComparer.Ordinal).Select(path => trustedPathIndex[path]).ToList();
+    }
+
     private async Task Refresh(CancellationToken token, string? forceFile = null, bool forceAll = false)
     {
+        var recoveryStarted = Environment.TickCount64;
+        var startGeneration = Interlocked.Read(ref invalidationGeneration);
+        var changes = incrementalValidation ? dirtyFiles.ToArray() : [];
+        var recover = incrementalValidation && (forceAll || watcher is null ||
+            recoveredGeneration != startGeneration || recoveryStarted - recoveredAt >= 5000);
+        var selectedFiles = incrementalValidation
+            ? SelectIncrementalFiles(changes, forceFile, ref recover, token) : null;
+        // Every selected incremental input is read, including exact external inputs.
+        // A recovery is a content sweep even when length and timestamps match.
         // Admission-only sharing within this trusted refresh. Content reads below
         // always revalidate the complete path without using this set.
         var checkedAncestors = trustedMsbuild && !forceAll && watcher is not null
             ? new HashSet<string>(StringComparer.Ordinal) : null;
-        var files = trustedMsbuild ? trustedPaths : new List<FileInfo>();
+        var files = selectedFiles ?? (trustedMsbuild ? trustedPaths : new List<FileInfo>());
         var pending = new Stack<string>();
         if (!trustedMsbuild) pending.Push(root!);
         long bytes = 0;
@@ -426,8 +482,14 @@ internal sealed class SourceEngine : IDisposable
                 files.Add(new FileInfo(path));
             }
         }
-        ResourcePolicy.Check("maxFiles", root!, root!, files.Count, resources.MaxFiles);
+        ResourcePolicy.Check("maxFiles", root!, root!, trustedMsbuild ? trustedPaths.Count : files.Count, resources.MaxFiles);
         bytes = 0; // Count actual bytes again; stat values can change during a read.
+        if (incrementalValidation && !recover)
+        {
+            bytes = committedBytes;
+            foreach (var info in files)
+                if (snapshots.TryGetValue(info.FullName, out var old)) bytes -= old.Length;
+        }
         if (!trustedMsbuild) files.Sort((left, right) => StringComparer.Ordinal.Compare(left.FullName, right.FullName));
         var solution = workspace.CurrentSolution;
         // Trusted membership changes only on reopen. Stage only refreshed entries;
@@ -447,7 +509,8 @@ internal sealed class SourceEngine : IDisposable
             }
         }
         byte[]? readBuffer = null;
-        using var metadataBatch = OperatingSystem.IsMacOS() && checkedAncestors is not null
+        using var metadataBatch = OperatingSystem.IsMacOS() && checkedAncestors is not null &&
+            (!incrementalValidation || recover)
             ? new DarwinMetadataBatch(trustedDirectoryMembers, resources.MaxDirectoryEntries, path => CheckPath(path)) : null;
         foreach (var info in files)
         {
@@ -468,7 +531,7 @@ internal sealed class SourceEngine : IDisposable
             var dirty = dirtyFiles.GetValueOrDefault(file);
             var now = Environment.TickCount64;
             ResourcePolicy.Check("maxFileBytes", root!, file, length, resources.MaxFileBytes);
-            if (!forceAll && !string.Equals(file, forceFile, PathComparison) && watcher is not null &&
+            if (!incrementalValidation && !forceAll && !string.Equals(file, forceFile, PathComparison) && watcher is not null &&
                 cached is not null && cached.Length == length && cached.Modified == modified &&
                 cached.Generation == generation && cached.Dirty == dirty && now - cached.ValidatedAt < 5000 &&
                 documents.ContainsKey(file))
@@ -480,10 +543,13 @@ internal sealed class SourceEngine : IDisposable
             }
             // Cached ancestor checks authorize snapshot admission, never a read.
             // Preserve full validation immediately before opening source bytes.
-            if (checkedAncestors is not null && !externalCompilerInputs.Contains(file))
+            if (incrementalValidation)
+                CheckCompilerInput(file);
+            else if (checkedAncestors is not null && !externalCompilerInputs.Contains(file))
                 CheckPath(file);
             // Bounded read even when the file grows after enumeration.
             using var stream = OpenCompilerInput(file);
+            readFiles++;
             using var memory = new MemoryStream();
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             var buffer = readBuffer ??= new byte[8192];
@@ -522,6 +588,8 @@ internal sealed class SourceEngine : IDisposable
                     solution = solution.WithDocumentText(id, source);
         }
         token.ThrowIfCancellationRequested();
+        if (incrementalValidation && startGeneration != Interlocked.Read(ref invalidationGeneration))
+            throw new IOException("Watcher invalidated during refresh; full recovery remains required");
         if (!ReferenceEquals(solution, workspace.CurrentSolution) && !workspace.TryApplyChanges(solution)) throw new InvalidOperationException("Could not update workspace");
         if (!trustedMsbuild)
         {
@@ -532,6 +600,21 @@ internal sealed class SourceEngine : IDisposable
         }
         foreach (var entry in nextSnapshots) snapshots[entry.Key] = entry.Value;
         foreach (var entry in nextFingerprints) fingerprints[entry.Key] = entry.Value;
+        if (incrementalValidation)
+        {
+            committedBytes = bytes;
+            if (recover)
+            {
+                recoveredAt = recoveryStarted;
+                recoveredGeneration = startGeneration;
+                fullRecoveries++;
+            }
+            else incrementalRefreshes++;
+            // Acknowledge only captured versions after successful publication.
+            // Concurrent events, failed/cancelled work and overflow remain pending.
+            foreach (var change in changes)
+                ((ICollection<KeyValuePair<string, long>>)dirtyFiles).Remove(change);
+        }
     }
 
     // Only documents returned by the explicitly trusted MSBuild graph may enter

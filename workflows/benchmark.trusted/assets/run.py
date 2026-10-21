@@ -58,6 +58,7 @@ def prepare():
                   referenceCallers=int(os.environ.get('FREEFLIGHT_TRUSTED_BENCH_CALLERS','1')),
                   searchQuery=os.environ.get('FREEFLIGHT_TRUSTED_BENCH_QUERY','C58'),
                   firstVariant=os.environ.get('FREEFLIGHT_TRUSTED_BENCH_FIRST','baseline'),
+                  candidateArgs=['--incremental-validation'] if os.environ.get('FREEFLIGHT_TRUSTED_BENCH_INCREMENTAL') == '1' else [],
                   configuration='Release', transport='direct trusted worker; not full MCP', variants={})
     assert 0 <= config['paddingBytes'] <= 65536
     assert 1 <= config['referenceCallers'] <= 1000 and 1 <= len(config['searchQuery']) <= 256
@@ -112,9 +113,9 @@ def prepare():
     print('Prepared pinned source/build/fixture receipts:', OUT, flush=True)
 
 class Session:
-    def __init__(self,dll,name):
+    def __init__(self,dll,name,args=()):
         self.log=(OUT/(name+'.stderr')).open('w'); self.q=queue.Queue(); self.seq=0
-        self.p=subprocess.Popen([DOTNET,dll,'--trusted-msbuild'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=self.log,text=True,env=ENV)
+        self.p=subprocess.Popen([DOTNET,dll,'--trusted-msbuild',*args],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=self.log,text=True,env=ENV)
         def reader():
             for line in self.p.stdout:self.q.put(line)
             self.q.put(None)
@@ -143,6 +144,10 @@ def qualify(config):
             command([sys.executable,'-B',str(Path(__file__).with_name('metadata_tests.py')),DOTNET,str(OUT/variant/'source'),str(OUT/variant/'metadata-proof')],variant+'-metadata-proof.log')
         if platform.system() == 'Darwin' and 'ReadCompilerBytes(' in (OUT/variant/'source/workers/roslyn/Program.cs').read_text():
             command([sys.executable,'-B',str(Path(__file__).with_name('expiry_tests.py')),DOTNET,str(OUT/variant/'source'),str(OUT/variant/'expiry-proof')],variant+'-expiry-proof.log')
+    if config.get('candidateArgs'):
+        command([sys.executable, '-B', str(Path(__file__).with_name('incremental_tests.py')), DOTNET,
+                 str(OUT/'candidate/source'), str(OUT/'candidate/incremental-proof'),
+                 config['fixtures']['433']['root']], 'candidate-incremental-proof.log')
     save('qualification.json',dict(status='passed',variants=list(config['variants']),suites=['test_worker.py','test_trusted.py','mutations.py'],testHashes={name:digest(REPO/'workers/roslyn'/name) for name in ('test_worker.py','test_trusted.py')}))
 
 
@@ -204,7 +209,7 @@ def measure(config):
         for diagnostic,variants in ((False,order),(True,['baseline','candidate'])):
             for index,variant in enumerate(variants):
                 name=f'{size}-'+('profile' if diagnostic else 'plain')+f'-{index}-{variant}'
-                session=Session(config['variants'][variant]['profileDll' if diagnostic else 'dll'],name)
+                session=Session(config['variants'][variant]['profileDll' if diagnostic else 'dll'],name,config.get('candidateArgs',[]) if variant=='candidate' else [])
                 receipt=dict(name=name,size=int(size),variant=variant,diagnostic=diagnostic,samples=[])
                 samples.append(receipt)
                 try:
@@ -216,7 +221,7 @@ def measure(config):
                         for method,args in queries:
                             before,_=session.call('capabilities'); result,ms=session.call(method,**args); ident=session.seq
                             check(method,result); after,_=session.call('capabilities')
-                            readCount=int(size)-(after['refreshStats']['reusedSnapshots']-before['refreshStats']['reusedSnapshots'])
+                            readCount=(after['refreshStats']['readFiles']-before['refreshStats']['readFiles']) if 'readFiles' in after['refreshStats'] else int(size)-(after['refreshStats']['reusedSnapshots']-before['refreshStats']['reusedSnapshots'])
                             receipt['samples'].append(dict(readDocuments=readCount,readBytes=after['refreshStats']['bytesRead']-before['refreshStats']['bytesRead'],id=ident,round=round,phase=phase,method=method,ms=ms,before=before['refreshStats'],after=after['refreshStats']))
                         if config.get('roundIntervalSeconds',0)>0: time.sleep(max(0,config['roundIntervalSeconds']-(time.monotonic()-cycleStart)))
                     while round<3 or time.monotonic()-warmStart<config['warmupSeconds']:

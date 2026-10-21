@@ -1031,3 +1031,21 @@ outline semantics. Skipping unchanged non-target validation would change the
 existing contract and was not implemented. All work remains local. See
 [expiry qualification](expiry-read-scheduling.md) and
 [comparative behavior, limitations and design boundary](glider-behavior.md).
+
+## Opt-in incremental validation (2026-10-21)
+
+Resumed on the connected M6 from `789ba8d` after the user approved affected-file
+validation with strict mode retained. `repo.check` passed after granting the local
+DockPipe state-directory access required by the sandbox. Inspected Nucleon's
+architecture read-only at `de9ba1c`; transferred general immutable-index, bounded
+pending-work, deterministic-order and private-staging concepts without importing
+code or ML assets. Implemented an explicit startup mode and generated missed-event,
+overflow, concurrency, restored-timestamp, cross-project, cancellation, resource,
+external-input and path-race proofs. `incremental-v1` and `incremental-v2` passed
+qualification and repeated worker measurements; both retain a worse post-idle
+recovery cost. `incremental-v3` retains fresh reads while restoring request-local
+batch admission during full sweeps and passed final qualification. The native three-product comparison also passed
+all 7,344 measured semantic checks. Mixed outcomes remain explicit: near-parity
+outlines, slower definitions, costly expiry and worse paced search versus shipped.
+See `docs/incremental-validation.md` for per-session-derived tables and receipts. All changes
+remain local; published branches, active MCP, Biztraak and other services untouched.

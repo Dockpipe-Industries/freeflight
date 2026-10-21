@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 from provenance import capture, finish
+from documents import bundle as bundle_documents
 
 REPO = pathlib.Path(__file__).resolve().parents[3]
 TITLES = {"home": "Home", "installation": "Installation", "documentation": "Documentation", "languages": "Languages", "configuration": "MCP setup", "contributing": "Contributing"}
@@ -36,7 +37,7 @@ class Sections(HTMLParser):
                 url = attrs.get("href", "")
                 if not (url.startswith("https://github.com/") or url.startswith("#")):
                     raise RuntimeError("Unexpected product link")
-                self.current["html"] += '<a style="color:#c3ef88" href="' + html.escape(url, quote=True) + '">'
+                self.current["html"] += '<a href="' + html.escape(url, quote=True) + '">'
             elif tag == "div":
                 self.current["html"] += "<br>"
             elif tag == "tr":
@@ -74,6 +75,10 @@ def run(args, **kwargs):
 
 def main():
     provenance = capture(REPO)
+    environment = os.environ.get("FREEFLIGHT_SITE_ENV", "staging")
+    if environment not in ("staging", "production"):
+        raise RuntimeError("FREEFLIGHT_SITE_ENV must be staging or production")
+    company_url = "https://dockpipe.com/#company" if environment == "production" else "https://staging.dockpipe.com/#company"
     source = REPO / "site"
     pins = json.loads((source / "toolchain.json").read_text())
     build = REPO / ("bin/.local/site-qt-build-" + pins["qt"])
@@ -105,7 +110,7 @@ def main():
     env["EMSDK"] = str(sdk)
     env["EMSDK_PYTHON"] = toolchain.get("python", os.environ.get("EMSDK_PYTHON", sys.executable))
     env["PATH"] = str(sdk) + os.pathsep + str(sdk / "upstream/emscripten") + os.pathsep + env.get("PATH", "")
-    run([pathlib.Path(toolchain["wasmRoot"]) / "bin/qt-cmake", "-S", source / "qt", "-B", build, "-DCMAKE_BUILD_TYPE=Release", "-DFREEFLIGHT_SITE_CONTENT=" + str(content), "-DQT_CHAINLOAD_TOOLCHAIN_FILE=" + str(sdk / "upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake")], env=env)
+    run([pathlib.Path(toolchain["wasmRoot"]) / "bin/qt-cmake", "-S", source / "qt", "-B", build, "-DCMAKE_BUILD_TYPE=Release", "-DFREEFLIGHT_SITE_CONTENT=" + str(content), "-DFREEFLIGHT_COMPANY_URL=" + company_url, "-DQT_CHAINLOAD_TOOLCHAIN_FILE=" + str(sdk / "upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake")], env=env)
     run(["cmake", "--build", build, "--parallel", "2"], env=env)
     notices = REPO / "bin/.local/site-sources/NOTICES.txt"
     if not notices.is_file():
@@ -118,6 +123,10 @@ def main():
         shutil.copy2(build / name, stage / name)
     shutil.copy2(source / "index.html", stage / "review.html")
     shutil.copy2(source / "styles.css", stage / "styles.css")
+    bundle_documents(REPO, stage, run, env)
+    fallback = (stage / "review.html").read_text().replace("__COMPANY_URL__", company_url)
+    fallback = fallback.replace("</body>", "<script>" + (REPO / "bin/.local/site-docs-tools/reader.js").read_text().replace("</script", "<\\/script") + "</script></body>")
+    (stage / "review.html").write_text(fallback)
     environment = os.environ.get("FREEFLIGHT_SITE_ENV", "staging")
     if environment not in ("staging", "production"):
         raise RuntimeError("FREEFLIGHT_SITE_ENV must be staging or production")

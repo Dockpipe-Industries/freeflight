@@ -1,0 +1,9 @@
+name: site.preview
+description: Serve the built site on loopback only for local visual review; no deployment.
+vault: none
+docker_preflight: false
+steps:
+  - id: loopback-preview
+    kind: host
+    cwd: repo
+    cmd: python3 -m http.server 4174 --bind 127.0.0.1 --directory bin/.local/site

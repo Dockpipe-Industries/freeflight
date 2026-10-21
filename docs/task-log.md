@@ -1071,3 +1071,30 @@ recovery design. No watcher-only, TTL-extension, deferred-response recovery or
 unmeasured idle maintenance shortcut was taken. See `docs/compilation-search.md`.
 
 Closing qualification passed in `bin/.local/benchmarks/trusted/restored-runtime-final`: worker/security/mutation gates, all 16 incremental fault checks, metadata/read proofs and five failed-refresh state-preservation cases per variant. Baseline/candidate worker source hashes are identical to d8232ec. `bin/.local/glider-comparison/response-ref-replay-qualification` passed native worker/core gates with zero timed processes; its pinned core source hashes exactly match the measured response-only control.
+
+## Native MCP attribution pass (2026-10-21)
+
+Resumed from fb19231 with d8232ec runtime. Added serial DockPipe identical-binary
+and response-only controls, shared worker binaries, rotating query order, generated
+native stage/CPU instrumentation, client GC/parse observation and ID-based joins.
+Completed 32 ordinary and eight diagnostic processes; all 12,960 measured semantic
+checks passed. Retained query-position effects, A/A variability, all maxima and
+mixed candidate outcomes. Search gains did not qualify a general runtime winner.
+Recovery remains a complete content sweep, dominated by opens/path validation;
+documented an exact completion-order accounting counterexample and the ordered
+reservation/cancellation proof needed before parallel reads. No parallel candidate
+or weaker freshness contract was introduced.
+
+Final log review found a real qualification gap: both diagnostic trusted-worker
+tests printed an EOF cancellation-source disposal exception despite successful
+Python exit. Added a fail-closed log gate and an additive audit receipt marking
+those two conditions failed; preserved the original raw/completion receipts and
+did not call the diagnostic gates clean. The unchanged source has a shutdown
+cancellation/disposal race, now documented for a scoped deterministic correction.
+An ancillary read-only CPU-summary command initially treated a dictionary as a
+number; corrected its field access without rerunning or changing measurements.
+Runtime, active MCP, Biztraak, remote branches and services remain untouched.
+
+Closing staged `repo.check` and Python syntax checks passed. The six-condition log
+audit correctly accepts the four ordinary logs and rejects both diagnostic crashes.
+Production `src`, `include` and `workers` have no diff against d8232ec.

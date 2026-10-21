@@ -55,6 +55,18 @@ intervals=[float(x) for x in os.environ.get('FREEFLIGHT_GLIDER_INTERVALS','0,0.1
 sizes=[int(x) for x in os.environ.get('FREEFLIGHT_GLIDER_SIZES','433,5845').split(',')]
 assert rounds>=10 and sessions>=1 and warmup>=2 and set(sizes)<={433,5845}
 assert all(0<=x<=10 for x in intervals)
+diagnostic=os.environ.get('FREEFLIGHT_GLIDER_PROFILE')=='1'
+queryOrder=os.environ.get('FREEFLIGHT_GLIDER_QUERY_ORDER','fixed')
+assert queryOrder in ('fixed','rotating')
+requestedProducts=os.environ.get('FREEFLIGHT_GLIDER_PRODUCTS')
+requestedProducts=requestedProducts.split(',') if requestedProducts else None
+if requestedProducts:
+    assert len(requestedProducts)>=2 and len(set(requestedProducts))==len(requestedProducts)
+    assert set(requestedProducts)<={'freeflight','local-baseline','candidate','glider'}
+if diagnostic:
+    from native_profile import install_client
+    install_client(client)
+
 fixtures={}
 for size in sizes:
     old=original['fixtures'][str(size)];root=BASE/f'fixtures-net10/{size}'
@@ -83,8 +95,12 @@ for size in sizes:
     assert all(hashes[n]==v for n,v in old['hashes'].items() if n.endswith('.cs'))
     fixtures[str(size)]={**old,'root':str(root),'project':'Comparison.sln','hashes':hashes,'aggregateSha256':hashlib.sha256(json.dumps(hashes,sort_keys=True).encode()).hexdigest()}
 provenance=dict(officialPackageVerification=json.loads((BASE/'official-package-verification.json').read_text()),bundleSdkPinSha256=sha(BUNDLE.parent/'global.json'),releaseManifestSha256=sha(releasePath),sourceCommit=release['sourceCommit'],releaseTag=release['tag'],freeflightBinarySha256=sha(BUNDLE/'bin/freeflight'),bundleManifestSha256=sha(BUNDLE/'SHA256SUMS'),gliderVersion='13.3.0',gliderCommand=str(GLIDER),gliderFiles={str(p.relative_to(GLIDER.parent)):sha(p) for p in GLIDER.parent.rglob('*') if p.is_file()},sdk='10.0.402',sdkRoot=str(SDK),platform=platform.platform(),architecture=platform.machine(),rounds=rounds,sessions=sessions,warmupSeconds=warmup,intervals=intervals,fixtures=fixtures,originalProvenanceSha256=sha(origin),driverHashes={str(p.relative_to(trusted.REPO)):sha(p) for p in [Path(__file__),Path(client.__file__),Path(trusted.__file__)]},limitations=['Synthetic source graph, not Biztraak.','Source bytes and graph retained; both target net10.0 with SDK 10.0.402 instead of prior net11.0.','Published self-contained FreeFlight uses its bundled runtime; Glider uses existing .NET 10.0.13.','Glider definition/search omit columns and reference ends; exact source declarations are qualified separately and missing fields are not fabricated.','Reference symbol keys are discovered and validated before timing.','Contract differences in per-request freshness/security are not normalized away.'])
+provenance.update(diagnostic=diagnostic,queryOrder=queryOrder,requestedProducts=requestedProducts)
+profileAsset=Path(__file__).with_name('native_profile.py')
+provenance['driverHashes'][str(profileAsset.relative_to(trusted.REPO))]=sha(profileAsset)
+provenance['driverHashes'][str(Path(__file__).with_name('profile.py').relative_to(trusted.REPO))]=sha(Path(__file__).with_name('profile.py'))
 save(OUT/'provenance.json',provenance)
-for p in [Path(__file__),Path(client.__file__),Path(trusted.__file__)]:
+for p in [Path(__file__),Path(client.__file__),Path(trusted.__file__),profileAsset,Path(__file__).with_name('profile.py')]:
     target=OUT/'driver-source'/p.relative_to(trusted.REPO);target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(p,target)
 # Optional qualified local worker: published core and source-pinned native worker.
 # Preparation/tests finish before any timing process starts.
@@ -99,6 +115,13 @@ if candidateReceipt:
     prepared=json.loads((receipt/'provenance.json').read_text())
     frozen=prepared['variants']['candidate'];source=receipt/'candidate/source'
     for name,digest in frozen['sourceHashes'].items():assert sha(source/name)==digest,name
+    if diagnostic:
+        originalSource=source;source=OUT/'instrumented-worker-source'
+        shutil.copytree(originalSource,source,ignore=shutil.ignore_patterns('bin','obj'))
+        from native_profile import instrument_worker
+        instrument_worker(source)
+        provenance['workerInstrumentation']={'originalSourceHashes':frozen['sourceHashes'],
+            'instrumentedSourceHashes':{str(p.relative_to(source)):sha(p) for p in source.rglob('*') if p.is_file()}}
     save(OUT/'global.json',{'sdk':{'version':'10.0.402','rollForward':'disable'}})
     native=OUT/'candidate-native'
     with (OUT/'candidate-publish.log').open('w') as log:
@@ -108,6 +131,8 @@ if candidateReceipt:
     for test,args in [('test_worker.py',['--native',candidateCommand[0]]),('test_trusted.py',[prepared['dotnet'],candidateCommand[0],'--native'])]:
         with (OUT/(test+'.log')).open('w') as log:
             subprocess.run(['python3','-B',str(source/'workers/roslyn'/test),*args],cwd=source,env={**ENV,'DOTNET_ROOT':str(Path(prepared['dotnet']).resolve().parent),'PATH':str(Path(prepared['dotnet']).parent)+os.pathsep+ENV['PATH']},stdout=log,stderr=subprocess.STDOUT,check=True)
+        from native_profile import assert_clean_worker_log
+        assert_clean_worker_log(OUT/(test+'.log'))
     provenance['candidate']={'workerProvenanceSha256':sha(receipt/'provenance.json'),'qualificationSha256':sha(receipt/'qualification.json'),'transactionSha256':sha(receipt/'transaction-qualification.json'),'sourceHashes':frozen['sourceHashes'],'sdk':prepared['sdk'],'nativeFiles':{str(p.relative_to(native)):sha(p) for p in native.rglob('*') if p.is_file()},'command':candidateCommand,'transport':'Published unchanged core with locally published self-contained candidate worker'}
     save(OUT/'provenance.json',provenance)
 # Optional retained native local baseline, verified against its previous receipt.
@@ -132,6 +157,12 @@ if localBaselineReceipt:
         'sourceHashes':previous['candidate']['sourceHashes'], 'command':localBaselineCommand}
     provenance['orderPolicy']='Four products; reversed order in alternate sessions, balanced positions for two sessions'
     save(OUT/'provenance.json',provenance)
+if os.environ.get('FREEFLIGHT_GLIDER_SHARED_WORKER')=='1':
+    assert candidateCommand and localBaselineCommand
+    assert provenance['candidate']['sourceHashes']==provenance['localBaseline']['sourceHashes']
+    localBaselineCommand=candidateCommand[:]
+    provenance['sharedWorker']=True
+    provenance['localBaseline']['command']=localBaselineCommand
 # Build both local cores with the same compiler/options when testing core changes.
 candidateCore = BUNDLE/'bin/freeflight'
 localBaselineCore = candidateCore
@@ -150,6 +181,9 @@ if os.environ.get('FREEFLIGHT_GLIDER_BUILD_CANDIDATE_CORE') == '1':
         for name in names:
             data=(trusted.REPO/name).read_bytes() if ref is None else subprocess.check_output(['git','show',ref+':'+name],cwd=trusted.REPO)
             target=coreSource/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(data)
+        if diagnostic:
+            from native_profile import instrument_core
+            instrument_core(coreSource)
         coreBuild=OUT/(label+'-core-build')
         commands=[[cmake,'-S',str(coreSource),'-B',str(coreBuild),'-DCMAKE_BUILD_TYPE=Release',
                    '-DFETCHCONTENT_SOURCE_DIR_JSON='+str(jsonSource)],
@@ -170,6 +204,14 @@ if os.environ.get('FREEFLIGHT_GLIDER_BUILD_CANDIDATE_CORE') == '1':
     provenance['candidate']['transport']='Source-frozen local core with protocol/process gates and qualified native worker'
     provenance['localBaseline']['transport']='Commit-frozen local core built with identical compiler/options and retained qualified native worker'
     save(OUT/'provenance.json',provenance)
+if os.environ.get('FREEFLIGHT_GLIDER_IDENTICAL_CONTROL')=='1':
+    assert provenance.get('sharedWorker')
+    assert provenance['candidateCore']['sourceHashes']==provenance['local-baselineCore']['sourceHashes']
+    localBaselineCore=candidateCore
+    provenance['identicalBinaryControl']=True
+if diagnostic:
+    assert provenance.get('sharedWorker') and 'candidateCore' in provenance
+save(OUT/'provenance.json',provenance)
 if os.environ.get('FREEFLIGHT_GLIDER_PREPARE_ONLY') == '1':
     save(OUT/'qualification-only.json',{'status':'passed','timedProcesses':0,'note':'Preparation/native gates only; no latency claim.'})
     raise SystemExit(0)
@@ -201,7 +243,7 @@ def run_session(variant,f,size,interval,index):
     else:command=[str(GLIDER),'--no-telemetry','--max-response-chars','2000000','--msbuild-path',str(SDK/'sdk/10.0.402')]
     cpuStart=resource.getrusage(resource.RUSAGE_CHILDREN)
     s=client.Session(root,directory,command=command,environment=ENV,sample_memory=False,working_directory=root)
-    rec=dict(name=name,variant=variant,size=size,interval=interval,startupDiscoveryMs=s.startup_ms,samples=[],status='running');records.append(rec)
+    rec=dict(name=name,variant=variant,size=size,interval=interval,command=command,diagnostic=diagnostic,queryOrder=queryOrder,startupDiscoveryMs=s.startup_ms,samples=[],status='running');records.append(rec)
     save(directory/'discovery.json',s.server_info)
     try:
         start=time.perf_counter_ns()
@@ -275,9 +317,15 @@ def run_session(variant,f,size,interval,index):
             result,ms=invoke(method,args);save(directory/(method+'-validated.json'),result)
         def cycle(phase,round_index):
             started=time.monotonic()
-            for method,args in queries:
+            ordered=queries
+            if queryOrder=='rotating' and phase!='idle-5.1s':
+                offset=round_index%len(queries);ordered=queries[offset:]+queries[:offset]
+            for ordinal,(method,args) in enumerate(ordered):
                 result,ms=invoke(method,args)
-                rec['samples'].append({'phase':phase,'round':round_index,'method':method,'ms':ms,'resultSha256':hashlib.sha256(json.dumps(result,sort_keys=True).encode()).hexdigest()})
+                sample={'phase':phase,'round':round_index,'ordinal':ordinal,'method':method,'ms':ms,
+                    'requestId':s.sequence,'resultSha256':hashlib.sha256(json.dumps(result,sort_keys=True).encode()).hexdigest()}
+                if diagnostic:sample['clientProfile']=s.last_request_profile.copy()
+                rec['samples'].append(sample)
             if interval:time.sleep(max(0,interval-(time.monotonic()-started)))
         start=time.monotonic();i=0
         while i<3 or time.monotonic()-start<warmup:cycle('warmup',i);i+=1
@@ -306,6 +354,9 @@ try:
                     products=['freeflight','candidate','glider'];rotation=pair%3
                     order=products[rotation:]+products[:rotation]
                 else:order=['freeflight','glider'] if pair%2==0 else ['glider','freeflight']
+                if requestedProducts:
+                    assert all(x not in ('candidate','local-baseline') or (candidateCommand if x=='candidate' else localBaselineCommand) for x in requestedProducts)
+                    order=requestedProducts if pair%2==0 else list(reversed(requestedProducts))
                 for offset,variant in enumerate(order):run_session(variant,fixtures[str(size)],size,interval,pair*len(order)+offset)
     rows=[]
     for r in records:
@@ -318,12 +369,14 @@ try:
             for method in ['symbols','definition','references','workspaceSymbols']:
                 selected=[x for x in rows if x['phase']=='steady' and x['size']==size and x['interval']==interval and x['method']==method]
                 ff=[x for x in selected if x['variant']=='freeflight'];gl=[x for x in selected if x['variant']=='glider']
-                item=dict(size=size,interval=interval,method=method,freeflight=ff,glider=gl,medianRatio=statistics.median(x['median'] for x in ff)/statistics.median(x['median'] for x in gl),p90Ratio=statistics.median(x['p90'] for x in ff)/statistics.median(x['p90'] for x in gl));comparisons.append(item)
-                print(size,interval,method,'FreeFlight/Glider median',round(item['medianRatio'],3),'p90',round(item['p90Ratio'],3),flush=True)
+                if ff and gl:
+                    item=dict(size=size,interval=interval,method=method,freeflight=ff,glider=gl,medianRatio=statistics.median(x['median'] for x in ff)/statistics.median(x['median'] for x in gl),p90Ratio=statistics.median(x['p90'] for x in ff)/statistics.median(x['p90'] for x in gl));comparisons.append(item)
+                    print(size,interval,method,'FreeFlight/Glider median',round(item['medianRatio'],3),'p90',round(item['p90Ratio'],3),flush=True)
                 if candidateCommand:
                     candidate=[x for x in selected if x['variant']=='candidate']
                     for other in (['freeflight','local-baseline','glider'] if localBaselineCommand else ['freeflight','glider']):
                         baseline=[x for x in selected if x['variant']==other]
+                        if not baseline or not candidate:continue
                         extra=dict(size=size,interval=interval,method=method,candidate=candidate,baseline=baseline,baselineName=other,medianRatio=statistics.median(x['median'] for x in candidate)/statistics.median(x['median'] for x in baseline),p90Ratio=statistics.median(x['p90'] for x in candidate)/statistics.median(x['p90'] for x in baseline));comparisons.append(extra)
                         print(size,interval,method,'candidate/'+other,'median',round(extra['medianRatio'],3),'p90',round(extra['p90Ratio'],3),flush=True)
 

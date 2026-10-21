@@ -439,3 +439,21 @@ d8232ec; profiling, differential tests and deterministic comparison/replay
 workflows remain. See [complete tables, source costs, failures and repeat commands](compilation-search.md).
 
 Closing qualification passed in `bin/.local/benchmarks/trusted/restored-runtime-final`: worker/security/mutation gates, all 16 incremental fault checks, metadata/read proofs and five failed-refresh state-preservation cases per variant. Baseline/candidate worker source hashes are identical to d8232ec. `bin/.local/glider-comparison/response-ref-replay-qualification` passed native worker/core gates with zero timed processes; its pinned core source hashes exactly match the measured response-only control.
+
+## Native attribution controls (2026-10-21)
+
+No runtime winner accepted; production source remains d8232ec. Four ordinary
+conditions (identical-binary A/A and response-only A/B, fixed/rotating order) passed
+32 fresh processes and 10,368 measured semantic checks. Search gains remain modest
+and rotating outline medians worsen in every candidate pair. Eight separate
+diagnostic processes passed 2,592 measured semantic checks with 5,524 joined
+records including warm-up. Stage data distinguishes worker execution, core JSON
+parsing, construction, delivery, client parsing and profiler overhead.
+
+Final log audit found EOF `ObjectDisposedException` in both diagnostic worker
+qualification runs, hidden by a test script that did not check worker exit status.
+Those gates are not accepted as clean. The workflow now rejects the retained crash
+logs; four ordinary conditions pass this audit, both diagnostic conditions fail.
+All evidence and the overriding `qualification-review.json` remain local. No
+production fix, parallel recovery or publication was attempted. See
+[attribution, mixed timings, failure and next proof obligations](native-mcp-attribution.md).

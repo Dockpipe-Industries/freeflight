@@ -29,6 +29,8 @@ def instrument(path):
             }
             var readStart = Stopwatch.GetTimestamp();
             // Cached ancestor checks authorize snapshot admission, never a read.''')
+    if 'previousHash == nextFingerprints[file]' in s:
+        replace('                previousHash == nextFingerprints[file] && documents.ContainsKey(file))\n                continue;', '                previousHash == nextFingerprints[file] && documents.ContainsKey(file))\n            { BenchProfile.Add("readHashDecode", readStart); continue; }')
     replace('            var source = SourceText.From(memory, encoding: Encoding.UTF8);','            var source = SourceText.From(memory, encoding: Encoding.UTF8);\n            BenchProfile.Add("readHashDecode", readStart);')
     apply = '        if (!ReferenceEquals(solution, workspace.CurrentSolution) && !workspace.TryApplyChanges(solution))' if 'if (!ReferenceEquals(solution, workspace.CurrentSolution)' in s else '        if (!workspace.TryApplyChanges(solution))'
     replace(apply, '        var applyStart = Stopwatch.GetTimestamp();\n'+apply)

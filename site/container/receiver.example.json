@@ -1,0 +1,6 @@
+{
+  "environment": "staging",
+  "activationEnabled": false,
+  "root": "/srv/freeflight-staging",
+  "loopbackPort": 18080
+}

@@ -1,0 +1,9 @@
+name: infra.hostname
+description: Migrate only the existing inactive staging receiver hostname over pinned operator SSH.
+vault: none
+docker_preflight: false
+steps:
+  - id: hostname-only
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/infra.hostname/assets/migrate.py

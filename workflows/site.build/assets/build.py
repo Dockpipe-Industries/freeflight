@@ -121,7 +121,7 @@ def main():
     environment = os.environ.get("FREEFLIGHT_SITE_ENV", "staging")
     if environment not in ("staging", "production"):
         raise RuntimeError("FREEFLIGHT_SITE_ENV must be staging or production")
-    default_host = "freeflight.dockpipe.com" if environment == "production" else "freeflight.staging.dockpipe.com"
+    default_host = "freeflight.dockpipe.com" if environment == "production" else "freeflight-staging.dockpipe.com"
     hostname = os.environ.get("FREEFLIGHT_SITE_HOSTNAME", default_host)
     if not re.fullmatch(r"[a-z0-9]+(?:[.-][a-z0-9]+)+", hostname):
         raise RuntimeError("Invalid site hostname")

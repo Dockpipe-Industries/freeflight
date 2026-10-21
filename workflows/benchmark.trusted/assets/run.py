@@ -72,7 +72,8 @@ def prepare():
         ref = config[variant]; source = OUT / variant / 'source'; source.mkdir(parents=True)
         commit = git('rev-parse', 'HEAD' if ref == 'WORKTREE' else ref)
         hashes = {}
-        for path in paths:
+        variantPaths = paths if ref == 'WORKTREE' else ['global.json'] + git('ls-tree','-r','--name-only',commit,'workers/roslyn').splitlines()
+        for path in variantPaths:
             data = (REPO/path).read_bytes() if ref == 'WORKTREE' else subprocess.check_output(['git','show',f'{commit}:{path}'], cwd=REPO)
             target = source/path; target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data)
             hashes[path] = hashlib.sha256(data).hexdigest()
@@ -138,6 +139,8 @@ def qualify(config):
         for test in ('test_worker.py','test_trusted.py'):
             command([sys.executable,'-B',str(REPO/'workers/roslyn'/test),DOTNET,v['dll']],variant+'-'+test+'.log')
         command([sys.executable,'-B',str(Path(__file__).with_name('mutations.py')),DOTNET,v['dll'],str(OUT/variant/'mutations'),config['fixtures']['433']['root']],variant+'-mutations.log')
+        if platform.system() == 'Darwin' and (OUT/variant/'source/workers/roslyn/DarwinMetadataBatch.cs').is_file():
+            command([sys.executable,'-B',str(Path(__file__).with_name('metadata_tests.py')),DOTNET,str(OUT/variant/'source'),str(OUT/variant/'metadata-proof')],variant+'-metadata-proof.log')
     save('qualification.json',dict(status='passed',variants=list(config['variants']),suites=['test_worker.py','test_trusted.py','mutations.py'],testHashes={name:digest(REPO/'workers/roslyn'/name) for name in ('test_worker.py','test_trusted.py')}))
 
 

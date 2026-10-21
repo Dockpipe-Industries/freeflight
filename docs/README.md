@@ -154,3 +154,5 @@ For reproducible trusted Roslyn baseline/candidate experiments, see the
 Same-machine product comparison: [Glider head-to-head](glider-head-to-head.md).
 
 Glider-target experiments: [retained candidate and measurements](glider-target-iteration.md).
+
+Fresh metadata batching: [API proof, qualification and limits](fresh-metadata-batching.md).

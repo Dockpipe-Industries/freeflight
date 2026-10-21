@@ -1,0 +1,17 @@
+name: benchmark.trusted.transaction
+description: Qualify failure-state preservation on existing immutable benchmark snapshots.
+vault: none
+docker_preflight: false
+dependencies:
+  host:
+    - id: python3
+      command: python3
+      description: Benchmark transaction qualification asset.
+    - id: dotnet
+      command: dotnet
+      description: Same pinned SDK used for benchmark snapshots.
+steps:
+  - id: transaction
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/run.py transaction

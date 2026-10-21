@@ -215,3 +215,14 @@ request-scoped admission/leaf-metadata fix is now retained locally with full
 uncached validation before reads. Full-graph per-session p90 improved in short and
 long comparisons; a small-graph reference p90 regression remains explicit.
 Original experiments and every unfavorable sample remain preserved.
+
+## Residual trusted-refresh workflow
+
+The [residual investigation](rc2-residual-refresh-investigation.md) evaluates the
+operator's retest of shipped 39c3cc83 separately from M6 synthetic measurements.
+The [DockPipe workflow](trusted-performance-workflow.md) owns pinned comparison
+inputs, qualification, transactional failure guards, ordinary timings, diagnostic
+stages/allocations/GC/JIT and expiry. Its identical-source control and all unfavorable
+small-graph/expiry samples remain visible. Fresh per-leaf validation remains an
+explicit performance floor; no watcher-only authority or cross-request path trust
+was introduced.

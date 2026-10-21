@@ -883,3 +883,20 @@ correction polls the required new-host 200 and old-host 404 outcomes for at most
 five seconds without repeating any mutation. Both outcomes remain mandatory.
 Publication of this test-only correction is pending explicit approval; no new
 qualification result is claimed.
+
+## 2026-10-21 — RC2 warm trusted-query investigation on isolated M6 checkout
+
+Pinned c2a55dde; confirmed repeated whole-graph ancestor checks before snapshot
+reuse and core caching of pre-open refreshStats. Native 433/5,845-file project
+fixtures, three alternating process sessions/version/graph and private stage
+profiles completed. A leaf-FileInfo experiment passed correctness but showed a
+77–79 ms p90 in one full-graph session despite favorable pooled medians. Saved its
+patch and reverted runtime code; retained trusted non-target leaf/ancestor symlink
+and missing-input tests plus `docs/rc2-warm-refresh-investigation.md`.
+
+Native safe-source/trusted suites and supplemental trusted mutation/overflow
+checks passed with host watcher/pipe access; original sandbox failures retained.
+Repository validation asset passed using isolated PyYAML; DockPipe wrapper's shared
+state chmod was blocked by sandbox. No Docker services, Linux host, Biztraak,
+active MCP settings, site/Cloud work, publication or deployment changed. Runtime
+performance qualification remains open; full syscall and platform matrix absent.

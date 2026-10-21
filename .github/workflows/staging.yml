@@ -1,0 +1,94 @@
+name: Staging publication and deployment
+on:
+  push:
+    branches: [staging]
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+concurrency:
+  group: freeflight-staging-delivery
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'Dockpipe-Industries/freeflight'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      actions: read
+      pull-requests: read
+    outputs:
+      release_tag: ${{ steps.publish.outputs.release_tag }}
+      release_url: ${{ steps.publish.outputs.release_url }}
+    env:
+      FREEFLIGHT_RELEASE_CHANNEL: staging
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+      - uses: ./.github/actions/setup-dockpipe
+      - name: Select exact-tree qualified source and collect retained bytes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 -B .github/release/api.py select
+      - name: Collect source artifacts and promotion evidence
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 -B .github/release/api.py collect
+      - name: Publish the verified staging prerelease
+        id: publish
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_MODE: publish
+        run: python3 -B .github/release/api.py publish
+      - name: Retain publication reconciliation evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: staging-publication-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            bin/.local/release-candidate/*.json
+            bin/.local/release-prepared/*/release-manifest.json
+            bin/.local/release-prepared/*/SHA256SUMS
+          if-no-files-found: warn
+  deploy:
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: staging
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+      - uses: ./.github/actions/setup-dockpipe
+      - name: Verify published site bytes and build bounded delivery
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          FREEFLIGHT_DEPLOY_ENVIRONMENT: staging
+          FREEFLIGHT_DEPLOY_RELEASE_TAG: ${{ needs.publish.outputs.release_tag }}
+        run: python3 -B .github/site/delivery.py
+      - name: Activate only the approved FreeFlight staging receiver
+        env:
+          FREEFLIGHT_DEPLOY_ENVIRONMENT: staging
+          SITE_DEPLOY_ENABLED: ${{ vars.FREEFLIGHT_SITE_DEPLOY_ENABLED }}
+          SITE_DEPLOY_HOST: ${{ vars.FREEFLIGHT_SITE_DEPLOY_HOST }}
+          SITE_DEPLOY_SSH_PORT: ${{ vars.FREEFLIGHT_SITE_DEPLOY_SSH_PORT }}
+          SITE_DEPLOY_KNOWN_HOSTS: ${{ vars.FREEFLIGHT_SITE_DEPLOY_KNOWN_HOSTS }}
+          SITE_DEPLOY_PRIVATE_KEY: ${{ secrets.FREEFLIGHT_SITE_DEPLOY_PRIVATE_KEY }}
+        run: dockpipe --workflow site.deploy.send
+      - name: Retain delivery evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: staging-site-delivery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: bin/.local/site-pipeline/*.json
+          if-no-files-found: warn

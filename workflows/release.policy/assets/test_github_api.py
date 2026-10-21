@@ -18,6 +18,29 @@ spec.loader.exec_module(api)
 
 
 class GitHubApiTests(unittest.TestCase):
+    def test_draft_without_tag_blocks_duplicate_creation(self):
+        with patch.object(api, 'request', return_value=[{'tag_name': 'v0.1.0-staging.42.abc', 'draft': True}]) as request:
+            with self.assertRaisesRegex(ValueError, 'Existing draft'):
+                api.require_release_absent('v0.1.0-staging.42.abc')
+            self.assertEqual(request.call_count, 1)
+
+    def test_absence_requires_both_release_and_tag_404(self):
+        missing = api.HTTPError('https://api.github.com', 404, 'Not found', {}, None)
+        with patch.object(api, 'request', side_effect=[[], missing, missing]) as request:
+            api.require_release_absent('v0.1.0')
+            self.assertEqual(request.call_count, 3)
+
+    def test_jammy_receipt_requires_explicit_compatibility_artifact(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive = root / "download.zip"
+            with zipfile.ZipFile(archive, "w") as bundle:
+                bundle.writestr("jammy-compatibility.json", "{}")
+            with self.assertRaises(ValueError):
+                api.extract_native_artifact(archive, root)
+            api.extract_native_artifact(archive, root, jammy=True)
+            self.assertEqual((root / "jammy-compatibility.json").read_text(), "{}")
+
     def test_native_artifact_accepts_flat_and_packages_layout(self):
         for prefix in ('', 'packages/'):
             with self.subTest(prefix=prefix), tempfile.TemporaryDirectory() as temporary:
@@ -186,7 +209,7 @@ class GitHubApiTests(unittest.TestCase):
         query = opener.open.call_args.args[0]
         self.assertEqual(opener.open.call_args.kwargs, {'timeout': 120})
         self.assertEqual(query.full_url, api.API + '/actions/artifacts/123/zip')
-        self.assertEqual(query.get_header('Accept'), 'application/vnd.github+json')
+        self.assertEqual(query.get_header('Accept'), 'application/octet-stream' if options.get('asset') else 'application/vnd.github+json')
         self.assertEqual(query.get_header('X-github-api-version'), '2026-03-10')
         self.assertEqual(query.get_header('Authorization'), 'Bearer test-token-not-a-credential')
         self.assertNotIn('Authorization', query.headers)
@@ -198,6 +221,12 @@ class GitHubApiTests(unittest.TestCase):
         self.assertFalse(response.closed)
         self.assertEqual(result.read(), b'PK\x03\x04test-zip')
         self.assertEqual(query.method, 'GET')
+        result.close()
+
+    def test_release_asset_uses_octet_stream_without_changing_artifact_contract(self):
+        result, response, query = self.request_with_response(b'asset', binary=True, asset=True)
+        self.assertEqual(query.get_header('Accept'), 'application/octet-stream')
+        self.assertEqual(result.read(), b'asset')
         result.close()
 
     def test_json_is_decoded_and_response_closed(self):

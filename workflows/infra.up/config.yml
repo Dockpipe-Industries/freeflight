@@ -1,0 +1,9 @@
+name: infra.up
+description: Plan coordinated staging setup through the reviewed Cloud extension; apply requires an exact reviewed plan digest.
+vault: none
+docker_preflight: false
+steps:
+  - id: coordinated-staging
+    kind: host
+    cwd: repo
+    cmd: bash workflows/infra.up/assets/up.sh

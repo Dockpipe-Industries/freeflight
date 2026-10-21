@@ -961,3 +961,19 @@ A generated transaction-only ancestor-swap seam proved uncached validation rejec
 an escape after admission before reading bytes. Expanded native suites, core tests
 and the actual worker project through MCP passed. Final baseline and endpoint
 comparisons remain pending at this checkpoint. No remote mutation yet.
+
+
+Closing paced qualification changed the selection: four-worker admission doubled
+observed diagnostic CPU, regressed full-graph search in both final paced sessions,
+and regressed outline p90 in one. Its unpaced gains and all unfavorable results
+remain in the sprint record. Program.cs is restored exactly to serial checkpoint
+`3084d82`; lexical/metadata-object reuse, staged deltas and fresh-read decoding
+reuse remain. Final selected-runtime shipped-baseline and MCP qualification are
+running before authorized staging promotion. No new optimization is being added.
+
+Final serial qualification completed: 4,800 ordinary worker, 1,600 diagnostic and
+4,800 MCP measured responses passed across three fresh sessions per variant/graph.
+Full-graph endpoint median/p90 improved in this repeat; one worker-only outline
+p90 regression remains retained. No Linux rerun or Glider win is claimed. The
+selected runtime is exactly the measured serial checkpoint, with no new runtime
+change after qualification. Hosted platform checks and staging delivery follow.

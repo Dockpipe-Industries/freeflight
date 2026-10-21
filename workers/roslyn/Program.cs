@@ -424,29 +424,18 @@ internal sealed class SourceEngine : IDisposable
                 nextSnapshots.Remove(removed);
             }
         }
-        // The prepass refreshes metadata; defer errors to their serial position.
-        // Every request repeats it; content reads still revalidate uncached paths.
-        var parallelAdmission = checkedAncestors is not null && files.Count >= 256 && Environment.ProcessorCount > 1;
-        var admissionFailure = parallelAdmission ? ValidateSnapshotInputs(files, token) : null;
-        var fileIndex = -1;
         byte[]? readBuffer = null;
         foreach (var info in files)
         {
             token.ThrowIfCancellationRequested();
-            fileIndex++;
-            if (admissionFailure is { } failure && failure.Index == fileIndex)
-                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure.Error).Throw();
             var file = info.FullName;
             snapshots.TryGetValue(file, out var cached);
-            if (!parallelAdmission)
+            if (checkedAncestors is not null && !externalCompilerInputs.Contains(file))
+                CheckSnapshotPath(file, checkedAncestors, info, cached?.Parent);
+            else
             {
-                if (checkedAncestors is not null && !externalCompilerInputs.Contains(file))
-                    CheckSnapshotPath(file, checkedAncestors, info, cached?.Parent);
-                else
-                {
-                    CheckCompilerInput(file);
-                    info.Refresh();
-                }
+                CheckCompilerInput(file);
+                info.Refresh();
             }
             var length = info.Length;
             var modified = info.LastWriteTimeUtc.Ticks;
@@ -468,8 +457,6 @@ internal sealed class SourceEngine : IDisposable
             // Preserve full validation immediately before opening source bytes.
             if (checkedAncestors is not null && !externalCompilerInputs.Contains(file))
                 CheckPath(file);
-            else if (parallelAdmission)
-                CheckCompilerInput(file);
             // Bounded read even when the file grows after enumeration.
             using var stream = OpenCompilerInput(file);
             using var memory = new MemoryStream();
@@ -601,50 +588,6 @@ internal sealed class SourceEngine : IDisposable
     }
 
     private string CheckPath(string path) => CheckPath(path, null, null);
-
-    private (int Index, Exception Error)? ValidateSnapshotInputs(List<FileInfo> files, CancellationToken token)
-    {
-        var workers = Math.Min(4, Environment.ProcessorCount);
-        var failures = new Exception?[workers];
-        var failedAt = new int[workers];
-        Array.Fill(failedAt, int.MaxValue);
-        Parallel.For(0, workers, new ParallelOptions { MaxDegreeOfParallelism = workers, CancellationToken = token }, partition =>
-        {
-            var ancestors = new HashSet<string>(StringComparer.Ordinal);
-            var start = (int)((long)files.Count * partition / workers);
-            var end = (int)((long)files.Count * (partition + 1) / workers);
-            for (var index = start; index < end; index++)
-            {
-                try
-                {
-                    token.ThrowIfCancellationRequested();
-                    var info = files[index];
-                    var file = info.FullName;
-                    if (externalCompilerInputs.Contains(file))
-                    {
-                        CheckCompilerInput(file);
-                        info.Refresh();
-                    }
-                    else
-                    {
-                        snapshots.TryGetValue(file, out var cached);
-                        CheckSnapshotPath(file, ancestors, info, cached?.Parent);
-                    }
-                }
-                catch (Exception error)
-                {
-                    failures[partition] = error;
-                    failedAt[partition] = index;
-                    break;
-                }
-            }
-        });
-        token.ThrowIfCancellationRequested();
-        // The serial loop reports this only after all earlier resource/read checks.
-        // No semantic state is committed here.
-        var failed = Array.IndexOf(failedAt, failedAt.Min());
-        return failures[failed] is { } failure ? (failedAt[failed], failure) : null;
-    }
 
     // Only canonical workspace keys admitted at trusted open reach this helper.
     // Reuse lexical identity, never filesystem authority: validate each parent

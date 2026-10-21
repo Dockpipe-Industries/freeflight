@@ -138,3 +138,17 @@ notes that precise counting costs more and excludes native allocations. Ordinary
 binaries never contain this instrumentation. `tail-observations.json` supplies a
 compact view of each operation's five slowest steady samples per session, including actual reads
 and available diagnostic observations; it does not assign speculative causes.
+
+`FREEFLIGHT_TRUSTED_BENCH_INTERVAL` optionally sets a minimum interval per complete
+four-operation round (0–10 seconds, default 0). Pacing occurs outside each timed
+request and includes client checks/counter sampling in the round's elapsed budget.
+A round that exceeds the interval is not interrupted or shortened. Use a distinct
+label and keep paced results separate: faster unpaced loops change expiry batching.
+The optional MCP pass inherits the frozen comparison's interval setting.
+
+If every MCP session passed but summary generation failed, rerun the same workflow
+with `FREEFLIGHT_TRUSTED_MCP_RESUME=summary` and the same benchmark/MCP labels.
+Recovery requires complete passed raw measurements and no existing summary; it
+verifies source binaries/fixtures and records a separate recovery receipt. It does
+not restart processes or overwrite original provenance. Other failed measurements
+require a new label and investigation rather than summary-only recovery.

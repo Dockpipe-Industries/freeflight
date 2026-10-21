@@ -158,3 +158,5 @@ Glider-target experiments: [retained candidate and measurements](glider-target-i
 Fresh metadata batching: [API proof, qualification and limits](fresh-metadata-batching.md).
 
 Expiry and comparative behavior: [bounded read scheduling](expiry-read-scheduling.md), [Glider evidence and contract boundary](glider-behavior.md).
+
+Guarded search and MCP ownership: [profiling, retained regressions and repeat commands](compilation-search.md).

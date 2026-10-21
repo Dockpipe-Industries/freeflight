@@ -130,3 +130,23 @@ internal sealed class BenchProfile : EventListener
         end=s.index('    public static IncrementalHash CreateHash()',start)
         s=s[:start]+s[end:]
     path.write_text(s)
+
+    semantic_path = path.with_name('SemanticQueries.cs')
+    semantic = semantic_path.read_text()
+    declaration = ('        var symbols = await FindCompilationDeclarations(solution, query, token);'
+                   if 'FindCompilationDeclarations(' in semantic else
+                   '        var symbols = await SymbolFinder.FindSourceDeclarationsAsync(solution,')
+    returned = '        return Ordered(symbols, token).Where(symbol => !symbol.IsImplicitlyDeclared).Select(Item).ToArray();'
+    assert semantic.count(declaration) == semantic.count(returned) == 1
+    semantic = 'using System.Diagnostics;\n' + semantic
+    semantic = semantic.replace(declaration, '        var findStarted = Stopwatch.GetTimestamp();\n' + declaration)
+    semantic = semantic.replace(returned, '\n'.join([
+        '        BenchProfile.Add("findDeclarations", findStarted);',
+        '        var orderStarted = Stopwatch.GetTimestamp();',
+        '        var ordered = Ordered(symbols, token);',
+        '        BenchProfile.Add("orderSymbols", orderStarted);',
+        '        var renderStarted = Stopwatch.GetTimestamp();',
+        '        var result = ordered.Where(symbol => !symbol.IsImplicitlyDeclared).Select(Item).ToArray();',
+        '        BenchProfile.Add("renderSymbols", renderStarted);',
+        '        return result;']))
+    semantic_path.write_text(semantic)

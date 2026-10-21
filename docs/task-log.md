@@ -785,3 +785,101 @@ merging PR #32 and publishing the corrected preview. PR #32 merged to js/dev as
 so existing release automation marks the publication prerelease. Qualification,
 js/dev -> dev -> staging -> master promotion and public-byte verification remain
 mandatory. No bot PR closure, website deployment or Registry publication is included.
+
+## Staging scope correction and production preparation (2026-10-20)
+
+The owner subsequently paused master promotion and production publication, requested
+a downloadable staging prerelease and live staging website, and approved the exact
+staging hostname DNS/HTTPS/tunnel route. Production wiring is requested in advance,
+but production activation and its specific ingress/security changes are not approved.
+These later instructions supersede the publication scope above.
+
+PRs #32, #33 and #34 merged; staging is 0b2b7e4 with the exact tree of qualified
+source 6e7b9a5. CI push run 39433227935 and CodeQL 39433227841 passed. Linux and
+Windows archives, MCPBs and corresponding Qt sources are prepared locally; no new
+release or site deployment is claimed. Master remains at the prior 27fba35.
+
+The site.deploy.prepare workflow validates local artifact/audit bindings and
+promotion identity, emits isolated Compose wiring, and rejects prerelease inputs
+for production. It performs no remote mutation and cannot authorize deployment.
+Existing operator access, live preflight and ingress activation remain outstanding.
+
+DockPipe site.deploy.prepare passed against the downloaded, hash-verified staging
+container/audit/source artifacts for 6e7b9a5 and emitted a non-authorizing preparation
+receipt. Five rejection tests cover unpromoted source, prerelease production,
+wrong-environment archives, changed archives and symlink inputs. repo.check passed.
+No production candidate has been prepared or activated.
+
+## Pipeline-only staging delivery implementation (2026-10-20)
+
+The owner explicitly rejected browser/manual uploads and requested staging delivery
+through pipelines. PR #35 now adds a staging-push publisher, a published-asset site
+collector, and DockPipe bundle/send/receiver workflows with scoped activation,
+exact-byte/source probes and rollback. A separate manual production-site workflow
+requires stable published release identity and matching master ancestry/tree.
+The staging policy does not weaken the production promotion chain or dispatch gate.
+Unique staging tags preserve earlier releases; master is not promoted.
+
+The receiver requires its own approved identity, pinned host key and installed
+fixed command; those grants are not created by this code. DNS/HTTPS routing was
+approved for staging, but operator access and receiver identity/setup remain
+unavailable. Offline tests establish rejection/rollback behavior, not deployment.
+
+## Cloud architecture alignment hold (2026-10-20)
+
+The owner requested matching DockPipe Cloud's actual provisioning and delivery
+workflow. Comparison against Cloud staging 4f55a5a identified a material difference:
+Cloud uses state-owned identities and an unprivileged static receiver; PR #35
+proposes manual setup and privileged container activation. The manual installation
+procedure is withdrawn pending the documented shared implementation alignment.
+No provider/state reads, Cloud edits, infrastructure mutation or PR promotion
+occurred. Existing policy tests do not establish architectural acceptance.
+
+## Unprivileged static delivery implementation (2026-10-20)
+
+Replaced Docker/Compose activation with a bounded static bundle, fixed allowlist,
+unprivileged receiver, atomic link switching and verified rollback. CI uses local
+health; coordinated bootstrap owns operator-private HTTPS readiness. Added a
+plan-first DockPipe entry point and pure additive infrastructure policy. Prepared
+an isolated, unpushed Cloud extension reusing its SSH/provider/exact-plan apply
+helpers, state-owned release identity and additive tunnel configuration. Provider,
+state and host operations were not run. No credentials or permissions changed.
+
+Fixed hosted Windows policy-test import failure by deferring the Unix account API
+until privileged host installation. Added DockPipe infra.terraform.validate and
+completed credential-free, backend-disabled Terraform schema validation. Existing
+Docker daemon is stopped and was not started; disposable Linux bootstrap validation
+remains a separate CI fixture gate. Architecture is unchanged following owner acceptance.
+
+With explicit workflow-push approval, added the disposable Ubuntu bootstrap CI job.
+The first run passed all real host/SSH/rollback/isolation checks (job 118835315216,
+run 39482701813). No fixture was executed on the operator Mac or staging host.
+Remaining native/site qualification is monitored separately from deployment gates.
+
+## 2026-10-20 — First-level staging hostname
+
+Changed staging build/delivery/bootstrap contracts to `freeflight-staging.dockpipe.com`
+under the approved hostname decision. Added the bounded `infra.hostname` workflow
+with pinned operator SSH, exact old-file hashes, inactive-site guard, Nginx validation
+and rollback, plus existing-service preservation. Local `release.policy` passed
+89 tests including hostname migration scenarios; hosted disposable Linux coverage
+now exercises the real migration before delivery/rollback. Live verification and
+latest-head hosted qualification are recorded separately after execution.
+
+Live hostname migration completed through the bounded workflow: pinned host files
+matched reviewed hashes, Nginx reloaded, existing services were preserved, and the
+new first-level hostname passed certificate validation. HTTPS health returned 200
+through the routing workflow; an independently denied caller returned 403. Origin
+checks returned 200 for the operator, 403 for a disallowed client and 404 for the old
+hostname. Obsolete Cloudflare entries were removed after verification. Delivery
+remained disabled and no site was activated. Disposable Ubuntu migration CI passed.
+The first Windows run exposed POSIX mode assumptions in the filesystem fixture;
+that fixture is now explicitly POSIX-only while byte/hash rejection tests run on
+all platforms. Actual installer/migration coverage remains in Ubuntu CI.
+
+Promotion push qualification exposed Nginx's asynchronous reload in the disposable
+hostname fixture: the first request could reach an old worker. The prepared fixture
+correction polls the required new-host 200 and old-host 404 outcomes for at most
+five seconds without repeating any mutation. Both outcomes remain mandatory.
+Publication of this test-only correction is pending explicit approval; no new
+qualification result is claimed.

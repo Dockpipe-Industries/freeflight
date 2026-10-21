@@ -26,7 +26,7 @@ removing it. Deployment is separate and has not occurred.
 ## Environments
 
 `FREEFLIGHT_SITE_ENV` is `staging` by default or explicitly `production`.
-`FREEFLIGHT_SITE_HOSTNAME` overrides the chosen defaults `freeflight.staging.dockpipe.com`
+`FREEFLIGHT_SITE_HOSTNAME` overrides the chosen defaults `freeflight-staging.dockpipe.com`
 and `freeflight.dockpipe.com`. Environment/hostname conflicts fail the build.
 Staging has robots Disallow:/, page noindex and the matching container X-Robots-Tag.
 Production has crawlable robots, canonical URLs and an environment-specific sitemap.

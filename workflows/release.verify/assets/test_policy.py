@@ -8,10 +8,42 @@ import tempfile
 import zipfile
 import io
 import tarfile
-from policy import REPO, check_promotion, check_run, verify_extra, check_extra_links, verify_runtime_notices
+from unittest.mock import patch
+from policy import REPO, check_promotion, check_run, verify_extra, check_extra_links, verify_runtime_notices, release_context, staging_tag, platforms
 
 
 class ReleasePolicy(unittest.TestCase):
+    def test_staging_context_cannot_authorize_master_or_manual_publication(self):
+        environment = {"FREEFLIGHT_RELEASE_CHANNEL": "staging", "GITHUB_EVENT_NAME": "push",
+                       "GITHUB_REF": "refs/heads/staging", "GITHUB_REPOSITORY": REPO}
+        with patch.dict("os.environ", environment, clear=True):
+            self.assertEqual(release_context(), ("staging", "staging"))
+        for key, value in (("GITHUB_REF", "refs/heads/master"), ("GITHUB_EVENT_NAME", "workflow_dispatch"),
+                           ("GITHUB_REPOSITORY", "other/freeflight")):
+            with patch.dict("os.environ", {**environment, key: value}, clear=True):
+                with self.assertRaises(ValueError):
+                    release_context()
+
+    def test_production_remains_explicit_master_dispatch(self):
+        with patch.dict("os.environ", {"GITHUB_EVENT_NAME": "push", "GITHUB_REF": "refs/heads/master",
+                                      "GITHUB_REPOSITORY": REPO}, clear=True):
+            with self.assertRaises(ValueError):
+                release_context()
+
+    def test_staging_identity_is_unique_and_uses_compatible_linux_build(self):
+        self.assertEqual(staging_tag("0.1.0", 42, "a" * 40), "v0.1.0-staging.42." + "a" * 12)
+        self.assertNotEqual(staging_tag("0.1.0-preview.rc2", 42, "a" * 40),
+                            staging_tag("0.1.0-preview.rc2", 43, "a" * 40))
+        self.assertEqual(platforms("staging")["preview-ubuntu-22.04-linux-x64"], "linux-x64")
+        self.assertNotIn("native-ubuntu-24.04", platforms("staging"))
+
+    def test_staging_requires_both_promotions_but_not_master(self):
+        self.assertEqual(check_promotion(self.source, "c" * 40, self.pulls[:2],
+                                         lambda a, b: a <= b, lambda sha: "e" * 40, "staging"), [1, 2])
+        with self.assertRaises(ValueError):
+            check_promotion(self.source, "c" * 40, self.pulls[1:2],
+                            lambda a, b: a <= b, lambda sha: "e" * 40, "staging")
+
     def setUp(self):
         self.run = {'repository': {'full_name': REPO}, 'head_repository': {'full_name': REPO},
                     'path': '.github/workflows/ci.yml', 'event': 'push', 'head_branch': 'js/dev',

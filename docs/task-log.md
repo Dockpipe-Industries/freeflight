@@ -900,3 +900,24 @@ Repository validation asset passed using isolated PyYAML; DockPipe wrapper's sha
 state chmod was blocked by sandbox. No Docker services, Linux host, Biztraak,
 active MCP settings, site/Cloud work, publication or deployment changed. Runtime
 performance qualification remains open; full syscall and platform matrix absent.
+
+## 2026-10-21 — Bounded RC2 refresh follow-up
+
+Equivalent default-runtime sessions reproduced the leaf-only slow mode. Separate
+CPU/GC/path profiles exclude source rereading and large GC pauses for measured
+slow samples; tiering-off and PGO-off diagnostic copies removed the long early mode,
+but exact method attribution remains unproven. No production runtime setting changed.
+Ancestor sharing alone also had a p90 regression and its patch is preserved.
+
+Retained a combined request-scoped trusted snapshot-admission/leaf-metadata fix;
+all source reads under the optimization receive uncached full validation before
+open. External inputs, force-all previews and watcher-unavailable fallback retain
+their existing paths. Native suites, additional external-input regressions and
+trusted mutation/overflow checks passed. A generated deterministic pre-read directory
+swap rejected the escaping symlink with zero additional bytes read and recovered.
+
+Three short and three longer candidate full-graph sessions improved per-session
+p90; small-graph reference p90 regressed in one session and remains documented.
+All 2,880 measured combined-comparison responses passed. Full receipts, rejected
+experiments, controls and proof obligations are in `docs/rc2-warm-refresh-followup.md`.
+No push, merge, deployment, Docker/service action or unrelated workspace change.

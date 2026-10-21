@@ -207,3 +207,11 @@ leaf-metadata experiment passed native correctness checks and improved pooled
 medians, but one process session regressed p90; its runtime change was removed.
 The report retains all session timings, private profiles, limitations and the
 experimental patch location. No production speedup is claimed.
+
+The [bounded follow-up](rc2-warm-refresh-followup.md) reproduced the leaf-only
+regression, found a tiered/dynamic-PGO warm-up contribution using diagnostic-only
+controls, and separately rejected ancestor deduplication alone. A combined
+request-scoped admission/leaf-metadata fix is now retained locally with full
+uncached validation before reads. Full-graph per-session p90 improved in short and
+long comparisons; a small-graph reference p90 regression remains explicit.
+Original experiments and every unfavorable sample remain preserved.

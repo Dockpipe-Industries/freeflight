@@ -2,7 +2,7 @@
 import pathlib, subprocess, json, os, queue, threading, time
 import sys, shutil
 # Reuse the deterministic two-project benchmark fixture; mutate only a private copy.
-dotnet,dll,destination,fixture=sys.argv[1:]
+dotnet,dll,destination,fixture=sys.argv[1:5]
 B=pathlib.Path(destination);B.mkdir(parents=True)
 root=B/'fixture';shutil.copytree(fixture,root)
 subprocess.run([dotnet,'restore',str(root/'source/P01/P01.csproj'),'--ignore-failed-sources'],check=True,stdout=subprocess.DEVNULL)
@@ -35,6 +35,31 @@ try:
  finally:late.write_bytes(late_bytes)
  assert 'result' in call('symbols',file=str(target))
  checks.append('late missing input rejects whole refresh after earlier staged target update')
+ # Resource failure at an earlier sorted input retains precedence over a later
+ # metadata failure, including when metadata admission uses parallel workers.
+ limit=2*1024*1024 # Also admits project.assets.json during trusted loading.
+ result=call('open',root=str(root),project='source/P01/P01.csproj',resources={'maxFileBytes':limit});assert 'result' in result,result
+ target.write_bytes(original+b' '*(limit+1));late.unlink()
+ try:
+  failure=call('symbols',file=str(target));assert failure['error']['code']=='resource_limit_exceeded' and failure['error']['resource']=='maxFileBytes',failure
+ finally:
+  target.write_bytes(original);late.write_bytes(late_bytes)
+ opened()
+ checks.append('earlier resource failure precedes later missing input; recovery')
+ if '--transaction' in sys.argv[5:]:
+  before=call('capabilities')['result']['refreshStats']['bytesRead']
+  (root/'.swap-before-read').write_text('generated test-only seam')
+  try:
+   rejected=call('symbols',file=str(target));assert 'error' in rejected and 'Symlink/reparse' in str(rejected),rejected
+   assert nested.is_symlink(), 'Pre-read swap seam did not execute'
+   assert call('capabilities')['result']['refreshStats']['bytesRead']==before, 'Read bytes after ancestor escape'
+  finally:
+   if nested.is_symlink():nested.unlink()
+   if (root/'.saved-ancestor').exists():(root/'.saved-ancestor').rename(nested)
+  assert 'result' in call('symbols',file=str(target))
+  checks.append('deterministic ancestor replacement after admission rejects before any source read; recovery')
+
+
  nested.rename(moved);nested.symlink_to(outside,target_is_directory=True)
  r=call('symbols',file='source/P01/Nested/C1.cs');assert 'error' in r and 'Symlink' in str(r),r
  nested.unlink();moved.rename(nested);assert 'result' in call('symbols',file=str(target));checks.append('non-target ancestor replaced with escaping symlink rejects whole query; recovery')

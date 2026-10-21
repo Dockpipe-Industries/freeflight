@@ -333,3 +333,20 @@ host contract, not live provider/state/TLS readiness or deployment authorization
 See [residual investigation](rc2-residual-refresh-investigation.md) and
 [workflow usage](trusted-performance-workflow.md). No new release or promotion is
 claimed or authorized by these local checks.
+
+## Trusted-refresh sprint — local qualification (2026-10-21)
+
+- [x] Retained named shipped/local baselines, identical-source control, raw outliers,
+  and rejected two/eight-worker experiments; no median-only acceptance gate.
+- [x] Four-worker bound and serial small-graph fallback exercised across six sizes;
+  explicit 256-file crossover check, including reversed first-pair ordering.
+- [x] Expanded normal trusted tests cover 258 members, resource-error precedence,
+  ancestor/leaf replacement and external read-only inputs.
+- [x] Five test-only failed-refresh guards per variant, including a deterministic
+  post-admission ancestor swap rejected before any additional source bytes read.
+- [x] Native core tests and actual worker-project semantics through C++ MCP passed.
+- [ ] Final named-baseline/MCP comparisons and single-processor qualification.
+- [ ] Hosted self-contained/platform qualification and staging publication.
+
+See [sprint evidence](rc2-refresh-sprint.md). M6 synthetic measurements do not
+establish Linux/Biztraak/Glider performance. No production promotion is authorized.

@@ -26,18 +26,19 @@ def summary(values):
 
 
 class Session:
-    def __init__(self, root, directory, installation=REPO):
+    def __init__(self, root, directory, installation=REPO, *, engines=None, configuration=None, sample_memory=True):
         binary = installation / 'bin/.local/build/freeflight'
         if not binary.exists():
             binary = installation / 'bin/.local/build/Release/freeflight.exe'
         self.binary = binary
         node, dotnet = shutil.which('node'), shutil.which('dotnet')
-        assert node and dotnet and binary.is_file(), 'Run DockPipe build before benchmarking'
+        assert dotnet and (engines is not None or node) and binary.is_file(), 'Run DockPipe build before benchmarking'
         config = directory / 'freeflight.json'
-        config.write_text(json.dumps({'roots': [str(root)], 'engines': {
+        config.write_text(json.dumps({'roots': [str(root)], **(configuration or {}), 'engines': engines if engines is not None else {
             'typescript': [node, str(installation / 'bin/.local/typescript/worker.mjs')],
             'csharp': [dotnet, str(installation / 'bin/.local/roslyn/bin/FreeFlight.Roslyn/debug/FreeFlight.Roslyn.dll')]
         }}))
+        self.sample_memory = sample_memory
         self.root = root
         self.sequence = 0
         self.responses = queue.Queue()
@@ -63,7 +64,7 @@ class Session:
         self.responses.put(None)
 
     def sample_rss(self):
-        if os.name == 'nt' or not shutil.which('ps'):
+        if not self.sample_memory or os.name == 'nt' or not shutil.which('ps'):
             return
         while not self.stop.is_set():
             try:

@@ -944,3 +944,20 @@ The final five-stage workflow repeat also passed: 960 ordinary and 320 diagnosti
 measured responses, native suites and transaction guards. Full-graph outline
 medians were 12.58–12.76 ms baseline versus 8.62–8.87 ms candidate; small-graph
 reference p90 remained unfavorable in two sessions. Both workflow YAMLs validated.
+
+## 2026-10-21 — Bounded trusted-refresh sprint
+
+Retained the serial lexical/metadata/read-reuse checkpoints and measured four-way
+metadata admission against two/eight-way alternatives. Two workers worsened p90;
+eight improved full-graph latency modestly but increased diagnostic CPU and some
+small-graph tails. Four remains the bounded candidate, serial below 256 files.
+The crossover run retains the 16-file definition median/p90 regression, while
+256/433-file median and p90 improved across all measured operations.
+
+Extended the existing workflow with padded sources, configurable exact references
+and search results, CPU/runtime provenance, precise diagnostic allocation counts,
+compact comparisons/tail observations, and an optional existing-client MCP pass.
+A generated transaction-only ancestor-swap seam proved uncached validation rejects
+an escape after admission before reading bytes. Expanded native suites, core tests
+and the actual worker project through MCP passed. Final baseline and endpoint
+comparisons remain pending at this checkpoint. No remote mutation yet.

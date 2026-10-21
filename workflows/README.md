@@ -49,3 +49,7 @@ candidate snapshots, native security/semantic qualification, alternating fresh
 sessions and separate instrumentation/expiry receipts. See the
 [usage guide](../docs/trusted-performance-workflow.md). It complements the full MCP
 benchmark; it does not replace endpoint or packaged platform qualification.
+
+`benchmark.trusted.mcp` reuses a completed trusted comparison through the existing
+MCP client, recording endpoint timings separately against the same frozen workers.
+It requires a local core build and does not modify active MCP configuration.

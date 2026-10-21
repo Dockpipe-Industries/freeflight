@@ -1,0 +1,9 @@
+name: benchmark.trusted.attribution
+description: Matched ordinary controls and separate native MCP stage attribution; no runtime edits.
+vault: none
+docker_preflight: false
+steps:
+  - id: attribute
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/attribution.py

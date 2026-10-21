@@ -79,3 +79,9 @@ and adds generated missed-event, overflow, concurrency, transaction and boundary
 proofs. `benchmark.trusted.glider` forwards those frozen arguments from the
 qualified candidate receipt. See [freshness semantics and repeat commands](../docs/incremental-validation.md);
 strict mode remains the default and active MCP configuration is unchanged.
+
+`benchmark.trusted.attribution` runs identical-binary and response-copy controls
+through the existing MCP driver, with fixed/rotating operation order and separate
+generated-source native diagnostics. It retains paired session ratios, live
+recovery events and correlated core/worker/client costs. See
+[usage and interpretation limits](../docs/native-mcp-attribution.md).

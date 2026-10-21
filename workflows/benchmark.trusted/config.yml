@@ -1,0 +1,33 @@
+name: benchmark.trusted
+description: Reproducible trusted Roslyn baseline/candidate qualification and separate profiling.
+vault: none
+docker_preflight: false
+dependencies:
+  host:
+    - id: python3
+      command: python3
+      description: Standard-library fixture, receipts and comparison tooling.
+    - id: dotnet
+      command: dotnet
+      description: Repository-pinned .NET SDK for both variants.
+steps:
+  - id: prepare
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/run.py prepare
+  - id: qualify
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/run.py qualify
+  - id: transaction
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/run.py transaction
+  - id: measure
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/run.py measure
+  - id: summarize
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/run.py summarize

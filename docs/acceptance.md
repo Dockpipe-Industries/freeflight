@@ -486,3 +486,9 @@ error; six byte-completion schedules also retain the ordered-accounting
 counterexample. Speculative opens are rejected before runtime integration or timing
 qualification. Runtime remains `6a06b1d`; no recovery speedup is claimed. See
 [proof, receipts and remaining design constraints](recovery-parallel-proof.md).
+
+2026-10-21 handle feasibility: the corrected macOS nonblocking/all-component
+no-follow open plus regular-handle validation passes the local FIFO/race/cancellation
+probe. The invalid flag combination and incorrect event-only assumption remain in
+receipts. This is not a qualified parallel runtime: in-flight syscall termination
+and device-open effects remain limitations. See [native proof and design decision](recovery-handle-feasibility.md).

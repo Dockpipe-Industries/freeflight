@@ -1153,3 +1153,16 @@ claimed, and no existing qualification silently extended to a parallel candidate
 The exact limitation and alternatives are in `docs/recovery-parallel-proof.md`.
 Initial system-Python preflight failed for missing PyYAML; existing perf-venv
 preflight passed. Runtime/lifetime fix and all prior performance evidence preserved.
+
+### 2026-10-21 — macOS handle admission feasibility
+
+From `7f57cc7`, added `benchmark.recovery.handles`. Corrected two tested assumptions:
+NOFOLLOW plus NOFOLLOW_ANY returns EINVAL; EVTONLY regular handles are readable on
+this host. Both failures retained. Final native probe covers special files, leaf and
+ancestor replacement, inode identity/read races, timestamp-restored changes,
+cancellation and fstat faults, plus width-two/four FIFO/cancellation drain. No
+content reads on rejected inputs; no retained owned descriptors. Final frozen
+receipt: `bin/.local/benchmarks/recovery-handles/handles-qualified/result.json`.
+FIFO-specific feasibility established; no general syscall termination claim and
+no .NET/runtime integration, benchmark claim or remote action. Serial runtime and
+accepted lifetime fix remain unchanged. See `docs/recovery-handle-feasibility.md`.

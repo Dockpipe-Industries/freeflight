@@ -102,3 +102,8 @@ condition; it cannot replace a completed condition. See
 recovery opens and ordered byte accounting. It contains potentially blocking
 operations in disposable child processes; see `docs/recovery-parallel-proof.md`
 for expected rejection results and limitations. It is not a latency benchmark.
+
+`benchmark.recovery.handles` tests the macOS nonblocking/all-component no-follow
+open and regular-handle admission proposal using disposable fixtures. It records
+negative race controls and descriptor ownership; it is not a runtime performance
+qualification. See `docs/recovery-handle-feasibility.md`.

@@ -479,3 +479,10 @@ cadence crossover shows substantial context effects but does not identify a
 hardware/runtime mechanism. Latency cells remain mixed; the lifetime repair is a
 correctness acceptance, not a Glider win or a general performance claim. See
 [full timing tables, interruption audit and repeat commands](query-position-controls.md).
+
+2026-10-21 recovery feasibility gate: serial versus width-two/four source-extracted
+workspace opens reproduced a non-draining FIFO case after an earlier resource
+error; six byte-completion schedules also retain the ordered-accounting
+counterexample. Speculative opens are rejected before runtime integration or timing
+qualification. Runtime remains `6a06b1d`; no recovery speedup is claimed. See
+[proof, receipts and remaining design constraints](recovery-parallel-proof.md).

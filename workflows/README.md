@@ -97,3 +97,8 @@ within-process cadence crossover. `benchmark.trusted.position.summary` validates
 complete receipts and an explicitly identified replacement for an interrupted
 condition; it cannot replace a completed condition. See
 [commands, measured gaps and interpretation limits](../docs/query-position-controls.md).
+
+`benchmark.recovery.proof` runs the source-pinned negative gates for speculative
+recovery opens and ordered byte accounting. It contains potentially blocking
+operations in disposable child processes; see `docs/recovery-parallel-proof.md`
+for expected rejection results and limitations. It is not a latency benchmark.

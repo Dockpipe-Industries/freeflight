@@ -1139,3 +1139,17 @@ See `docs/query-position-controls.md` and `position-lifetime-v2/final-review.jso
 Closing staged `repo.check`, Python syntax validation and final receipt workflow
 passed. Forty-four new qualification/MCP logs contain no unhandled exception;
 runtime source remains exactly the scoped `6a06b1d` repair. No publication occurred.
+
+### 2026-10-21 — bounded recovery pre-open rejection
+
+From clean `a74167f`, added `benchmark.recovery.proof` and a source-extracted local
+.NET probe. Serial admission avoids a later FIFO after the first file's size error;
+widths two/four remain blocked while draining despite cancellation. The harness
+contains and records these expected negative outcomes. v1 scheduling-delay and v2
+countdown-barrier receipts are both retained under `bin/.local/benchmarks/recovery-proof`.
+All six two-file completion schedules are recorded; three expose shared-counter
+error-path changes. No runtime optimization accepted, no additional timing matrix
+claimed, and no existing qualification silently extended to a parallel candidate.
+The exact limitation and alternatives are in `docs/recovery-parallel-proof.md`.
+Initial system-Python preflight failed for missing PyYAML; existing perf-venv
+preflight passed. Runtime/lifetime fix and all prior performance evidence preserved.

@@ -17,10 +17,12 @@ def instrument(path):
                             BenchProfile.End(id, method, invokeMs, Stopwatch.GetElapsedTime(reply).TotalMilliseconds);
                         }''')
     replace('        // Admission-only sharing within this trusted refresh.', '        var profileStart = Stopwatch.GetTimestamp();\n        var bytesBefore = bytesRead; var reusedBefore = reusedSnapshots;\n        // Admission-only sharing within this trusted refresh.')
-    sort = '        if (!trustedMsbuild) files.Sort(StringComparer.Ordinal);' if 'if (!trustedMsbuild) files.Sort(StringComparer.Ordinal);' in s else '        files.Sort(StringComparer.Ordinal);'
+    sort = next(line for line in s.splitlines() if 'files.Sort(' in line)
     replace(sort,'        var bookkeepingStart = Stopwatch.GetTimestamp();\n'+sort)
-    replace('        foreach (var file in files)\n        {','        BenchProfile.Add("bookkeeping", bookkeepingStart);\n        foreach (var file in files)\n        {')
-    replace('            var info = new FileInfo(file);','            var admissionStart = Stopwatch.GetTimestamp();\n            var info = new FileInfo(file);')
+    loop = '        foreach (var info in files)\n        {' if 'foreach (var info in files)' in s else '        foreach (var file in files)\n        {'
+    replace(loop,'        BenchProfile.Add("bookkeeping", bookkeepingStart);\n'+loop)
+    admission = '            var file = info.FullName;' if 'foreach (var info in files)' in s else '            var info = new FileInfo(file);'
+    replace(admission,'            var admissionStart = Stopwatch.GetTimestamp();\n'+admission)
     replace('            var generation = Interlocked.Read(ref invalidationGeneration);','            BenchProfile.Add("admission", admissionStart);\n            var generation = Interlocked.Read(ref invalidationGeneration);')
     replace('            // Cached ancestor checks authorize snapshot admission, never a read.', '''            BenchProfile.Reads++;
             if (snapshots.TryGetValue(file, out var prior)) {
@@ -47,6 +49,7 @@ def instrument(path):
         parent = '        var parent = knownParent ?? Path.GetDirectoryName(file)!;' if 'var parent = knownParent' in s else '        var parent = Path.GetDirectoryName(file)!;'
         replace(parent, '        using var scope = BenchProfile.Scope("snapshotPath");\n'+parent)
         replace('\n        if ((info.Attributes & FileAttributes.ReparsePoint)', '\n        if ((BenchProfile.Leaf(info) & FileAttributes.ReparsePoint)')
+    s=s.replace('info.Refresh();', 'BenchProfile.RefreshMetadata(info);')
     s+='''
 // Diagnostic build only: process-wide allocations/GC and runtime event observations.
 internal sealed class BenchProfile : EventListener
@@ -76,6 +79,7 @@ internal sealed class BenchProfile : EventListener
     public static void Add(string stage, long start) => Stages[stage] = Stages.GetValueOrDefault(stage) + Stopwatch.GetElapsedTime(start).TotalMilliseconds;
     public static IDisposable Scope(string stage) => new Timed(stage);
     private sealed class Timed(string stage) : IDisposable { private readonly long start=Stopwatch.GetTimestamp(); public void Dispose()=>Add(stage,start); }
+    public static void RefreshMetadata(FileInfo info) { var start=Stopwatch.GetTimestamp(); try{info.Refresh();} finally{Add("metadataRefresh",start);} }
     public static FileAttributes Leaf(FileInfo info) { var start=Stopwatch.GetTimestamp(); Attrs++; try{return info.Attributes;} finally{Add("attributes",start);} }
     public static FileAttributes Attributes(string path) { var start=Stopwatch.GetTimestamp(); Attrs++; try{return File.GetAttributes(path);} finally{Add("attributes",start);} }
     public static void End(JsonElement id, string method, double invokeMs, double replyMs)

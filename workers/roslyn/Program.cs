@@ -107,7 +107,7 @@ internal static class Program
 internal sealed class SourceEngine : IDisposable
 {
     private ResourcePolicy resources = new();
-    private readonly List<string> trustedPaths = [];
+    private readonly List<FileInfo> trustedPaths = [];
     private readonly Dictionary<string, FileSnapshot> snapshots = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, long> dirtyFiles = new(StringComparer.Ordinal);
     private FileSystemWatcher? watcher;
@@ -238,8 +238,8 @@ internal sealed class SourceEngine : IDisposable
                     }
                 }
                 foreach (var entry in loadedDocuments) documents.Add(entry.Key, entry.Value);
-                trustedPaths.AddRange(documents.Keys);
-                trustedPaths.Sort(StringComparer.Ordinal);
+                trustedPaths.AddRange(documents.Keys.Select(path => new FileInfo(path)));
+                trustedPaths.Sort((left, right) => StringComparer.Ordinal.Compare(left.FullName, right.FullName));
                 projectId = workspace.CurrentSolution.ProjectIds[0];
                 await Refresh(token);
                 // Compilation is now safe to inspect: all source text came through
@@ -376,7 +376,7 @@ internal sealed class SourceEngine : IDisposable
         // always revalidate the complete path without using this set.
         var checkedAncestors = trustedMsbuild && !forceAll && watcher is not null
             ? new HashSet<string>(StringComparer.Ordinal) : null;
-        var files = trustedMsbuild ? trustedPaths : new List<string>();
+        var files = trustedMsbuild ? trustedPaths : new List<FileInfo>();
         var pending = new Stack<string>();
         if (!trustedMsbuild) pending.Push(root!);
         long bytes = 0;
@@ -401,12 +401,12 @@ internal sealed class SourceEngine : IDisposable
                 bytes += length;
                 ResourcePolicy.Check("maxWorkspaceBytes", root!, path, bytes, resources.MaxWorkspaceBytes);
                 ResourcePolicy.Check("maxFiles", root!, path, files.Count + 1L, resources.MaxFiles);
-                files.Add(path);
+                files.Add(new FileInfo(path));
             }
         }
         ResourcePolicy.Check("maxFiles", root!, root!, files.Count, resources.MaxFiles);
         bytes = 0; // Count actual bytes again; stat values can change during a read.
-        if (!trustedMsbuild) files.Sort(StringComparer.Ordinal);
+        if (!trustedMsbuild) files.Sort((left, right) => StringComparer.Ordinal.Compare(left.FullName, right.FullName));
         var solution = workspace.CurrentSolution;
         // Trusted membership changes only on reopen. Stage only refreshed entries;
         // do not mutate the live dictionaries until every input has been admitted.
@@ -415,7 +415,7 @@ internal sealed class SourceEngine : IDisposable
         var nextSnapshots = trustedMsbuild ? new Dictionary<string, FileSnapshot>(StringComparer.Ordinal) : new Dictionary<string, FileSnapshot>(snapshots, StringComparer.Ordinal);
         if (!trustedMsbuild)
         {
-            var present = files.ToHashSet(StringComparer.Ordinal);
+            var present = files.Select(info => info.FullName).ToHashSet(StringComparer.Ordinal);
             foreach (var removed in documents.Keys.Where(path => !present.Contains(path)).ToArray())
             {
                 solution = solution.RemoveDocument(documents[removed]);
@@ -425,15 +425,18 @@ internal sealed class SourceEngine : IDisposable
             }
         }
         byte[]? readBuffer = null;
-        foreach (var file in files)
+        foreach (var info in files)
         {
             token.ThrowIfCancellationRequested();
+            var file = info.FullName;
             snapshots.TryGetValue(file, out var cached);
-            var info = new FileInfo(file);
             if (checkedAncestors is not null && !externalCompilerInputs.Contains(file))
                 CheckSnapshotPath(file, checkedAncestors, info, cached?.Parent);
             else
+            {
                 CheckCompilerInput(file);
+                info.Refresh();
+            }
             var length = info.Length;
             var modified = info.LastWriteTimeUtc.Ticks;
             var generation = Interlocked.Read(ref invalidationGeneration);
@@ -597,6 +600,9 @@ internal sealed class SourceEngine : IDisposable
             CheckPath(parent, checkedAncestors, null);
             checkedAncestors.Add(parent);
         }
+        // The object is reusable, its metadata is not. Refresh only after the
+        // parent path is admitted, before any attribute/length/mtime is consumed.
+        info.Refresh();
         if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
             throw new UnauthorizedAccessException("Symlink/reparse paths are not supported");
     }

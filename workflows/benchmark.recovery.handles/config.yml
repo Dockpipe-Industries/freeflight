@@ -1,0 +1,9 @@
+name: benchmark.recovery.handles
+description: macOS handle-validation feasibility and bounded FIFO fault gates; no runtime changes.
+vault: none
+docker_preflight: false
+steps:
+  - id: prove
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/recovery_handles.py

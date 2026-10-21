@@ -14,6 +14,7 @@ set_target_properties(freeflight-site PROPERTIES QT_WASM_EXPORT_NAME freeflight_
 qt_add_qml_module(freeflight-site URI FreeFlight.Site VERSION 1.0 QML_FILES Main.qml)
 set_source_files_properties("${FREEFLIGHT_SITE_CONTENT}" PROPERTIES QT_RESOURCE_ALIAS content.json)
 qt_add_resources(freeflight-site content PREFIX / FILES "${FREEFLIGHT_SITE_CONTENT}")
+qt_add_resources(freeflight-site fonts PREFIX / FILES fonts/InterVariable.ttf fonts/DejaVuSansMono.ttf)
 target_link_libraries(freeflight-site PRIVATE Qt6::Quick Qt6::QuickControls2)
 if(EMSCRIPTEN)
   configure_file(shell.html "${CMAKE_CURRENT_BINARY_DIR}/index.html" COPYONLY)

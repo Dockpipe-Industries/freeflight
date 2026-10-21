@@ -116,6 +116,10 @@ def main():
     if not notices.is_file():
         raise RuntimeError("Run dockpipe --workflow site.sources to preserve Qt license notices")
     shutil.copy2(notices, stage / "NOTICES.txt")
+    with (stage / "NOTICES.txt").open("a") as output:
+        for name in ("Inter-LICENSE.txt", "DejaVu-LICENSE.txt"):
+            output.write("\n\nBundled font: " + name + "\n")
+            output.write((source / "qt/fonts" / name).read_text())
     files = ("index.html", "loader.js", "freeflight-site.js", "freeflight-site.wasm", "qtloader.js")
     for name in files:
         if not (build / name).is_file():

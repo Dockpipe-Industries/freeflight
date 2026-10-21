@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "site-config.h"
 #include <QFile>
+#include <QFontDatabase>
 #include <QGuiApplication>
 #include <QJsonDocument>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQuickStyle>
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
@@ -39,6 +41,13 @@ public:
 };
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
+    const auto fontId = QFontDatabase::addApplicationFont(":/fonts/InterVariable.ttf");
+    const auto families = QFontDatabase::applicationFontFamilies(fontId);
+    if (!families.isEmpty()) {
+        app.setFont(QFont(families.first()));
+    }
+    QFontDatabase::addApplicationFont(":/fonts/DejaVuSansMono.ttf");
+    QQuickStyle::setStyle("Basic");
     app.setApplicationName("FreeFlight");
     app.setOrganizationName("Dockpipe Industries Inc.");
     QFile content(":/content.json");

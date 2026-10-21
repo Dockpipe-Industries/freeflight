@@ -85,6 +85,30 @@ provenance=dict(officialPackageVerification=json.loads((BASE/'official-package-v
 save(OUT/'provenance.json',provenance)
 for p in [Path(__file__),Path(client.__file__),Path(trusted.__file__)]:
     target=OUT/'driver-source'/p.relative_to(trusted.REPO);target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(p,target)
+# Optional qualified local worker: published core and source-pinned native worker.
+# Preparation/tests finish before any timing process starts.
+candidateReceipt=os.environ.get('FREEFLIGHT_GLIDER_CANDIDATE_RECEIPT')
+candidateCommand=None
+if candidateReceipt:
+    receipt=Path(candidateReceipt).resolve()
+    qualification=json.loads((receipt/'qualification.json').read_text())
+    transaction=json.loads((receipt/'transaction-qualification.json').read_text())
+    assert qualification['status']==transaction['status']=='passed'
+    assert (receipt/'summary.json').is_file(), 'Finish worker qualification and measurements first'
+    prepared=json.loads((receipt/'provenance.json').read_text())
+    frozen=prepared['variants']['candidate'];source=receipt/'candidate/source'
+    for name,digest in frozen['sourceHashes'].items():assert sha(source/name)==digest,name
+    save(OUT/'global.json',{'sdk':{'version':'10.0.402','rollForward':'disable'}})
+    native=OUT/'candidate-native'
+    with (OUT/'candidate-publish.log').open('w') as log:
+        subprocess.run([prepared['dotnet'],'publish',str(source/'workers/roslyn/FreeFlight.Roslyn.csproj'),'-c','Release','--runtime','osx-arm64','--self-contained','true','-p:RestoreLockedMode=true','--artifacts-path',str(OUT/'candidate-publish-artifacts'),'--output',str(native),'-p:PublishSingleFile=false'],cwd=source,env={**ENV,'DOTNET_ROOT':str(Path(prepared['dotnet']).resolve().parent)},stdout=log,stderr=subprocess.STDOUT,check=True)
+    candidateCommand=[str(native/'FreeFlight.Roslyn')]
+    (source/'bin/.local').mkdir(parents=True,exist_ok=True)
+    for test,args in [('test_worker.py',['--native',candidateCommand[0]]),('test_trusted.py',[prepared['dotnet'],candidateCommand[0],'--native'])]:
+        with (OUT/(test+'.log')).open('w') as log:
+            subprocess.run(['python3','-B',str(source/'workers/roslyn'/test),*args],cwd=source,env={**ENV,'DOTNET_ROOT':str(Path(prepared['dotnet']).resolve().parent),'PATH':str(Path(prepared['dotnet']).parent)+os.pathsep+ENV['PATH']},stdout=log,stderr=subprocess.STDOUT,check=True)
+    provenance['candidate']={'workerProvenanceSha256':sha(receipt/'provenance.json'),'qualificationSha256':sha(receipt/'qualification.json'),'transactionSha256':sha(receipt/'transaction-qualification.json'),'sourceHashes':frozen['sourceHashes'],'sdk':prepared['sdk'],'nativeFiles':{str(p.relative_to(native)):sha(p) for p in native.rglob('*') if p.is_file()},'command':candidateCommand,'transport':'Published unchanged core with locally published self-contained candidate worker'}
+    save(OUT/'provenance.json',provenance)
 records=[]
 
 def assert_fixture(f):
@@ -105,8 +129,10 @@ def run_session(variant,f,size,interval,index):
     name=f'{size}-interval{interval:g}-{index}-{variant}';directory=OUT/name;directory.mkdir()
     root=Path(f['root']);queries,check=trusted.workload(f,size);target=root/'source/P00/Nested/C0.cs';caller=Path(queries[1][1]['file'])
     assert_fixture(f)
-    if variant=='freeflight':
+    if variant!='glider':
         startup=directory/'startup.json';save(startup,{'roots':[str(root)],'trustedRoots':[str(root)],'csharp':{'project':f['project']}})
+        if variant=='candidate':
+            config=json.loads(startup.read_text());config['engines']={'csharp':candidateCommand};save(startup,config)
         command=[str(BUNDLE/'bin/freeflight'),'--config',str(startup)]
     else:command=[str(GLIDER),'--no-telemetry','--max-response-chars','2000000','--msbuild-path',str(SDK/'sdk/10.0.402')]
     s=client.Session(root,directory,command=command,environment=ENV,sample_memory=False,working_directory=root)
@@ -114,7 +140,7 @@ def run_session(variant,f,size,interval,index):
     save(directory/'discovery.json',s.server_info)
     try:
         start=time.perf_counter_ns()
-        if variant=='freeflight':
+        if variant!='glider':
             loaded=unpack(s.request('tools/call',{'name':'engine.capabilities','arguments':{'root':str(root),'language':'csharp'}}))
             rec['loadMs']=(time.perf_counter_ns()-start)/1e6
             assert loaded['analysis']['files']==size and loaded['analysis']['projects']==f['projects'],loaded
@@ -155,7 +181,7 @@ def run_session(variant,f,size,interval,index):
             save(directory/'validated-search-keys.json',keys)
         def invoke(method,args):
             start=time.perf_counter_ns()
-            if variant=='freeflight':result,ignored=s.query('csharp',method,**args)
+            if variant!='glider':result,ignored=s.query('csharp',method,**args)
             else:
                 if method=='symbols':tool='get_structure';arguments={'filePath':str(target),'includeMembers':True}
                 elif method=='definition':tool='get_symbol_at_position';arguments={'filePath':str(caller),'line':1,'column':args['character']+1}
@@ -163,7 +189,7 @@ def run_session(variant,f,size,interval,index):
                 else:tool='find_code';arguments={'query':f['searchQuery'],'matchMode':'all','scope':{'mode':'solution'},'take':1000}
                 result=unpack(s.request('tools/call',{'name':tool,'arguments':arguments}))
             ms=(time.perf_counter_ns()-start)/1e6
-            if variant=='freeflight':check(method,result)
+            if variant!='glider':check(method,result)
             else:
                 complete(result)
                 if method=='symbols':
@@ -202,8 +228,11 @@ try:
     for interval in intervals:
         for size in sizes:
             for pair in range(sessions):
-                order=['freeflight','glider'] if pair%2==0 else ['glider','freeflight']
-                for offset,variant in enumerate(order):run_session(variant,fixtures[str(size)],size,interval,pair*2+offset)
+                if candidateCommand:
+                    products=['freeflight','candidate','glider'];rotation=pair%3
+                    order=products[rotation:]+products[:rotation]
+                else:order=['freeflight','glider'] if pair%2==0 else ['glider','freeflight']
+                for offset,variant in enumerate(order):run_session(variant,fixtures[str(size)],size,interval,pair*len(order)+offset)
     rows=[]
     for r in records:
         for phase in ['warmup','steady','idle-5.1s']:
@@ -217,5 +246,12 @@ try:
                 ff=[x for x in selected if x['variant']=='freeflight'];gl=[x for x in selected if x['variant']=='glider']
                 item=dict(size=size,interval=interval,method=method,freeflight=ff,glider=gl,medianRatio=statistics.median(x['median'] for x in ff)/statistics.median(x['median'] for x in gl),p90Ratio=statistics.median(x['p90'] for x in ff)/statistics.median(x['p90'] for x in gl));comparisons.append(item)
                 print(size,interval,method,'FreeFlight/Glider median',round(item['medianRatio'],3),'p90',round(item['p90Ratio'],3),flush=True)
+                if candidateCommand:
+                    candidate=[x for x in selected if x['variant']=='candidate']
+                    for other in ['freeflight','glider']:
+                        baseline=[x for x in selected if x['variant']==other]
+                        extra=dict(size=size,interval=interval,method=method,candidate=candidate,baseline=baseline,baselineName=other,medianRatio=statistics.median(x['median'] for x in candidate)/statistics.median(x['median'] for x in baseline),p90Ratio=statistics.median(x['p90'] for x in candidate)/statistics.median(x['p90'] for x in baseline));comparisons.append(extra)
+                        print(size,interval,method,'candidate/'+other,'median',round(extra['medianRatio'],3),'p90',round(extra['p90Ratio'],3),flush=True)
+
     save(OUT/'summary.json',{'status':'passed','sessions':rows,'comparisons':comparisons})
 except Exception as error:save(OUT/'failure.json',{'error':repr(error)});raise

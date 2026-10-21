@@ -987,3 +987,13 @@ are checked where exposed; missing Glider fields and cached-key interaction are
 disclosed. All maxima and setup failures are retained. Glider leads tiny operations;
 broad-search ordering reverses with cadence. No runtime or remote changes.
 See [full evidence and repeat command](glider-head-to-head.md).
+
+## Glider-target local iteration (2026-10-21)
+
+Scratch reuse passed worker/native security, cancellation, mutation and transaction
+qualification plus 7,200 three-product MCP semantic checks. Full-expiry diagnostic
+allocation fell 48.0 to 21.7 MB, but ordinary latency remained mixed and several
+p90/max values regressed. Candidate rejected for latency; shipped runtime restored.
+The rejected patch, raw failures and all measurements remain local. See
+[iteration evidence and design proof obligations](glider-target-iteration.md).
+No push, PR, release, deployment or active configuration change.

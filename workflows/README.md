@@ -53,3 +53,7 @@ benchmark; it does not replace endpoint or packaged platform qualification.
 `benchmark.trusted.mcp` reuses a completed trusted comparison through the existing
 MCP client, recording endpoint timings separately against the same frozen workers.
 It requires a local core build and does not modify active MCP configuration.
+
+`benchmark.trusted.glider` compares the frozen published bundle with isolated official
+Glider through MCP, using the existing trusted fixtures and semantic oracle. See
+[methodology, results and repeat command](../docs/glider-head-to-head.md).

@@ -150,3 +150,5 @@ For reproducible trusted Roslyn baseline/candidate experiments, see the
 [trusted performance workflow](trusted-performance-workflow.md) and
 [residual refresh investigation](rc2-residual-refresh-investigation.md), and
 [optimization sprint](rc2-refresh-sprint.md).
+
+Same-machine product comparison: [Glider head-to-head](glider-head-to-head.md).

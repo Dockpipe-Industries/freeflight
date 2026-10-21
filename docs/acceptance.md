@@ -353,3 +353,13 @@ claimed or authorized by these local checks.
 
 See [sprint evidence](rc2-refresh-sprint.md). M6 synthetic measurements do not
 establish Linux/Biztraak/Glider performance. No production promotion is authorized.
+
+## Same-machine Glider comparison (2026-10-21)
+
+Published FreeFlight `97c1342d9234` and official Glider 13.3.0 completed the local
+`benchmark.trusted.glider` workflow: 24 fresh processes, both synthetic graph sizes,
+unpaced and paced runs, all 9,600 measured semantic checks passed. Complete ranges
+are checked where exposed; missing Glider fields and cached-key interaction are
+disclosed. All maxima and setup failures are retained. Glider leads tiny operations;
+broad-search ordering reverses with cadence. No runtime or remote changes.
+See [full evidence and repeat command](glider-head-to-head.md).

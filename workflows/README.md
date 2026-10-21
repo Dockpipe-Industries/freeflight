@@ -62,3 +62,13 @@ Glider through MCP, using the existing trusted fixtures and semantic oracle. See
 Set a fresh `FREEFLIGHT_METADATA_LABEL` and put the repository-pinned .NET SDK on PATH.
 The trusted benchmark automatically runs this proof for candidates containing the helper.
 See [batching evidence and repeat commands](../docs/fresh-metadata-batching.md).
+
+`benchmark.expiry` checks the pinned Darwin runtime IL and the exact bounded-read
+helper's cancellation/error behavior. Set a fresh `FREEFLIGHT_EXPIRY_LABEL`; use
+the repository-pinned SDK on PATH. The trusted workflow includes this proof for
+Darwin candidates containing the inline-read helper.
+
+`benchmark.trusted.behavior` clones a qualified comparison's fixture for edit,
+watcher, repeated/distinct-query and payload diagnostics. It never edits the
+immutable timing fixture. See [usage and proof limits](../docs/glider-behavior.md).
+Run it separately from ordinary timing processes.

@@ -1,0 +1,9 @@
+name: benchmark.expiry
+description: Inspect pinned runtime read scheduling and prove bounded content read cancellation semantics.
+vault: none
+docker_preflight: false
+steps:
+  - id: prove
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/expiry_tests.py

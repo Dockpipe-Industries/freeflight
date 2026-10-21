@@ -543,12 +543,12 @@ internal sealed class SourceEngine : IDisposable
             }
             // Cached ancestor checks authorize snapshot admission, never a read.
             // Preserve full validation immediately before opening source bytes.
-            if (incrementalValidation && !UseHandleAdmission(file))
+            if (incrementalValidation && !UseHandleAdmission(file, recover))
                 CheckCompilerInput(file);
-            else if (checkedAncestors is not null && !externalCompilerInputs.Contains(file) && !UseHandleAdmission(file))
+            else if (checkedAncestors is not null && !externalCompilerInputs.Contains(file) && !UseHandleAdmission(file, recover))
                 CheckPath(file);
             // Bounded read even when the file grows after enumeration.
-            using var stream = OpenCompilerInput(file);
+            using var stream = OpenCompilerInput(file, recover);
             readFiles++;
             using var memory = new MemoryStream();
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
@@ -664,11 +664,11 @@ internal sealed class SourceEngine : IDisposable
     [DllImport("libc", EntryPoint = "open", SetLastError = true)]
     private static extern int OpenNonBlocking([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int flags);
 
-    private bool UseHandleAdmission(string path) => trustedMsbuild && OperatingSystem.IsMacOS() && !externalCompilerInputs.Contains(path);
+    private bool UseHandleAdmission(string path, bool recovering) => recovering && trustedMsbuild && OperatingSystem.IsMacOS() && !externalCompilerInputs.Contains(path);
 
-    private FileStream OpenCompilerInput(string path)
+    private FileStream OpenCompilerInput(string path, bool recovering)
     {
-        if (UseHandleAdmission(path))
+        if (UseHandleAdmission(path, recovering))
             return DarwinSourceHandle.Open(path, root!, () =>
             {
                 CheckPath(path);

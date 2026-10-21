@@ -32,7 +32,14 @@ internal static class DarwinSourceHandle
         var fd = NativeOpen(full, flags);
         // Unsupported capability and ordinary open errors retain serial path/error
         // handling. Never retry with unchecked, weaker flags.
-        if (fd < 0) return fallback();
+        if (fd < 0)
+        {
+            // An explicit kernel symlink rejection is terminal. In particular,
+            // the legacy root-relative walk does not recheck the root itself.
+            if (Marshal.GetLastPInvokeError() == 62) // Darwin ELOOP
+                throw new UnauthorizedAccessException("Symlink/reparse paths are not supported");
+            return fallback();
+        }
         SafeFileHandle? handle = new((IntPtr)fd, ownsHandle: true);
         try
         {

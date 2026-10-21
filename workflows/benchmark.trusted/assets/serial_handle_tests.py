@@ -64,6 +64,11 @@ using(var cts=new CancellationTokenSource()){
 }
 var before=DarwinSourceHandle.Calls;
 Reject("ordered early failure avoids later open",()=>{if(new FileInfo(path).Length>1)throw new IOException("first size failure");using var stream=DarwinSourceHandle.Open(fifo,root,()=>old.Open(fifo));});Assert(before==DarwinSourceHandle.Calls,"opened later file");
+Directory.Move(root,root+"-saved");Directory.CreateSymbolicLink(root,outside);
+try {
+ using(var legacy=old.Open(path)){Assert(new StreamReader(legacy).ReadToEnd()=="outside","legacy root-swap negative control");}
+ Reject("root symlink cannot fall back",()=>{using var stream=DarwinSourceHandle.Open(path,root,()=>old.Open(path));});
+} finally {Directory.Delete(root);Directory.Move(root+"-saved",root);}
 Console.WriteLine("SERIAL_HANDLE_PROOF_PASSED");
 static class Native {
 [DllImport("libc",EntryPoint="fcntl",SetLastError=true)]internal static extern int Fcntl(int fd,int command);

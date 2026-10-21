@@ -420,3 +420,22 @@ responses across 36 fresh processes. Outlines approach Glider, but definitions,
 expiry spikes and a paced-search regression remain. No overall win, release or
 configuration change.
 See [the explicit freshness contract](incremental-validation.md).
+
+## Search and response regression investigation (2026-10-21)
+
+No new runtime winner was accepted. Guarded compilation search and owned MCP
+responses passed semantic/security gates, but the combined and response-only
+M6 matrices retained unfavorable latency cells. Each matrix used 32 fresh
+processes and passed 6,400 steady-state / 128 post-idle semantic checks against
+shipped 97c1342, d8232ec and pinned Glider 13.3.0. The combined candidate improved
+full-graph search but regressed paced outline/definition tails. The response-only
+control improved search by 11% unpaced / 3% paced but retained a 10% paced
+definition-p90 regression and an 18% unpaced reference-p90 regression. Recovery
+remained about 158 ms versus Glider's roughly 5 ms. These are bounded synthetic
+observations, not Linux/Biztraak results or a universal comparison.
+
+Candidates are preserved locally at 5d14a4a and 5c44c97. Runtime is restored to
+d8232ec; profiling, differential tests and deterministic comparison/replay
+workflows remain. See [complete tables, source costs, failures and repeat commands](compilation-search.md).
+
+Closing qualification passed in `bin/.local/benchmarks/trusted/restored-runtime-final`: worker/security/mutation gates, all 16 incremental fault checks, metadata/read proofs and five failed-refresh state-preservation cases per variant. Baseline/candidate worker source hashes are identical to d8232ec. `bin/.local/glider-comparison/response-ref-replay-qualification` passed native worker/core gates with zero timed processes; its pinned core source hashes exactly match the measured response-only control.

@@ -1,4 +1,9 @@
-# Guarded compilation search investigation
+# Search and response performance investigation
+
+**Outcome:** no regression-free runtime winner. Runtime is restored to `d8232ec`;
+local candidates `5d14a4a` (combined) and `5c44c97` (response only) preserve the
+tested alternatives. The workflows and all favorable/unfavorable evidence remain.
+Neither candidate is approved for promotion.
 
 Local continuation from `d8232ec`; no change to strict-default or incremental
 freshness/recovery contracts. No answer cache, background maintenance, project
@@ -247,8 +252,8 @@ incremental fault checks and five failed-refresh preservation cases per variant.
 Both local cores passed 23 protocol tests and the process/IPC/cancellation suite.
 
 Tables report median of session medians / median of session p90 / maximum of
-all retained ordinary samples, in milliseconds. Maxima include recovery spikes;
-none are removed. These bounded samples are not a statistical universal-win claim.
+all retained ordinary samples, in milliseconds. All large periodic outliers are retained;
+none are removed. Worker profiles separately identify full-recovery costs. These bounded samples are not a statistical universal-win claim.
 
 
 ### 433 files, 0-second round pacing
@@ -338,6 +343,7 @@ FREEFLIGHT_GLIDER_CANDIDATE_RECEIPT="$PWD/bin/.local/benchmarks/trusted/incremen
 FREEFLIGHT_GLIDER_LOCAL_BASELINE_RECEIPT="$PWD/bin/.local/glider-comparison/incremental-v3" \
 FREEFLIGHT_GLIDER_LOCAL_BASELINE_REF=d8232ec \
 FREEFLIGHT_GLIDER_BUILD_CANDIDATE_CORE=1 \
+FREEFLIGHT_GLIDER_CANDIDATE_CORE_REF=5c44c97 \
 FREEFLIGHT_GLIDER_DOTNET_ROOT=/Users/jamie/Documents/Codex/2026-10-19/task/toolchains/dotnet \
 FREEFLIGHT_GLIDER_SESSIONS=2 FREEFLIGHT_GLIDER_ROUNDS=50 FREEFLIGHT_GLIDER_WARMUP=10 \
 dockpipe --workflow benchmark.trusted.glider
@@ -413,7 +419,8 @@ Small-graph unfavorable tails are also retained in the tables. No unsupported
 noise threshold is used to dismiss them. Lower allocation alone is not proof of
 better latency for every operation.
 
-Both candidate source trees will remain recoverable locally. The selected runtime
+Both candidate source trees remain recoverable in local commits `5d14a4a` and
+`5c44c97`. The selected runtime
 returns to d8232ec; the new profiling, differential, matched-core comparison and
 response diagnostic workflows remain. Nothing here qualifies a release winner.
 
@@ -438,3 +445,18 @@ No Linux/Windows run, syscall rerun, arbitrary-solution qualification or univers
 win is claimed. All measurements here are M6 synthetic evidence. Strict default,
 fresh target reads, external-input restrictions, watcher recovery and preview
 hashes remain intact.
+
+
+`FREEFLIGHT_GLIDER_CANDIDATE_CORE_REF` selects a pinned candidate core without
+changing the checkout. It reuses the same Git-source freezing and native gates as
+the local baseline. `FREEFLIGHT_GLIDER_PREPARE_ONLY=1` runs preparation and native
+gates and emits `qualification-only.json` with zero timed processes; this is not
+a benchmark result. The closing replay checks this ref path against the original
+control source hashes.
+
+`benchmark.trusted.qualification` reuses prepare/qualify/transaction from the full
+workflow without timing. It is used for the restored runtime's closing fault and
+security qualification; use a fresh `FREEFLIGHT_TRUSTED_BENCH_LABEL` and the same
+SDK/fixture variables. No duplicate test implementation is introduced.
+
+Closing qualification passed in `bin/.local/benchmarks/trusted/restored-runtime-final`: worker/security/mutation gates, all 16 incremental fault checks, metadata/read proofs and five failed-refresh state-preservation cases per variant. Baseline/candidate worker source hashes are identical to d8232ec. `bin/.local/glider-comparison/response-ref-replay-qualification` passed native worker/core gates with zero timed processes; its pinned core source hashes exactly match the measured response-only control.

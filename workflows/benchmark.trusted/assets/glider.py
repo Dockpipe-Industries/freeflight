@@ -142,7 +142,9 @@ if os.environ.get('FREEFLIGHT_GLIDER_BUILD_CANDIDATE_CORE') == '1':
     ctest=str(Path(cmake).resolve().with_name('ctest'))
     assert Path(ctest).is_file(), ctest
     jsonSource=trusted.REPO/'bin/.local/build/_deps/json-src'
-    for label,ref in [('candidate',None),('local-baseline',baselineCommit)]:
+    requestedCoreRef=os.environ.get('FREEFLIGHT_GLIDER_CANDIDATE_CORE_REF')
+    candidateCoreRef=trusted.git('rev-parse',requestedCoreRef) if requestedCoreRef else None
+    for label,ref in [('candidate',candidateCoreRef),('local-baseline',baselineCommit)]:
         coreSource=OUT/(label+'-core-source');coreSource.mkdir()
         names=['CMakeLists.txt','README.md','LICENSE']+trusted.git('ls-files','src','include','tests').splitlines()
         for name in names:
@@ -168,6 +170,9 @@ if os.environ.get('FREEFLIGHT_GLIDER_BUILD_CANDIDATE_CORE') == '1':
     provenance['candidate']['transport']='Source-frozen local core with protocol/process gates and qualified native worker'
     provenance['localBaseline']['transport']='Commit-frozen local core built with identical compiler/options and retained qualified native worker'
     save(OUT/'provenance.json',provenance)
+if os.environ.get('FREEFLIGHT_GLIDER_PREPARE_ONLY') == '1':
+    save(OUT/'qualification-only.json',{'status':'passed','timedProcesses':0,'note':'Preparation/native gates only; no latency claim.'})
+    raise SystemExit(0)
 records=[]
 
 def assert_fixture(f):

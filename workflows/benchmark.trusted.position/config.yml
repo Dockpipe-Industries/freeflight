@@ -1,0 +1,9 @@
+name: benchmark.trusted.position
+description: Serial native lifetime-fix qualification and balanced identical-binary spacing controls.
+vault: none
+docker_preflight: false
+steps:
+  - id: compare
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/position.py

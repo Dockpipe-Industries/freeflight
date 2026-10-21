@@ -90,3 +90,10 @@ recovery events and correlated core/worker/client costs. See
 before and current source, in ordinary and generated diagnostic builds, then checks
 callback lifetime contracts. It is a correctness proof, not a timing run. See
 [commands and retained failures](../docs/shutdown-lifetime.md).
+
+`benchmark.trusted.position` reuses native qualification, matched lifetime-fix
+timings and identical-binary fixed/balanced/spacing controls. It includes a
+within-process cadence crossover. `benchmark.trusted.position.summary` validates
+complete receipts and an explicitly identified replacement for an interrupted
+condition; it cannot replace a completed condition. See
+[commands, measured gaps and interpretation limits](../docs/query-position-controls.md).

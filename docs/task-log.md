@@ -1110,3 +1110,32 @@ worker test teardown exit checks while retaining crash-log rejection. Full local
 worker/security/mutation, 16-case incremental and transaction qualification passed
 in `shutdown-lifetime-v1`. No freshness/validation/recovery contract changed.
 Prior failures remain retained; ordinary benchmark control qualification follows.
+
+Native ordinary and generated diagnostic preparation passed, including core
+protocol/process checks and the retained crash-log gate. Added balanced predecessor
+ordering, measured inter-query gaps and identical-binary controls. The first setup
+attempt stopped before timing because the adapter required a worker timing summary;
+added an explicit qualified-only receipt option without weakening worker or
+transaction gates, and retained `position-lifetime-v1`.
+
+`position-lifetime-v2` completed the 16-process lifetime comparison and eight
+fixed/balanced controls before executor handle loss interrupted the final spacing
+condition. Read-only escalated process inspection confirmed no surviving task
+processes. Preserved one complete process and the partial directory; unflushed
+partial timings were unavailable. Repeated only that four-process condition under
+`position-lifetime-v2-aa-equal-gap-recovery`. Added fail-closed completion review,
+source/parameter equality checks and an expected rejection of the partial condition.
+
+Because that spacing run followed the interruption, added a bounded four-process
+within-process cadence crossover in `position-lifetime-v3-crossover`, with alternating
+four-round balanced blocks. All 32 complete comparison/control processes passed
+10,240 steady and 128 idle semantic checks; the interrupted complete process remains
+separate. Actual gaps and boundary carryover are recorded. Cadence changes service
+time strongly in unchanged processes, but the OS/runtime mechanism and independent
+predecessor/position effects remain unresolved. Before/fixed performance cells are
+mixed and retained; no speculative optimization or parallel recovery was added.
+See `docs/query-position-controls.md` and `position-lifetime-v2/final-review.json`.
+
+Closing staged `repo.check`, Python syntax validation and final receipt workflow
+passed. Forty-four new qualification/MCP logs contain no unhandled exception;
+runtime source remains exactly the scoped `6a06b1d` repair. No publication occurred.

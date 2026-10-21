@@ -57,7 +57,13 @@ assert rounds>=10 and sessions>=1 and warmup>=2 and set(sizes)<={433,5845}
 assert all(0<=x<=10 for x in intervals)
 diagnostic=os.environ.get('FREEFLIGHT_GLIDER_PROFILE')=='1'
 queryOrder=os.environ.get('FREEFLIGHT_GLIDER_QUERY_ORDER','fixed')
-assert queryOrder in ('fixed','rotating')
+assert queryOrder in ('fixed','rotating','balanced')
+queryGap=float(os.environ.get('FREEFLIGHT_GLIDER_QUERY_GAP','0'))
+assert 0 <= queryGap <= 1
+cadenceCrossover=os.environ.get('FREEFLIGHT_GLIDER_CADENCE_CROSSOVER')=='1'
+if cadenceCrossover:
+    assert queryOrder=='balanced' and rounds%8==0 and intervals==[.1] and queryGap==.02
+    assert os.environ.get('FREEFLIGHT_GLIDER_IDENTICAL_CONTROL')=='1'
 requestedProducts=os.environ.get('FREEFLIGHT_GLIDER_PRODUCTS')
 requestedProducts=requestedProducts.split(',') if requestedProducts else None
 if requestedProducts:
@@ -95,7 +101,7 @@ for size in sizes:
     assert all(hashes[n]==v for n,v in old['hashes'].items() if n.endswith('.cs'))
     fixtures[str(size)]={**old,'root':str(root),'project':'Comparison.sln','hashes':hashes,'aggregateSha256':hashlib.sha256(json.dumps(hashes,sort_keys=True).encode()).hexdigest()}
 provenance=dict(officialPackageVerification=json.loads((BASE/'official-package-verification.json').read_text()),bundleSdkPinSha256=sha(BUNDLE.parent/'global.json'),releaseManifestSha256=sha(releasePath),sourceCommit=release['sourceCommit'],releaseTag=release['tag'],freeflightBinarySha256=sha(BUNDLE/'bin/freeflight'),bundleManifestSha256=sha(BUNDLE/'SHA256SUMS'),gliderVersion='13.3.0',gliderCommand=str(GLIDER),gliderFiles={str(p.relative_to(GLIDER.parent)):sha(p) for p in GLIDER.parent.rglob('*') if p.is_file()},sdk='10.0.402',sdkRoot=str(SDK),platform=platform.platform(),architecture=platform.machine(),rounds=rounds,sessions=sessions,warmupSeconds=warmup,intervals=intervals,fixtures=fixtures,originalProvenanceSha256=sha(origin),driverHashes={str(p.relative_to(trusted.REPO)):sha(p) for p in [Path(__file__),Path(client.__file__),Path(trusted.__file__)]},limitations=['Synthetic source graph, not Biztraak.','Source bytes and graph retained; both target net10.0 with SDK 10.0.402 instead of prior net11.0.','Published self-contained FreeFlight uses its bundled runtime; Glider uses existing .NET 10.0.13.','Glider definition/search omit columns and reference ends; exact source declarations are qualified separately and missing fields are not fabricated.','Reference symbol keys are discovered and validated before timing.','Contract differences in per-request freshness/security are not normalized away.'])
-provenance.update(diagnostic=diagnostic,queryOrder=queryOrder,requestedProducts=requestedProducts)
+provenance.update(diagnostic=diagnostic,queryOrder=queryOrder,queryGapSeconds=queryGap,cadenceCrossover=cadenceCrossover,requestedProducts=requestedProducts)
 profileAsset=Path(__file__).with_name('native_profile.py')
 provenance['driverHashes'][str(profileAsset.relative_to(trusted.REPO))]=sha(profileAsset)
 provenance['driverHashes'][str(Path(__file__).with_name('profile.py').relative_to(trusted.REPO))]=sha(Path(__file__).with_name('profile.py'))
@@ -111,7 +117,9 @@ if candidateReceipt:
     qualification=json.loads((receipt/'qualification.json').read_text())
     transaction=json.loads((receipt/'transaction-qualification.json').read_text())
     assert qualification['status']==transaction['status']=='passed'
-    assert (receipt/'summary.json').is_file(), 'Finish worker qualification and measurements first'
+    workerTimingPresent=(receipt/'summary.json').is_file()
+    assert workerTimingPresent or os.environ.get('FREEFLIGHT_GLIDER_QUALIFIED_WORKER_ONLY')=='1', 'Finish worker measurements or explicitly select a qualified-only worker receipt'
+    provenance['workerTimingReceiptPresent']=workerTimingPresent
     prepared=json.loads((receipt/'provenance.json').read_text())
     frozen=prepared['variants']['candidate'];source=receipt/'candidate/source'
     for name,digest in frozen['sourceHashes'].items():assert sha(source/name)==digest,name
@@ -142,7 +150,11 @@ if localBaselineReceipt:
     assert candidateCommand, 'A local baseline requires a candidate comparison'
     retained=Path(localBaselineReceipt).resolve()
     previous=json.loads((retained/'provenance.json').read_text())
-    assert json.loads((retained/'summary.json').read_text())['status']=='passed'
+    if (retained/'summary.json').exists():
+        assert json.loads((retained/'summary.json').read_text())['status']=='passed'
+    else:
+        preparedOnly=json.loads((retained/'qualification-only.json').read_text())
+        assert preparedOnly['status']=='passed' and preparedOnly['timedProcesses']==0
     for name,digest in previous['candidate']['nativeFiles'].items():
         assert sha(retained/'candidate-native'/name)==digest, name
     baselineRef=os.environ['FREEFLIGHT_GLIDER_LOCAL_BASELINE_REF']
@@ -204,6 +216,10 @@ if os.environ.get('FREEFLIGHT_GLIDER_BUILD_CANDIDATE_CORE') == '1':
     provenance['candidate']['transport']='Source-frozen local core with protocol/process gates and qualified native worker'
     provenance['localBaseline']['transport']='Commit-frozen local core built with identical compiler/options and retained qualified native worker'
     save(OUT/'provenance.json',provenance)
+if os.environ.get('FREEFLIGHT_GLIDER_SHARED_CORE')=='1':
+    assert provenance['candidateCore']['sourceHashes']==provenance['local-baselineCore']['sourceHashes']
+    localBaselineCore=candidateCore
+    provenance['sharedCore']=True
 if os.environ.get('FREEFLIGHT_GLIDER_IDENTICAL_CONTROL')=='1':
     assert provenance.get('sharedWorker')
     assert provenance['candidateCore']['sourceHashes']==provenance['local-baselineCore']['sourceHashes']
@@ -243,7 +259,7 @@ def run_session(variant,f,size,interval,index):
     else:command=[str(GLIDER),'--no-telemetry','--max-response-chars','2000000','--msbuild-path',str(SDK/'sdk/10.0.402')]
     cpuStart=resource.getrusage(resource.RUSAGE_CHILDREN)
     s=client.Session(root,directory,command=command,environment=ENV,sample_memory=False,working_directory=root)
-    rec=dict(name=name,variant=variant,size=size,interval=interval,command=command,diagnostic=diagnostic,queryOrder=queryOrder,startupDiscoveryMs=s.startup_ms,samples=[],status='running');records.append(rec)
+    rec=dict(name=name,variant=variant,size=size,interval=interval,command=command,diagnostic=diagnostic,queryOrder=queryOrder,queryGapSeconds=queryGap,startupDiscoveryMs=s.startup_ms,samples=[],status='running');records.append(rec)
     save(directory/'discovery.json',s.server_info)
     try:
         start=time.perf_counter_ns()
@@ -286,7 +302,9 @@ def run_session(variant,f,size,interval,index):
             definition=complete(unpack(s.request('tools/call',{'name':'get_symbol_at_position','arguments':{'filePath':str(caller),'line':1,'column':queries[1][1]['character']+1}})))
             definition_key=definition['symbolKey'];save(directory/'definition-source.json',source_check(s,definition_key,target,'Method'))
             save(directory/'validated-search-keys.json',keys)
+        previousQueryEnd=None;previousMethod=None;invokeContext={}
         def invoke(method,args):
+            nonlocal previousQueryEnd,previousMethod,invokeContext
             start=time.perf_counter_ns()
             if variant!='glider':result,ignored=s.query('csharp',method,**args)
             else:
@@ -295,7 +313,9 @@ def run_session(variant,f,size,interval,index):
                 elif method=='references':tool='find_references';arguments={'symbolKey':reference_key,'scope':{'mode':'solution'},'includeLineText':False,'take':1000}
                 else:tool='find_code';arguments={'query':f['searchQuery'],'matchMode':'all','scope':{'mode':'solution'},'take':1000}
                 result=unpack(s.request('tools/call',{'name':tool,'arguments':arguments}))
-            ms=(time.perf_counter_ns()-start)/1e6
+            end=time.perf_counter_ns();ms=(end-start)/1e6
+            invokeContext={'previousMethod':previousMethod,'gapBeforeMs':None if previousQueryEnd is None else (start-previousQueryEnd)/1e6}
+            previousQueryEnd=end;previousMethod=method
             if variant!='glider':check(method,result)
             else:
                 complete(result)
@@ -317,16 +337,26 @@ def run_session(variant,f,size,interval,index):
             result,ms=invoke(method,args);save(directory/(method+'-validated.json'),result)
         def cycle(phase,round_index):
             started=time.monotonic()
+            delayPolicy=cadenceCrossover and ((round_index//4+index)%2==1)
+            effectiveGap=queryGap if not cadenceCrossover or delayPolicy else 0
+            effectiveInterval=interval if not cadenceCrossover or not delayPolicy else 0
+            cadence='idle' if phase=='idle-5.1s' else 'query-delay' if effectiveGap else 'round'
             ordered=queries
             if queryOrder=='rotating' and phase!='idle-5.1s':
                 offset=round_index%len(queries);ordered=queries[offset:]+queries[:offset]
+            elif queryOrder=='balanced' and phase!='idle-5.1s':
+                # Williams design: all four positions and all twelve directed
+                # within-round predecessor pairs occur once per four rounds.
+                design=((0,1,3,2),(1,2,0,3),(2,3,1,0),(3,0,2,1))
+                ordered=[queries[i] for i in design[round_index%4]]
             for ordinal,(method,args) in enumerate(ordered):
+                if effectiveGap and phase!='idle-5.1s':time.sleep(effectiveGap)
                 result,ms=invoke(method,args)
                 sample={'phase':phase,'round':round_index,'ordinal':ordinal,'method':method,'ms':ms,
-                    'requestId':s.sequence,'resultSha256':hashlib.sha256(json.dumps(result,sort_keys=True).encode()).hexdigest()}
+                    'requestId':s.sequence,'cadence':cadence,**invokeContext,'resultSha256':hashlib.sha256(json.dumps(result,sort_keys=True).encode()).hexdigest()}
                 if diagnostic:sample['clientProfile']=s.last_request_profile.copy()
                 rec['samples'].append(sample)
-            if interval:time.sleep(max(0,interval-(time.monotonic()-started)))
+            if effectiveInterval:time.sleep(max(0,effectiveInterval-(time.monotonic()-started)))
         start=time.monotonic();i=0
         while i<3 or time.monotonic()-start<warmup:cycle('warmup',i);i+=1
         for i in range(rounds):cycle('steady',i)

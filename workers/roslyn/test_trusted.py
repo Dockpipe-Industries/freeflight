@@ -174,6 +174,30 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
         assert rejected["code"] == "project_load_failed", rejected
         empty_solution.unlink()
         assert "result" in call("open", root=str(root), project="source/Architecture.sln")
+        # Exercise multi-partition admission in native and packaged CI, not only
+        # the optional performance workflow. These inert members stay in scope.
+        padding = root / "Lib/Padding"
+        padding.mkdir()
+        for index in range(256):
+            (padding / f"Member{index}.cs").write_text(f"class Padding{index} {{}}")
+        enlarged = call("open", root=str(root), project="source/Architecture.sln")
+        assert enlarged["result"]["files"] == 258, enlarged
+        # Metadata prevalidation must not reorder a later missing input ahead of
+        # an earlier resource violation. Recovery also verifies no partial state.
+        limit = 4 * 1024 * 1024
+        assert "result" in call("open", root=str(root), project="App/App.csproj", resources={"maxFileBytes": limit})
+        early = root / "App/Consumer.cs"
+        late = root / "Lib/Widget.cs"
+        early.write_bytes(b" " * (limit + 1))
+        late.unlink()
+        try:
+            rejected = call("symbols", file="App/Consumer.cs")["error"]
+            assert rejected["code"] == "resource_limit_exceeded" and rejected["resource"] == "maxFileBytes", rejected
+            assert rejected["path"].replace("\\", "/") == "App/Consumer.cs", rejected
+        finally:
+            early.write_text(source)
+            late.write_bytes(widget_source.encode("utf-8"))
+        assert "result" in call("open", root=str(root), project="source/Architecture.sln")
         # Refresh must reject replaced non-target leaves/ancestors even when the
         # previous source snapshot is reusable. Unix symlink fixture only; Windows
         # reparse-point qualification requires its own privilege-aware fixture.

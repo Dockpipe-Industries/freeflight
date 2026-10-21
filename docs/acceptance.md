@@ -316,3 +316,40 @@ host contract, not live provider/state/TLS readiness or deployment authorization
   one small-graph reference p90 regressed. See `docs/rc2-warm-refresh-followup.md`.
   Kernel syscall tracing, complete packaged/platform qualification and live core
   telemetry remain open; no deployment or universal performance claim is made.
+
+## Residual trusted refresh — local candidate (2026-10-21)
+
+- [x] Workflow-owned baseline/candidate source, fixture, toolchain and binary receipts.
+- [x] Identical-source control; unfavorable small-graph noise retained.
+- [x] Separate ordinary timing, instrumented allocation/GC/JIT observations and expiry.
+- [x] Native semantic/security suites and mutation/overflow qualification for both variants.
+- [x] Test-only guard proves failed Refresh preserves committed solution/maps for the
+  exercised late missing-input, ancestor replacement and missing-input cases.
+- [x] Three fresh sessions per variant show lower full-graph median/p90 in the first
+  comparison; small-graph p90 and expiry regressions remain explicitly recorded.
+- [ ] Self-contained packaged, full MCP and hosted-platform qualification of this candidate.
+- [ ] Operator Linux/private-solution performance retest of this candidate.
+
+See [residual investigation](rc2-residual-refresh-investigation.md) and
+[workflow usage](trusted-performance-workflow.md). No new release or promotion is
+claimed or authorized by these local checks.
+
+## Trusted-refresh sprint — local qualification (2026-10-21)
+
+- [x] Retained named shipped/local baselines, identical-source control, raw outliers,
+  and rejected two/eight-worker experiments; no median-only acceptance gate.
+- [x] Four-worker bound and serial small-graph fallback exercised across six sizes;
+  explicit 256-file crossover check, including reversed first-pair ordering.
+- [x] Expanded normal trusted tests cover 258 members, resource-error precedence,
+  ancestor/leaf replacement and external read-only inputs.
+- [x] Five test-only failed-refresh guards per variant, including a deterministic
+  post-admission ancestor swap rejected before any additional source bytes read.
+- [x] Native core tests and actual worker-project semantics through C++ MCP passed.
+- [x] Final named-baseline/MCP comparisons and single-processor qualification.
+- [x] Paced comparison retained alongside unpaced results, including CPU and maximum-latency regressions.
+- [x] Rejected parallel admission after paced CPU/search/tail regressions; restored
+  the measured serial runtime while retaining expanded tests and experiment receipts.
+- [ ] Hosted self-contained/platform qualification and staging publication.
+
+See [sprint evidence](rc2-refresh-sprint.md). M6 synthetic measurements do not
+establish Linux/Biztraak/Glider performance. No production promotion is authorized.

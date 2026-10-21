@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import resource
 import shutil
 import statistics
 import subprocess
@@ -109,6 +110,64 @@ if candidateReceipt:
             subprocess.run(['python3','-B',str(source/'workers/roslyn'/test),*args],cwd=source,env={**ENV,'DOTNET_ROOT':str(Path(prepared['dotnet']).resolve().parent),'PATH':str(Path(prepared['dotnet']).parent)+os.pathsep+ENV['PATH']},stdout=log,stderr=subprocess.STDOUT,check=True)
     provenance['candidate']={'workerProvenanceSha256':sha(receipt/'provenance.json'),'qualificationSha256':sha(receipt/'qualification.json'),'transactionSha256':sha(receipt/'transaction-qualification.json'),'sourceHashes':frozen['sourceHashes'],'sdk':prepared['sdk'],'nativeFiles':{str(p.relative_to(native)):sha(p) for p in native.rglob('*') if p.is_file()},'command':candidateCommand,'transport':'Published unchanged core with locally published self-contained candidate worker'}
     save(OUT/'provenance.json',provenance)
+# Optional retained native local baseline, verified against its previous receipt.
+localBaselineCommand=None
+localBaselineReceipt=os.environ.get('FREEFLIGHT_GLIDER_LOCAL_BASELINE_RECEIPT')
+if localBaselineReceipt:
+    assert candidateCommand, 'A local baseline requires a candidate comparison'
+    retained=Path(localBaselineReceipt).resolve()
+    previous=json.loads((retained/'provenance.json').read_text())
+    assert json.loads((retained/'summary.json').read_text())['status']=='passed'
+    for name,digest in previous['candidate']['nativeFiles'].items():
+        assert sha(retained/'candidate-native'/name)==digest, name
+    baselineRef=os.environ['FREEFLIGHT_GLIDER_LOCAL_BASELINE_REF']
+    baselineCommit=trusted.git('rev-parse',baselineRef)
+    for name,digest in previous['candidate']['sourceHashes'].items():
+        originalBytes=subprocess.check_output(['git','show',baselineCommit+':'+name],cwd=trusted.REPO)
+        assert hashlib.sha256(originalBytes).hexdigest()==digest, 'Local baseline source mismatch: '+name
+    localBaselineCommand=[str(retained/'candidate-native/FreeFlight.Roslyn'),
+                          *previous['candidate']['command'][1:]]
+    provenance['localBaseline']={'receipt':str(retained),'commit':baselineCommit,
+        'provenanceSha256':sha(retained/'provenance.json'),
+        'sourceHashes':previous['candidate']['sourceHashes'], 'command':localBaselineCommand}
+    provenance['orderPolicy']='Four products; reversed order in alternate sessions, balanced positions for two sessions'
+    save(OUT/'provenance.json',provenance)
+# Build both local cores with the same compiler/options when testing core changes.
+candidateCore = BUNDLE/'bin/freeflight'
+localBaselineCore = candidateCore
+if os.environ.get('FREEFLIGHT_GLIDER_BUILD_CANDIDATE_CORE') == '1':
+    assert candidateCommand and localBaselineCommand, 'Core comparison requires qualified candidate and local baseline'
+    cmake=os.environ.get('FREEFLIGHT_GLIDER_CMAKE') or shutil.which('cmake')
+    assert cmake, 'Set FREEFLIGHT_GLIDER_CMAKE to an installed CMake executable'
+    ctest=str(Path(cmake).resolve().with_name('ctest'))
+    assert Path(ctest).is_file(), ctest
+    jsonSource=trusted.REPO/'bin/.local/build/_deps/json-src'
+    for label,ref in [('candidate',None),('local-baseline',baselineCommit)]:
+        coreSource=OUT/(label+'-core-source');coreSource.mkdir()
+        names=['CMakeLists.txt','README.md','LICENSE']+trusted.git('ls-files','src','include','tests').splitlines()
+        for name in names:
+            data=(trusted.REPO/name).read_bytes() if ref is None else subprocess.check_output(['git','show',ref+':'+name],cwd=trusted.REPO)
+            target=coreSource/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(data)
+        coreBuild=OUT/(label+'-core-build')
+        commands=[[cmake,'-S',str(coreSource),'-B',str(coreBuild),'-DCMAKE_BUILD_TYPE=Release',
+                   '-DFETCHCONTENT_SOURCE_DIR_JSON='+str(jsonSource)],
+                  [cmake,'--build',str(coreBuild),'--parallel','2'],
+                  [ctest,'--test-dir',str(coreBuild),'--output-on-failure']]
+        logPath=OUT/(label+'-core-qualification.log')
+        with logPath.open('w') as log:
+            for command in commands:
+                subprocess.run(command,stdout=log,stderr=subprocess.STDOUT,check=True)
+        binary=coreBuild/'freeflight'
+        provenance[label+'Core']={'sourceCommit':ref or 'WORKTREE',
+            'sourceHashes':{str(p.relative_to(coreSource)):sha(p) for p in coreSource.rglob('*') if p.is_file()},
+            'binarySha256':sha(binary),'qualificationLogSha256':sha(logPath),'commands':commands,
+            'compilerVersion':subprocess.check_output(['c++','--version'],text=True),
+            'jsonHeaders':{str(p.relative_to(jsonSource)):sha(p) for p in (jsonSource/'include').rglob('*') if p.is_file()}}
+        if label=='candidate':candidateCore=binary
+        else:localBaselineCore=binary
+    provenance['candidate']['transport']='Source-frozen local core with protocol/process gates and qualified native worker'
+    provenance['localBaseline']['transport']='Commit-frozen local core built with identical compiler/options and retained qualified native worker'
+    save(OUT/'provenance.json',provenance)
 records=[]
 
 def assert_fixture(f):
@@ -131,10 +190,11 @@ def run_session(variant,f,size,interval,index):
     assert_fixture(f)
     if variant!='glider':
         startup=directory/'startup.json';save(startup,{'roots':[str(root)],'trustedRoots':[str(root)],'csharp':{'project':f['project']}})
-        if variant=='candidate':
-            config=json.loads(startup.read_text());config['engines']={'csharp':candidateCommand};save(startup,config)
-        command=[str(BUNDLE/'bin/freeflight'),'--config',str(startup)]
+        if variant in ('candidate','local-baseline'):
+            config=json.loads(startup.read_text());config['engines']={'csharp':candidateCommand if variant=='candidate' else localBaselineCommand};save(startup,config)
+        command=[str(candidateCore if variant=='candidate' else localBaselineCore if variant=='local-baseline' else BUNDLE/'bin/freeflight'),'--config',str(startup)]
     else:command=[str(GLIDER),'--no-telemetry','--max-response-chars','2000000','--msbuild-path',str(SDK/'sdk/10.0.402')]
+    cpuStart=resource.getrusage(resource.RUSAGE_CHILDREN)
     s=client.Session(root,directory,command=command,environment=ENV,sample_memory=False,working_directory=root)
     rec=dict(name=name,variant=variant,size=size,interval=interval,startupDiscoveryMs=s.startup_ms,samples=[],status='running');records.append(rec)
     save(directory/'discovery.json',s.server_info)
@@ -221,14 +281,23 @@ def run_session(variant,f,size,interval,index):
         if variant=='glider':save(directory/'final-status.json',unpack(s.request('tools/call',{'name':'server_status','arguments':{}})))
         assert_fixture(f);rec['status']='passed'
     except Exception as error:rec['status']='failed';rec['error']=repr(error);raise
-    finally:s.close();save(OUT/'samples.json',records)
+    finally:
+        s.close()
+        cpuEnd=resource.getrusage(resource.RUSAGE_CHILDREN)
+        rec['wholeSessionChildCpuSeconds']={'user':cpuEnd.ru_utime-cpuStart.ru_utime,
+            'system':cpuEnd.ru_stime-cpuStart.ru_stime,
+            'scope':'All child-process phases including startup/load/warmup/steady/idle; excludes Python driver CPU.'}
+        save(OUT/'samples.json',records)
     print(name,'passed',flush=True)
 
 try:
     for interval in intervals:
         for size in sizes:
             for pair in range(sessions):
-                if candidateCommand:
+                if localBaselineCommand:
+                    products=['freeflight','local-baseline','candidate','glider']
+                    order=products if pair%2==0 else list(reversed(products))
+                elif candidateCommand:
                     products=['freeflight','candidate','glider'];rotation=pair%3
                     order=products[rotation:]+products[:rotation]
                 else:order=['freeflight','glider'] if pair%2==0 else ['glider','freeflight']
@@ -248,7 +317,7 @@ try:
                 print(size,interval,method,'FreeFlight/Glider median',round(item['medianRatio'],3),'p90',round(item['p90Ratio'],3),flush=True)
                 if candidateCommand:
                     candidate=[x for x in selected if x['variant']=='candidate']
-                    for other in ['freeflight','glider']:
+                    for other in (['freeflight','local-baseline','glider'] if localBaselineCommand else ['freeflight','glider']):
                         baseline=[x for x in selected if x['variant']==other]
                         extra=dict(size=size,interval=interval,method=method,candidate=candidate,baseline=baseline,baselineName=other,medianRatio=statistics.median(x['median'] for x in candidate)/statistics.median(x['median'] for x in baseline),p90Ratio=statistics.median(x['p90'] for x in candidate)/statistics.median(x['p90'] for x in baseline));comparisons.append(extra)
                         print(size,interval,method,'candidate/'+other,'median',round(extra['medianRatio'],3),'p90',round(extra['p90Ratio'],3),flush=True)

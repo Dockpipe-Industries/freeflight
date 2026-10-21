@@ -58,6 +58,7 @@ def prepare():
                   referenceCallers=int(os.environ.get('FREEFLIGHT_TRUSTED_BENCH_CALLERS','1')),
                   searchQuery=os.environ.get('FREEFLIGHT_TRUSTED_BENCH_QUERY','C58'),
                   firstVariant=os.environ.get('FREEFLIGHT_TRUSTED_BENCH_FIRST','baseline'),
+                  baselineArgs=['--incremental-validation'] if os.environ.get('FREEFLIGHT_TRUSTED_BENCH_BASELINE_INCREMENTAL') == '1' else [],
                   candidateArgs=['--incremental-validation'] if os.environ.get('FREEFLIGHT_TRUSTED_BENCH_INCREMENTAL') == '1' else [],
                   configuration='Release', transport='direct trusted worker; not full MCP', variants={})
     assert 0 <= config['paddingBytes'] <= 65536
@@ -144,6 +145,9 @@ def qualify(config):
             command([sys.executable,'-B',str(Path(__file__).with_name('metadata_tests.py')),DOTNET,str(OUT/variant/'source'),str(OUT/variant/'metadata-proof')],variant+'-metadata-proof.log')
         if platform.system() == 'Darwin' and 'ReadCompilerBytes(' in (OUT/variant/'source/workers/roslyn/Program.cs').read_text():
             command([sys.executable,'-B',str(Path(__file__).with_name('expiry_tests.py')),DOTNET,str(OUT/variant/'source'),str(OUT/variant/'expiry-proof')],variant+'-expiry-proof.log')
+    if 'FindCompilationDeclarations(' in (OUT/'candidate/source/workers/roslyn/SemanticQueries.cs').read_text():
+        command([sys.executable, '-B', str(Path(__file__).with_name('search_tests.py')), DOTNET,
+                 str(OUT/'candidate/source'), str(OUT/'candidate/search-proof')], 'candidate-search-proof.log')
     if config.get('candidateArgs'):
         command([sys.executable, '-B', str(Path(__file__).with_name('incremental_tests.py')), DOTNET,
                  str(OUT/'candidate/source'), str(OUT/'candidate/incremental-proof'),
@@ -209,7 +213,7 @@ def measure(config):
         for diagnostic,variants in ((False,order),(True,['baseline','candidate'])):
             for index,variant in enumerate(variants):
                 name=f'{size}-'+('profile' if diagnostic else 'plain')+f'-{index}-{variant}'
-                session=Session(config['variants'][variant]['profileDll' if diagnostic else 'dll'],name,config.get('candidateArgs',[]) if variant=='candidate' else [])
+                session=Session(config['variants'][variant]['profileDll' if diagnostic else 'dll'],name,config.get(variant+'Args',[]))
                 receipt=dict(name=name,size=int(size),variant=variant,diagnostic=diagnostic,samples=[])
                 samples.append(receipt)
                 try:

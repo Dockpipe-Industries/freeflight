@@ -1,0 +1,25 @@
+name: benchmark.trusted.qualification
+description: Freeze and qualify trusted worker sources without scheduling timing sessions.
+vault: none
+docker_preflight: false
+dependencies:
+  host:
+    - id: python3
+      command: python3
+      description: Existing trusted qualification assets.
+    - id: dotnet
+      command: dotnet
+      description: Repository-pinned SDK for frozen source builds.
+steps:
+  - id: prepare
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/run.py prepare
+  - id: qualify
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/run.py qualify
+  - id: transaction
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/run.py transaction

@@ -1,0 +1,17 @@
+name: benchmark.response
+description: Isolated response-construction diagnostics with exact byte equivalence; not product latency.
+vault: none
+docker_preflight: false
+dependencies:
+  host:
+    - id: python3
+      command: python3
+      description: Diagnostic receipts and summaries.
+    - id: cxx
+      command: c++
+      description: Native C++23 diagnostic compiler.
+steps:
+  - id: measure
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.response/assets/run.py

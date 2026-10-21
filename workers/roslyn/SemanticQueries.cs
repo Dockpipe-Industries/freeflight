@@ -50,9 +50,72 @@ internal static class SemanticQueries
     public static async Task<object> WorkspaceSymbols(Solution solution, string query, CancellationToken token)
     {
         if (query.Length is < 1 or > 256) throw new ArgumentException("query must contain 1 to 256 characters");
-        var symbols = await SymbolFinder.FindSourceDeclarationsAsync(solution,
-            name => name.Contains(query, StringComparison.OrdinalIgnoreCase), SymbolFilter.TypeAndMember, token);
+        var symbols = await FindCompilationDeclarations(solution, query, token);
         return Ordered(symbols, token).Where(symbol => !symbol.IsImplicitlyDeclared).Select(Item).ToArray();
+    }
+
+    // Use Roslyn-owned existing compilations without forcing a cold compilation
+    // merely to bypass a per-document syntactic existence precheck.
+    private static async Task<IEnumerable<ISymbol>> FindCompilationDeclarations(
+        Solution solution, string query, CancellationToken token)
+    {
+        var result = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
+        foreach (var project in solution.Projects)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!project.SupportsCompilation) continue;
+            IEnumerable<ISymbol>? symbols = null;
+            if (project.TryGetCompilation(out var compilation) && compilation is not null)
+            {
+                var matches = compilation.GetSymbolsWithName(
+                    name => name.Contains(query, StringComparison.OrdinalIgnoreCase), SymbolFilter.TypeAndMember, token)
+                    .Where(IsSearchDeclaration).ToArray();
+                // A matching ordinary declaration proves the syntactic precheck
+                // true. Special compiler names without that witness fall back.
+                if (matches.Length == 0 || matches.Any(symbol => HasMatchingSyntaxName(symbol, query, token)))
+                    symbols = matches;
+            }
+            // Preserve cold/unavailable compilation behavior, including cheap
+            // negative queries that the original syntax index can reject.
+            symbols ??= await SymbolFinder.FindSourceDeclarationsAsync(project,
+                name => name.Contains(query, StringComparison.OrdinalIgnoreCase), SymbolFilter.TypeAndMember, token);
+            foreach (var symbol in symbols)
+            {
+                token.ThrowIfCancellationRequested();
+                result.Add(symbol);
+            }
+        }
+        return result;
+    }
+
+    private static bool IsSearchDeclaration(ISymbol symbol)
+    {
+        if (symbol.IsImplicitlyDeclared || symbol is IMethodSymbol
+            { MethodKind: MethodKind.PropertyGet or MethodKind.PropertySet or
+                MethodKind.EventAdd or MethodKind.EventRemove or MethodKind.EventRaise }) return false;
+        return symbol is ITypeSymbol || symbol.Kind is
+            SymbolKind.Method or SymbolKind.Property or SymbolKind.Event or SymbolKind.Field;
+    }
+
+    private static bool HasMatchingSyntaxName(ISymbol symbol, string query, CancellationToken token)
+    {
+        foreach (var reference in symbol.DeclaringSyntaxReferences)
+        {
+            token.ThrowIfCancellationRequested();
+            var name = reference.GetSyntax(token) switch
+            {
+                BaseTypeDeclarationSyntax declaration => declaration.Identifier.ValueText,
+                DelegateDeclarationSyntax declaration => declaration.Identifier.ValueText,
+                MethodDeclarationSyntax declaration => declaration.Identifier.ValueText,
+                PropertyDeclarationSyntax declaration => declaration.Identifier.ValueText,
+                EventDeclarationSyntax declaration => declaration.Identifier.ValueText,
+                VariableDeclaratorSyntax declaration => declaration.Identifier.ValueText,
+                EnumMemberDeclarationSyntax declaration => declaration.Identifier.ValueText,
+                _ => null
+            };
+            if (name is not null && name.Contains(query, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
     }
 
     public static object TypeInfo(SemanticModel model, SyntaxNode syntax, int position, ISymbol? symbol, CancellationToken token)

@@ -152,3 +152,5 @@ For reproducible trusted Roslyn baseline/candidate experiments, see the
 [optimization sprint](rc2-refresh-sprint.md).
 
 Same-machine product comparison: [Glider head-to-head](glider-head-to-head.md).
+
+Glider-target experiments: [retained candidate and measurements](glider-target-iteration.md).

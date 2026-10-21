@@ -238,3 +238,20 @@ Official Glider archive byte verification is recorded separately in
 No Linux receipts were accessed, and these synthetic results cannot be presented
 as a Biztraak rerun. No active MCP configuration or remote state changed.
 
+
+## Local candidate comparison
+
+After a completed `benchmark.trusted` receipt, set
+`FREEFLIGHT_GLIDER_CANDIDATE_RECEIPT` to its absolute directory to add a third
+product. The workflow verifies frozen candidate source hashes and passing semantic
+and transaction receipts, publishes that worker locally as self-contained macOS
+ARM64 using the recorded SDK, then runs both existing native worker suites before
+timing. The core remains the verified published FreeFlight core. All native files
+and qualification receipts are hashed in provenance. This is local preparation,
+not release publication. Active configuration is never edited.
+
+Three-product sessions rotate order to balance positions: shipped/candidate/Glider,
+candidate/Glider/shipped, Glider/shipped/candidate. All use the same .NET 10 fixture
+and readiness/oracle requirements. Results retain comparisons of candidate to both
+shipped FreeFlight and Glider. Native candidate preparation currently targets macOS
+ARM64; do not treat this local adapter as portable platform qualification.

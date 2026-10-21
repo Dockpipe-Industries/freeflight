@@ -1,0 +1,9 @@
+name: site.deploy.bundle
+description: Validate published site receipts and build a bounded receiver input without deployment.
+vault: none
+docker_preflight: false
+steps:
+  - id: bundle
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/site.deploy.bundle/assets/bundle.py

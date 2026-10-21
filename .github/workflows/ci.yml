@@ -25,6 +25,18 @@ jobs:
       - uses: ./.github/actions/setup-dockpipe
       - name: Check protected-branch promotion source
         run: dockpipe --workflow promotion.check
+  static-bootstrap:
+    name: Disposable static bootstrap
+    needs: promotion-policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-dockpipe
+      - name: Exercise isolated receiver with fixture keys only
+        run: dockpipe --workflow infra.bootstrap.test
   qualify:
     needs: promotion-policy
     name: Qualify (${{ matrix.os }})

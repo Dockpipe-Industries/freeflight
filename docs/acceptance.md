@@ -249,5 +249,53 @@ distinguish the in-process Locator from Roslyn's remote build-host selection.
 The user confirmed saving workflow permission on the existing token. The consolidated
 workflow changes include the five setup-python v7 replacements and CI's exact RC2
 SDK pin. No authentication routing or credentials are replaced by this work.
+
+Hosted RC2 source 6e7b9a5 subsequently passed all native/site jobs and CodeQL in
+runs 39433227935 and 39433227841. Staging promotion PR #34 passed and merged.
+Production/master promotion is paused for user acceptance. Site deployment
+preparation is separate from activation: no hosted FreeFlight website or new RC2
+prerelease is established by prepared files or local validation.
 The preceding .NET 10 head 3a8ff3f passed all ten hosted checks, including all five
 platforms, both sites and CodeQL. A fresh hosted run must qualify this RC2 revision.
+
+PR #35 implementation 77e00b5 passed all ten hosted checks (CI 39454236338,
+CodeQL 39454236572) and 78 local policy tests. It remains draft and unmerged.
+The subsequent Cloud architecture comparison places deployment on hold: its
+manual privileged receiver setup is withdrawn pending alignment with Cloud's
+state-owned identities and unprivileged static delivery. Test success is not
+evidence of deployment readiness, infrastructure setup or publication.
+
+The static alignment replacement passes 88 local release/delivery/infrastructure
+policy tests and four isolated Cloud routing/coordinator tests. A retained qualified
+CI site artifact also passed the new bounded static bundle decoder. Five POSIX
+filesystem activation tests apply to the Linux receiver and run on Linux/macOS;
+Windows retains payload/scope and infrastructure policy tests. Cloud extension
+commit 3f80112 is local-only and unpushed. Terraform validation and disposable Linux
+bootstrap validation have not run; live setup remains blocked pending those checks,
+provider/state access approval and review. No deployment result is claimed.
+
+Follow-up validation: Terraform 1.13.5 (official checksum-pinned, task-local) passed
+backend-disabled schema validation of the authored Cloud extension with the pinned
+DigitalOcean 2.104.0 and TLS 4.1.0 providers. Only the disposable scratch lockfile
+received macOS package hashes; the authored lock was unchanged. No state, credentials,
+plan or apply was used. Hosted Windows exposed an unconditional Unix `pwd` import;
+it is now deferred until actual Linux host installation. Fresh hosted CI is required.
+
+Disposable Ubuntu bootstrap job 118835315216 passed in CI run 39482701813 at
+source e75b42c. The real installation and repeat setup, restricted SSH command/user/
+forwarding rejection, exact static serving, private ingress, first-install failure,
+upgrade rollback, failed-rollback lock retention and pre-existing site/admin-policy
+preservation all passed. Keys were ephemeral test fixtures on a disposable runner;
+no staging credentials or infrastructure were involved. This validates the local
+host contract, not live provider/state/TLS readiness or deployment authorization.
+
+- 2026-10-20: First-level staging hostname `freeflight-staging.dockpipe.com` is now
+  used consistently by site generation, receipt validation and receiver/bootstrap.
+  Local release policy and hostname rollback fixtures passed. The real Nginx
+  migration is included in disposable Ubuntu CI; live/hosted status is not implied
+  by these authored tests.
+
+- 2026-10-20: Approved hostname-only live migration verified valid TLS and health
+  for `freeflight-staging.dockpipe.com`; existing Cloud services and operator access
+  policy preserved. Old nested-host DNS, ingress and transform removed with verified
+  readback. No site activation or automatic-delivery enablement performed.

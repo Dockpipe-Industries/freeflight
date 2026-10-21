@@ -174,6 +174,41 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
         assert rejected["code"] == "project_load_failed", rejected
         empty_solution.unlink()
         assert "result" in call("open", root=str(root), project="source/Architecture.sln")
+        # Refresh must reject replaced non-target leaves/ancestors even when the
+        # previous source snapshot is reusable. Unix symlink fixture only; Windows
+        # reparse-point qualification requires its own privilege-aware fixture.
+        if os.name != "nt":
+            with tempfile.TemporaryDirectory(prefix="trusted-path-outside-", dir=root.parent) as outside_dir:
+                outside_root = pathlib.Path(outside_dir)
+                (outside_root / "Widget.cs").write_bytes(widget_source.encode("utf-8"))
+                leaf = root / "Lib/Widget.cs"
+                saved_leaf = root / "Lib/Widget.cs.saved"
+                leaf.rename(saved_leaf)
+                try:
+                    leaf.symlink_to(outside_root / "Widget.cs")
+                    rejected = call("symbols", file="App/Consumer.cs")
+                    assert "error" in rejected and "Symlink/reparse" in str(rejected), rejected
+                finally:
+                    leaf.unlink()
+                    saved_leaf.rename(leaf)
+                assert "result" in call("symbols", file="App/Consumer.cs"), "leaf replacement recovery"
+                ancestor = root / "Lib"
+                saved_ancestor = root / "Lib-saved"
+                ancestor.rename(saved_ancestor)
+                try:
+                    ancestor.symlink_to(outside_root, target_is_directory=True)
+                    rejected = call("symbols", file="App/Consumer.cs")
+                    assert "error" in rejected and "Symlink/reparse" in str(rejected), rejected
+                finally:
+                    ancestor.unlink()
+                    saved_ancestor.rename(ancestor)
+                assert "result" in call("symbols", file="App/Consumer.cs"), "ancestor replacement recovery"
+                leaf.unlink()
+                try:
+                    assert "error" in call("symbols", file="App/Consumer.cs"), "missing graph input silently omitted"
+                finally:
+                    leaf.write_bytes(widget_source.encode("utf-8"))
+                assert "result" in call("symbols", file="App/Consumer.cs"), "missing input recovery"
         (root / "App/Consumer.cs").write_text(source.replace("value.Value", '"invalid"'))
         diagnostics = call("diagnostics", file="App/Consumer.cs")["result"]
         assert any(d["code"] == "CS0029" for d in diagnostics), diagnostics

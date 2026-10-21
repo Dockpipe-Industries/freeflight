@@ -197,3 +197,13 @@ and artifacts remain unchanged. Existing benchmark tooling is retained for futur
 controlled work. There is no retained-runtime 34–37% speedup claim. Post-revert
 correctness qualification is recorded separately in the task log and receipt;
 no favorable rerun replaces the original timing evidence.
+
+## RC2 trusted graph follow-up
+
+The [2026-10-21 M6 investigation](rc2-warm-refresh-investigation.md) confirms
+whole-graph path validation before snapshot reuse in the RC2 trusted path and
+explains why the core's cached capability counters remain zero. A separate narrow
+leaf-metadata experiment passed native correctness checks and improved pooled
+medians, but one process session regressed p90; its runtime change was removed.
+The report retains all session timings, private profiles, limitations and the
+experimental patch location. No production speedup is claimed.

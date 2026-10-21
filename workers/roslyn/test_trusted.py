@@ -174,6 +174,41 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
         assert rejected["code"] == "project_load_failed", rejected
         empty_solution.unlink()
         assert "result" in call("open", root=str(root), project="source/Architecture.sln")
+        # Refresh must reject replaced non-target leaves/ancestors even when the
+        # previous source snapshot is reusable. Unix symlink fixture only; Windows
+        # reparse-point qualification requires its own privilege-aware fixture.
+        if os.name != "nt":
+            with tempfile.TemporaryDirectory(prefix="trusted-path-outside-", dir=root.parent) as outside_dir:
+                outside_root = pathlib.Path(outside_dir)
+                (outside_root / "Widget.cs").write_bytes(widget_source.encode("utf-8"))
+                leaf = root / "Lib/Widget.cs"
+                saved_leaf = root / "Lib/Widget.cs.saved"
+                leaf.rename(saved_leaf)
+                try:
+                    leaf.symlink_to(outside_root / "Widget.cs")
+                    rejected = call("symbols", file="App/Consumer.cs")
+                    assert "error" in rejected and "Symlink/reparse" in str(rejected), rejected
+                finally:
+                    leaf.unlink()
+                    saved_leaf.rename(leaf)
+                assert "result" in call("symbols", file="App/Consumer.cs"), "leaf replacement recovery"
+                ancestor = root / "Lib"
+                saved_ancestor = root / "Lib-saved"
+                ancestor.rename(saved_ancestor)
+                try:
+                    ancestor.symlink_to(outside_root, target_is_directory=True)
+                    rejected = call("symbols", file="App/Consumer.cs")
+                    assert "error" in rejected and "Symlink/reparse" in str(rejected), rejected
+                finally:
+                    ancestor.unlink()
+                    saved_ancestor.rename(ancestor)
+                assert "result" in call("symbols", file="App/Consumer.cs"), "ancestor replacement recovery"
+                leaf.unlink()
+                try:
+                    assert "error" in call("symbols", file="App/Consumer.cs"), "missing graph input silently omitted"
+                finally:
+                    leaf.write_bytes(widget_source.encode("utf-8"))
+                assert "result" in call("symbols", file="App/Consumer.cs"), "missing input recovery"
         (root / "App/Consumer.cs").write_text(source.replace("value.Value", '"invalid"'))
         diagnostics = call("diagnostics", file="App/Consumer.cs")["result"]
         assert any(d["code"] == "CS0029" for d in diagnostics), diagnostics
@@ -185,13 +220,30 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
         assert "error" in call("open", root=str(root), project="../outside.csproj")
         assert "error" in call("open", root=str(root), mode="safe-source", project="App/App.csproj")
         outside = root.parent / (root.name + "-outside.cs")
-        outside.write_text("class Outside {}")
+        outside_text = "class Outside { int Read(Library.Widget value) => value.Value; }"
+        outside.write_text(outside_text)
         try:
             project = root / "App/App.csproj"
             project.write_text(project.read_text().replace("</Project>", f'<ItemGroup><Compile Include="{outside.as_posix()}" /></ItemGroup></Project>'))
             opened = call("open", root=str(root), project="App/App.csproj")["result"]
             assert str(outside) in opened["externalCompilerInputs"], opened
             assert "error" in call("symbols", file=str(outside)), "external input is not a query grant"
+            rejected = call("rename", file="Lib/Widget.cs", line=2, character=34, newName="RenamedValue")
+            assert rejected.get("error", {}).get("code") == "external_input_read_only", rejected
+            assert "result" not in rejected, "external rename returned a partial preview"
+            if os.name != "nt":
+                backing = outside.with_suffix(".backing")
+                backing.write_text(outside_text)
+                outside.unlink()
+                try:
+                    outside.symlink_to(backing)
+                    rejected = call("symbols", file="App/Consumer.cs")
+                    assert "error" in rejected and "symlink" in str(rejected).lower(), rejected
+                finally:
+                    outside.unlink()
+                    outside.write_text(outside_text)
+                    backing.unlink()
+                assert "result" in call("symbols", file="App/Consumer.cs"), "external symlink refresh recovery"
         finally:
             outside.unlink()
         print("Trusted MSBuild project settings, cross-project definition/references, diagnostics, refresh and boundary tests passed")

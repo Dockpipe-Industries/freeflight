@@ -316,3 +316,20 @@ host contract, not live provider/state/TLS readiness or deployment authorization
   one small-graph reference p90 regressed. See `docs/rc2-warm-refresh-followup.md`.
   Kernel syscall tracing, complete packaged/platform qualification and live core
   telemetry remain open; no deployment or universal performance claim is made.
+
+## Residual trusted refresh — local candidate (2026-10-21)
+
+- [x] Workflow-owned baseline/candidate source, fixture, toolchain and binary receipts.
+- [x] Identical-source control; unfavorable small-graph noise retained.
+- [x] Separate ordinary timing, instrumented allocation/GC/JIT observations and expiry.
+- [x] Native semantic/security suites and mutation/overflow qualification for both variants.
+- [x] Test-only guard proves failed Refresh preserves committed solution/maps for the
+  exercised late missing-input, ancestor replacement and missing-input cases.
+- [x] Three fresh sessions per variant show lower full-graph median/p90 in the first
+  comparison; small-graph p90 and expiry regressions remain explicitly recorded.
+- [ ] Self-contained packaged, full MCP and hosted-platform qualification of this candidate.
+- [ ] Operator Linux/private-solution performance retest of this candidate.
+
+See [residual investigation](rc2-residual-refresh-investigation.md) and
+[workflow usage](trusted-performance-workflow.md). No new release or promotion is
+claimed or authorized by these local checks.

@@ -43,3 +43,9 @@ declarations plus explicit comment padding. These controlled byte-budget workloa
 are not representative real solutions. First diagnostics includes lazy engine
 loading; subsequent query timings and changed-file diagnostics verify exact results.
 Default `benchmark` behavior is unchanged when the variable is unset.
+
+`benchmark.trusted` isolates trusted Roslyn refresh costs with pinned baseline and
+candidate snapshots, native security/semantic qualification, alternating fresh
+sessions and separate instrumentation/expiry receipts. See the
+[usage guide](../docs/trusted-performance-workflow.md). It complements the full MCP
+benchmark; it does not replace endpoint or packaged platform qualification.

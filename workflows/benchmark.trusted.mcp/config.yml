@@ -1,0 +1,9 @@
+name: benchmark.trusted.mcp
+description: Compare frozen qualified trusted workers through the existing C++ MCP benchmark client.
+vault: none
+docker_preflight: false
+steps:
+  - id: measure-mcp
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/mcp.py

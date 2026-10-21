@@ -921,3 +921,59 @@ p90; small-graph reference p90 regressed in one session and remains documented.
 All 2,880 measured combined-comparison responses passed. Full receipts, rejected
 experiments, controls and proof obligations are in `docs/rc2-warm-refresh-followup.md`.
 No push, merge, deployment, Docker/service action or unrelated workspace change.
+
+## 2026-10-21 — Workflow-owned residual refresh investigation
+
+Added `benchmark.trusted` and its focused transaction-qualification workflow with
+workflow-local assets derived from the prior synthetic fixtures/drivers. Preparation
+pins source hashes/SDK/builds; qualification reuses native suites; ordinary fresh
+sessions and diagnostics remain separate. Raw JSON, tails, GC/JIT observations,
+expiry, median/p90/max and unfavorable comparisons are retained automatically.
+The identical-source control exposed large small-graph noise and remains recorded.
+
+A bounded local candidate avoids repeated lexical reconstruction for already
+canonical trusted graph keys while preserving fresh leaf checks, and stages only
+trusted snapshot/hash deltas before commit. Full uncached read validation remains.
+The test-only transaction guard verified all-or-nothing failure behavior for the
+exercised failures. First full-graph comparison improved ordinary outline medians
+from 12.7–13.4 to 8.4–8.6 ms. Small-graph outline p90 and expiry regressions remain
+explicit; this is M6 synthetic evidence, not the supplied Linux/Biztraak retest.
+See `docs/rc2-residual-refresh-investigation.md` for exact evidence and limits.
+No new push, merge, publication, deployment, service or active MCP change.
+The final five-stage workflow repeat also passed: 960 ordinary and 320 diagnostic
+measured responses, native suites and transaction guards. Full-graph outline
+medians were 12.58–12.76 ms baseline versus 8.62–8.87 ms candidate; small-graph
+reference p90 remained unfavorable in two sessions. Both workflow YAMLs validated.
+
+## 2026-10-21 — Bounded trusted-refresh sprint
+
+Retained the serial lexical/metadata/read-reuse checkpoints and measured four-way
+metadata admission against two/eight-way alternatives. Two workers worsened p90;
+eight improved full-graph latency modestly but increased diagnostic CPU and some
+small-graph tails. Four remains the bounded candidate, serial below 256 files.
+The crossover run retains the 16-file definition median/p90 regression, while
+256/433-file median and p90 improved across all measured operations.
+
+Extended the existing workflow with padded sources, configurable exact references
+and search results, CPU/runtime provenance, precise diagnostic allocation counts,
+compact comparisons/tail observations, and an optional existing-client MCP pass.
+A generated transaction-only ancestor-swap seam proved uncached validation rejects
+an escape after admission before reading bytes. Expanded native suites, core tests
+and the actual worker project through MCP passed. Final baseline and endpoint
+comparisons remain pending at this checkpoint. No remote mutation yet.
+
+
+Closing paced qualification changed the selection: four-worker admission doubled
+observed diagnostic CPU, regressed full-graph search in both final paced sessions,
+and regressed outline p90 in one. Its unpaced gains and all unfavorable results
+remain in the sprint record. Program.cs is restored exactly to serial checkpoint
+`3084d82`; lexical/metadata-object reuse, staged deltas and fresh-read decoding
+reuse remain. Final selected-runtime shipped-baseline and MCP qualification are
+running before authorized staging promotion. No new optimization is being added.
+
+Final serial qualification completed: 4,800 ordinary worker, 1,600 diagnostic and
+4,800 MCP measured responses passed across three fresh sessions per variant/graph.
+Full-graph endpoint median/p90 improved in this repeat; one worker-only outline
+p90 regression remains retained. No Linux rerun or Glider win is claimed. The
+selected runtime is exactly the measured serial checkpoint, with no new runtime
+change after qualification. Hosted platform checks and staging delivery follow.

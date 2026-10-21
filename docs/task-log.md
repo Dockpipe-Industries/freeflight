@@ -1049,3 +1049,25 @@ all 7,344 measured semantic checks. Mixed outcomes remain explicit: near-parity
 outlines, slower definitions, costly expiry and worse paced search versus shipped.
 See `docs/incremental-validation.md` for per-session-derived tables and receipts. All changes
 remain local; published branches, active MCP, Biztraak and other services untouched.
+
+## Guarded search and owned-response controls (2026-10-21)
+
+Profiled the paced regression using the existing trusted workflow and pinned
+Roslyn source. Declaration prechecks remained expensive; an unrestricted bypass
+failed the `Finalize` differential oracle and was rejected. A guarded bypass
+passed 104 exact comparisons plus cold-negative and cancellation checks, but its
+worker-only gain did not fully translate to MCP. An isolated response-construction
+diagnostic found redundant C++ JSON copies; an ownership candidate preserved
+serialized bytes while reducing allocations. Combined and response-only matched
+native matrices both passed semantic gates but retained unfavorable p90 cells.
+Neither became an accepted runtime winner. Preserved candidates 5d14a4a/5c44c97,
+restored d8232ec runtime, and retained raw receipts and workflow additions. The
+missing-CMake setup failure was preserved and recovered with the installed CMake
+path. No push, release, deployment, active MCP or service change occurred.
+
+The next source/profile work should resolve native MCP scheduling/response costs
+before selecting a latency tradeoff, and separately prove any bounded parallel
+recovery design. No watcher-only, TTL-extension, deferred-response recovery or
+unmeasured idle maintenance shortcut was taken. See `docs/compilation-search.md`.
+
+Closing qualification passed in `bin/.local/benchmarks/trusted/restored-runtime-final`: worker/security/mutation gates, all 16 incremental fault checks, metadata/read proofs and five failed-refresh state-preservation cases per variant. Baseline/candidate worker source hashes are identical to d8232ec. `bin/.local/glider-comparison/response-ref-replay-qualification` passed native worker/core gates with zero timed processes; its pinned core source hashes exactly match the measured response-only control.

@@ -116,9 +116,7 @@ int runMain(const std::vector<std::string> &argv) {
                 value["resultType"] = "complete";
                 value["_meta"] = {{"io.modelcontextprotocol/serverInfo", identity}};
             }
-            Json response = {{"jsonrpc", "2.0"}, {"id", id}};
-            response["result"] = std::move(value);
-            send(std::move(response));
+            send({{"jsonrpc", "2.0"}, {"id", id}, {"result", value}});
         };
         std::mutex queueMutex;
         std::condition_variable ready;
@@ -194,17 +192,10 @@ int runMain(const std::vector<std::string> &argv) {
                     auto value = server.call(job->params.at("name").get<std::string>(),
                                              job->params.value("arguments", Json::object()),
                                              job->stop.get_token());
-                    // Serialize text before transferring the owned structured value.
-                    // Both representations remain present in the MCP response.
-                    Json content = {{"type", "text"}, {"text", value.dump()}};
-                    response = Json::object();
-                    response["content"] = Json::array();
-                    response["content"].push_back(std::move(content));
-                    if (value.is_object())
-                        response["structuredContent"] = std::move(value);
-                    else
-                        response["structuredContent"]["items"] = std::move(value);
-                    response["isError"] = false;
+                    response = {
+                        {"content", Json::array({{{"type", "text"}, {"text", value.dump()}}})},
+                        {"structuredContent", value.is_object() ? value : Json{{"items", value}}},
+                        {"isError", false}};
                 } catch (const freeflight::EngineError &exception) {
                     response = {
                         {"content", Json::array({{{"type", "text"}, {"text", exception.what()}}})},
@@ -218,7 +209,7 @@ int runMain(const std::vector<std::string> &argv) {
                 // Cancellation and delivery share a lock, preventing a post-cancel reply.
                 std::lock_guard guard(queueMutex);
                 if (!job->id.is_null() && !job->stop.stop_requested())
-                    result(job->id, std::move(response), job->modern);
+                    result(job->id, response, job->modern);
                 pending.erase(job->id.dump());
             }
         });

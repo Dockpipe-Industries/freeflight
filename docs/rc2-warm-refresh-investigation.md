@@ -1,5 +1,9 @@
 # RC2 trusted warm-query investigation — M6, 2026-10-21
 
+For the subsequent investigation and retained combined fix, see the
+[follow-up](rc2-warm-refresh-followup.md). The results and rejected leaf-only
+disposition below are preserved as the initial experiment.
+
 ## Scope and provenance
 
 Baseline source is `c2a55ddeed79a6130d75af6a50cf6b096bcc76d6`, copied into an

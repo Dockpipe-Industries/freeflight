@@ -65,7 +65,11 @@ bytes are reused for at most five seconds before content revalidation, and a mis
 watcher falls back to reading each request. The directly queried file is always read;
 rename validates all source bytes before computing previews. Other files have eventual
 consistency while watcher notifications arrive (at most the five-second fallback on
-the next request), including same-size edits with preserved timestamps. Changed text
+the next request), including same-size edits with preserved timestamps. Trusted refresh may share successful ancestor checks within one request while
+admitting cached snapshots; every leaf is checked afresh, and content reads use
+full uncached path validation. No path authority persists to the next request.
+External compiler inputs bypass this optimization, and rename retains full reads.
+Changed text
 is applied incrementally to stable Roslyn document IDs. This detects added/deleted
 files without silently splitting the compilation. Trusted project graph changes still
 require reopening. Default resource budgets are 50,000 C# files, 32 MiB per file, 512 MiB of

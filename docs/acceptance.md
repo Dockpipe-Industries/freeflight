@@ -307,3 +307,12 @@ host contract, not live provider/state/TLS readiness or deployment authorization
   performance acceptance remains open. See `docs/rc2-warm-refresh-investigation.md`.
   No Linux rerun, syscall-count reduction, packaged-platform pass or deployment
   is claimed.
+
+- 2026-10-21 follow-up: A combined trusted-refresh admission optimization is retained
+  on the isolated investigation branch. Native semantic/security suites, trusted
+  mutation/overflow, external rename/symlink regressions, and a generated deterministic
+  pre-read ancestor-swap check passed. All 2,880 measured responses in the combined
+  short/long/small comparisons passed; full-graph per-session p90 improved, while
+  one small-graph reference p90 regressed. See `docs/rc2-warm-refresh-followup.md`.
+  Kernel syscall tracing, complete packaged/platform qualification and live core
+  telemetry remain open; no deployment or universal performance claim is made.

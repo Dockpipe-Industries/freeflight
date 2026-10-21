@@ -1,0 +1,9 @@
+name: benchmark.recovery.serial
+description: Source-extracted serial Darwin handle fault and fallback qualification.
+vault: none
+docker_preflight: false
+steps:
+  - id: prove
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/serial_handle_tests.py

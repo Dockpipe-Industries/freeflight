@@ -3,6 +3,10 @@ description: Render the Qt WebAssembly site in task-local Chromium and verify re
 vault: none
 docker_preflight: false
 steps:
+  - id: source-documents
+    kind: host
+    cwd: repo
+    cmd: python3 -B -m unittest discover -s workflows/site.build/assets -p test_documents.py
   - id: browser-smoke
     kind: host
     cwd: repo

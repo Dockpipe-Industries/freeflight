@@ -299,3 +299,10 @@ host contract, not live provider/state/TLS readiness or deployment authorization
   for `freeflight-staging.dockpipe.com`; existing Cloud services and operator access
   policy preserved. Old nested-host DNS, ingress and transform removed with verified
   readback. No site activation or automatic-delivery enablement performed.
+
+
+### Website correction review
+- [x] Blue light/dark local preview and source-backed documentation implemented.
+- [x] Both environment build outputs and desktop/mobile theme/docs behavior tested.
+- [ ] Operator visual acceptance of the corrected preview.
+- [ ] Separate approval and qualification before any corrected staging deployment.

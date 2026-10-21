@@ -52,7 +52,7 @@ Cleanup must target only identified generated artifacts; never use broad git cle
 
 ## Configure a complete bundle
 
-The development branch adds a **not-yet-published** source-folder configuration:
+The [qualified staging prerelease](https://github.com/Dockpipe-Industries/freeflight/releases/tag/v0.1.0-preview.20261020.rc2.staging.39524813103.c2a55ddeed79) supports source-folder configuration:
 
 ```json
 {
@@ -88,8 +88,7 @@ See [workspace selection](workspaces.md) for exact routing, reload and access ru
 The published
 [`v0.1.0-preview.20261020.trusted.1997d38`](https://github.com/Dockpipe-Industries/freeflight/releases/tag/v0.1.0-preview.20261020.trusted.1997d38)
 requires its older `roots` plus `trustedRoots` configuration. It does not implement
-the new source-folder routing. Follow its release notes until a replacement bundle
-is qualified. `--workspace /absolute/project` remains a safe-source alternative,
+the new source-folder routing. Use its release notes for that older build; the staging prerelease linked above includes source-folder routing. `--workspace /absolute/project` remains a safe-source alternative,
 and no-argument startup remains dormant. Neither grants MSBuild execution trust.
 
 ## Source-build configuration
@@ -137,7 +136,7 @@ Pipelang API, SDK, LSP support or additional language support is claimed today.
 - Thread execution is serialized; long calls can delay other calls.
 - Real-world large solution/monorepo qualification remains pending; cross-platform
   results apply only to the exact commits identified in the acceptance evidence.
-- Registry publication, DockPipe end-to-end installation and hosting are pending.
+- Registry publication and DockPipe end-to-end installation remain pending. The staging site is deployed; production website activation remains held.
 
 See [acceptance](acceptance.md), [comparison](comparison.md), and [release](release.md).
 

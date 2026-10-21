@@ -407,3 +407,16 @@ outline semantics. Skipping unchanged non-target validation would change the
 existing contract and was not implemented. All work remains local. See
 [expiry qualification](expiry-read-scheduling.md) and
 [comparative behavior, limitations and design boundary](glider-behavior.md).
+
+## Incremental validation prototype (2026-10-21)
+
+After explicit user approval of a separate affected-file mode, a local startup-only
+prototype retains strict mode as default and adds bounded watcher-driven selection,
+versioned acknowledgment, full-content recovery on a five-second deadline or watcher
+uncertainty, and transactional aggregate resource accounting. Sixteen generated
+fault/contract checks passed in final `incremental-v3`, along with 2,400 ordinary
+and 800 diagnostic worker responses and 7,200 steady-state / 144 post-idle MCP
+responses across 36 fresh processes. Outlines approach Glider, but definitions,
+expiry spikes and a paced-search regression remain. No overall win, release or
+configuration change.
+See [the explicit freshness contract](incremental-validation.md).

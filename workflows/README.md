@@ -72,3 +72,10 @@ Darwin candidates containing the inline-read helper.
 watcher, repeated/distinct-query and payload diagnostics. It never edits the
 immutable timing fixture. See [usage and proof limits](../docs/glider-behavior.md).
 Run it separately from ordinary timing processes.
+
+The local incremental-validation prototype reuses `benchmark.trusted` with
+`FREEFLIGHT_TRUSTED_BENCH_INCREMENTAL=1`. It records candidate-only startup argv
+and adds generated missed-event, overflow, concurrency, transaction and boundary
+proofs. `benchmark.trusted.glider` forwards those frozen arguments from the
+qualified candidate receipt. See [freshness semantics and repeat commands](../docs/incremental-validation.md);
+strict mode remains the default and active MCP configuration is unchanged.

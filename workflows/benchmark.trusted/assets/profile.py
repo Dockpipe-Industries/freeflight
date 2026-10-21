@@ -17,7 +17,8 @@ def instrument(path):
                             BenchProfile.End(id, method, invokeMs, Stopwatch.GetElapsedTime(reply).TotalMilliseconds);
                         }''')
     replace('        await Refresh(token, requestedFile, method == "rename");', '        await Refresh(token, requestedFile, method == "rename");\n        using var semanticScope = BenchProfile.Scope("semantic");')
-    replace('        // Admission-only sharing within this trusted refresh.', '        var profileStart = Stopwatch.GetTimestamp();\n        var bytesBefore = bytesRead; var reusedBefore = reusedSnapshots;\n        // Admission-only sharing within this trusted refresh.')
+    refresh_start = '        var recoveryStarted = Environment.TickCount64;' if 'var recoveryStarted =' in s else '        // Admission-only sharing within this trusted refresh.'
+    replace(refresh_start, '        var profileStart = Stopwatch.GetTimestamp();\n        var bytesBefore = bytesRead; var reusedBefore = reusedSnapshots;\n' + refresh_start)
     sort = next(line for line in s.splitlines() if 'files.Sort(' in line)
     replace(sort,'        var bookkeepingStart = Stopwatch.GetTimestamp();\n'+sort)
     loop = '        foreach (var info in files)\n        {' if 'foreach (var info in files)' in s else '        foreach (var file in files)\n        {'

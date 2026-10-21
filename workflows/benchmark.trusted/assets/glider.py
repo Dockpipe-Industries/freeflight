@@ -102,7 +102,7 @@ if candidateReceipt:
     native=OUT/'candidate-native'
     with (OUT/'candidate-publish.log').open('w') as log:
         subprocess.run([prepared['dotnet'],'publish',str(source/'workers/roslyn/FreeFlight.Roslyn.csproj'),'-c','Release','--runtime','osx-arm64','--self-contained','true','-p:RestoreLockedMode=true','--artifacts-path',str(OUT/'candidate-publish-artifacts'),'--output',str(native),'-p:PublishSingleFile=false'],cwd=source,env={**ENV,'DOTNET_ROOT':str(Path(prepared['dotnet']).resolve().parent)},stdout=log,stderr=subprocess.STDOUT,check=True)
-    candidateCommand=[str(native/'FreeFlight.Roslyn')]
+    candidateCommand=[str(native/'FreeFlight.Roslyn'),*prepared.get('candidateArgs',[])]
     (source/'bin/.local').mkdir(parents=True,exist_ok=True)
     for test,args in [('test_worker.py',['--native',candidateCommand[0]]),('test_trusted.py',[prepared['dotnet'],candidateCommand[0],'--native'])]:
         with (OUT/(test+'.log')).open('w') as log:

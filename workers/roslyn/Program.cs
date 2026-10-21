@@ -107,6 +107,7 @@ internal static class Program
 internal sealed class SourceEngine : IDisposable
 {
     private ResourcePolicy resources = new();
+    private readonly List<string> trustedPaths = [];
     private readonly Dictionary<string, FileSnapshot> snapshots = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, long> dirtyFiles = new(StringComparer.Ordinal);
     private FileSystemWatcher? watcher;
@@ -114,7 +115,7 @@ internal sealed class SourceEngine : IDisposable
     private long changeSequence;
     private long bytesRead;
     private long reusedSnapshots;
-    private sealed record FileSnapshot(long Length, long Modified, long Dirty, long Generation, long ValidatedAt);
+    private sealed record FileSnapshot(long Length, long Modified, long Dirty, long Generation, long ValidatedAt, string Parent);
 
     private void Watch(string directory)
     {
@@ -199,6 +200,7 @@ internal sealed class SourceEngine : IDisposable
             Watch(root);
             workspace.ClearSolution();
             documents.Clear();
+            trustedPaths.Clear();
             fingerprints.Clear();
             projectId = null;
             selectedProject = null;
@@ -236,6 +238,8 @@ internal sealed class SourceEngine : IDisposable
                     }
                 }
                 foreach (var entry in loadedDocuments) documents.Add(entry.Key, entry.Value);
+                trustedPaths.AddRange(documents.Keys);
+                trustedPaths.Sort(StringComparer.Ordinal);
                 projectId = workspace.CurrentSolution.ProjectIds[0];
                 await Refresh(token);
                 // Compilation is now safe to inspect: all source text came through
@@ -372,10 +376,9 @@ internal sealed class SourceEngine : IDisposable
         // always revalidate the complete path without using this set.
         var checkedAncestors = trustedMsbuild && !forceAll && watcher is not null
             ? new HashSet<string>(StringComparer.Ordinal) : null;
-        var files = new List<string>();
+        var files = trustedMsbuild ? trustedPaths : new List<string>();
         var pending = new Stack<string>();
         if (!trustedMsbuild) pending.Push(root!);
-        else files.AddRange(documents.Keys);
         long bytes = 0;
         var entries = 0;
         while (pending.TryPop(out var directory))
@@ -403,7 +406,7 @@ internal sealed class SourceEngine : IDisposable
         }
         ResourcePolicy.Check("maxFiles", root!, root!, files.Count, resources.MaxFiles);
         bytes = 0; // Count actual bytes again; stat values can change during a read.
-        files.Sort(StringComparer.Ordinal);
+        if (!trustedMsbuild) files.Sort(StringComparer.Ordinal);
         var solution = workspace.CurrentSolution;
         // Trusted membership changes only on reopen. Stage only refreshed entries;
         // do not mutate the live dictionaries until every input has been admitted.
@@ -425,9 +428,10 @@ internal sealed class SourceEngine : IDisposable
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
+            snapshots.TryGetValue(file, out var cached);
             var info = new FileInfo(file);
             if (checkedAncestors is not null && !externalCompilerInputs.Contains(file))
-                CheckSnapshotPath(file, checkedAncestors, info);
+                CheckSnapshotPath(file, checkedAncestors, info, cached?.Parent);
             else
                 CheckCompilerInput(file);
             var length = info.Length;
@@ -437,7 +441,7 @@ internal sealed class SourceEngine : IDisposable
             var now = Environment.TickCount64;
             ResourcePolicy.Check("maxFileBytes", root!, file, length, resources.MaxFileBytes);
             if (!forceAll && !string.Equals(file, forceFile, PathComparison) && watcher is not null &&
-                snapshots.TryGetValue(file, out var cached) && cached.Length == length && cached.Modified == modified &&
+                cached is not null && cached.Length == length && cached.Modified == modified &&
                 cached.Generation == generation && cached.Dirty == dirty && now - cached.ValidatedAt < 5000 &&
                 documents.ContainsKey(file))
             {
@@ -467,7 +471,7 @@ internal sealed class SourceEngine : IDisposable
             }
             memory.Position = 0;
             nextFingerprints[file] = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
-            nextSnapshots[file] = new FileSnapshot(memory.Length, modified, dirty, generation, now);
+            nextSnapshots[file] = new FileSnapshot(memory.Length, modified, dirty, generation, now, cached?.Parent ?? Path.GetDirectoryName(file)!);
             // A freshly read exact-byte match cannot change Roslyn text. Keep the
             // refreshed snapshot/hash staged, but avoid allocating/decoding it again.
             if (fingerprints.TryGetValue(file, out var previousHash) &&
@@ -585,9 +589,9 @@ internal sealed class SourceEngine : IDisposable
     // Only canonical workspace keys admitted at trusted open reach this helper.
     // Reuse lexical identity, never filesystem authority: validate each parent
     // once per request and every leaf afresh. Reads still call uncached CheckPath.
-    private void CheckSnapshotPath(string file, HashSet<string> checkedAncestors, FileInfo info)
+    private void CheckSnapshotPath(string file, HashSet<string> checkedAncestors, FileInfo info, string? knownParent)
     {
-        var parent = Path.GetDirectoryName(file)!;
+        var parent = knownParent ?? Path.GetDirectoryName(file)!;
         if (!checkedAncestors.Contains(parent))
         {
             CheckPath(parent, checkedAncestors, null);

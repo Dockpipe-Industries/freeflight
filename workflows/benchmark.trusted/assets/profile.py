@@ -17,7 +17,8 @@ def instrument(path):
                             BenchProfile.End(id, method, invokeMs, Stopwatch.GetElapsedTime(reply).TotalMilliseconds);
                         }''')
     replace('        // Admission-only sharing within this trusted refresh.', '        var profileStart = Stopwatch.GetTimestamp();\n        var bytesBefore = bytesRead; var reusedBefore = reusedSnapshots;\n        // Admission-only sharing within this trusted refresh.')
-    replace('        files.Sort(StringComparer.Ordinal);','        var bookkeepingStart = Stopwatch.GetTimestamp();\n        files.Sort(StringComparer.Ordinal);')
+    sort = '        if (!trustedMsbuild) files.Sort(StringComparer.Ordinal);' if 'if (!trustedMsbuild) files.Sort(StringComparer.Ordinal);' in s else '        files.Sort(StringComparer.Ordinal);'
+    replace(sort,'        var bookkeepingStart = Stopwatch.GetTimestamp();\n'+sort)
     replace('        foreach (var file in files)\n        {','        BenchProfile.Add("bookkeeping", bookkeepingStart);\n        foreach (var file in files)\n        {')
     replace('            var info = new FileInfo(file);','            var admissionStart = Stopwatch.GetTimestamp();\n            var info = new FileInfo(file);')
     replace('            var generation = Interlocked.Read(ref invalidationGeneration);','            BenchProfile.Add("admission", admissionStart);\n            var generation = Interlocked.Read(ref invalidationGeneration);')
@@ -43,7 +44,8 @@ def instrument(path):
     replace('        var full = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(root!, path));','        using var scope = BenchProfile.Scope("path");\n        var full = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(root!, path));')
     replace('leafInfo.Attributes : File.GetAttributes(current)', 'BenchProfile.Leaf(leafInfo) : BenchProfile.Attributes(current)')
     if 'private void CheckSnapshotPath' in s:
-        replace('        var parent = Path.GetDirectoryName(file)!;', '        using var scope = BenchProfile.Scope("snapshotPath");\n        var parent = Path.GetDirectoryName(file)!;')
+        parent = '        var parent = knownParent ?? Path.GetDirectoryName(file)!;' if 'var parent = knownParent' in s else '        var parent = Path.GetDirectoryName(file)!;'
+        replace(parent, '        using var scope = BenchProfile.Scope("snapshotPath");\n'+parent)
         replace('\n        if ((info.Attributes & FileAttributes.ReparsePoint)', '\n        if ((BenchProfile.Leaf(info) & FileAttributes.ReparsePoint)')
     s+='''
 // Diagnostic build only: process-wide allocations/GC and runtime event observations.

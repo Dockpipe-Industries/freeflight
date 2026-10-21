@@ -29,4 +29,8 @@ def instrument(path):
             throw;
         }
 ''' + method[closing:]
-    path.write_text(source[:start] + guarded + source[end:])
+    result = source[:start] + guarded + source[end:]
+    anchor = '            // Cached ancestor checks authorize snapshot admission, never a read.'
+    assert result.count(anchor) == 1
+    result = result.replace(anchor, '            // Generated test-only seam; never part of a production/timed build.\n            if (forceFile == file && File.Exists(Path.Combine(root!, ".swap-before-read")))\n            {\n                File.Delete(Path.Combine(root!, ".swap-before-read"));\n                var directory = Path.GetDirectoryName(file)!;\n                Directory.Move(directory, Path.Combine(root!, ".saved-ancestor"));\n                Directory.CreateSymbolicLink(directory, Path.Combine(Path.GetDirectoryName(root!)!, "outside-ancestor"));\n                Console.Error.WriteLine("BENCH_PRE_READ_SWAP_EXECUTED");\n            }\n' + anchor)
+    path.write_text(result)

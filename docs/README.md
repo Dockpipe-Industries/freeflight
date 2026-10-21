@@ -148,4 +148,5 @@ Unreleased source-folder configuration and routing are documented in
 
 For reproducible trusted Roslyn baseline/candidate experiments, see the
 [trusted performance workflow](trusted-performance-workflow.md) and
-[residual refresh investigation](rc2-residual-refresh-investigation.md).
+[residual refresh investigation](rc2-residual-refresh-investigation.md), and
+[optimization sprint](rc2-refresh-sprint.md).

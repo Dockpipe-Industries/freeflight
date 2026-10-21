@@ -405,23 +405,28 @@ internal sealed class SourceEngine : IDisposable
         bytes = 0; // Count actual bytes again; stat values can change during a read.
         files.Sort(StringComparer.Ordinal);
         var solution = workspace.CurrentSolution;
-        var nextDocuments = new Dictionary<string, DocumentId>(documents, StringComparer.Ordinal);
-        var nextFingerprints = new Dictionary<string, string>(fingerprints, StringComparer.Ordinal);
-        var nextSnapshots = new Dictionary<string, FileSnapshot>(snapshots, StringComparer.Ordinal);
-        var present = files.ToHashSet(StringComparer.Ordinal);
-        foreach (var removed in documents.Keys.Where(path => !present.Contains(path)).ToArray())
+        // Trusted membership changes only on reopen. Stage only refreshed entries;
+        // do not mutate the live dictionaries until every input has been admitted.
+        var nextDocuments = trustedMsbuild ? documents : new Dictionary<string, DocumentId>(documents, StringComparer.Ordinal);
+        var nextFingerprints = trustedMsbuild ? new Dictionary<string, string>(StringComparer.Ordinal) : new Dictionary<string, string>(fingerprints, StringComparer.Ordinal);
+        var nextSnapshots = trustedMsbuild ? new Dictionary<string, FileSnapshot>(StringComparer.Ordinal) : new Dictionary<string, FileSnapshot>(snapshots, StringComparer.Ordinal);
+        if (!trustedMsbuild)
         {
-            solution = solution.RemoveDocument(documents[removed]);
-            nextDocuments.Remove(removed);
-            nextFingerprints.Remove(removed);
-            nextSnapshots.Remove(removed);
+            var present = files.ToHashSet(StringComparer.Ordinal);
+            foreach (var removed in documents.Keys.Where(path => !present.Contains(path)).ToArray())
+            {
+                solution = solution.RemoveDocument(documents[removed]);
+                nextDocuments.Remove(removed);
+                nextFingerprints.Remove(removed);
+                nextSnapshots.Remove(removed);
+            }
         }
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
             var info = new FileInfo(file);
             if (checkedAncestors is not null && !externalCompilerInputs.Contains(file))
-                CheckPath(file, checkedAncestors, info);
+                CheckSnapshotPath(file, checkedAncestors, info);
             else
                 CheckCompilerInput(file);
             var length = info.Length;
@@ -465,6 +470,7 @@ internal sealed class SourceEngine : IDisposable
             var source = SourceText.From(memory, encoding: Encoding.UTF8);
             if (!documents.TryGetValue(file, out var id))
             {
+                if (trustedMsbuild) throw new InvalidOperationException("Trusted graph membership changed during refresh");
                 id = DocumentId.CreateNewId(projectId!);
                 nextDocuments.Add(file, id);
                 solution = solution.AddDocument(id, Path.GetFileName(file), source, filePath: file);
@@ -477,13 +483,17 @@ internal sealed class SourceEngine : IDisposable
                 else
                     solution = solution.WithDocumentText(id, source);
         }
-        if (!workspace.TryApplyChanges(solution)) throw new InvalidOperationException("Could not update workspace");
-        snapshots.Clear();
-        foreach (var entry in nextSnapshots) snapshots.Add(entry.Key, entry.Value);
-        documents.Clear();
-        foreach (var entry in nextDocuments) documents.Add(entry.Key, entry.Value);
-        fingerprints.Clear();
-        foreach (var entry in nextFingerprints) fingerprints.Add(entry.Key, entry.Value);
+        token.ThrowIfCancellationRequested();
+        if (!ReferenceEquals(solution, workspace.CurrentSolution) && !workspace.TryApplyChanges(solution)) throw new InvalidOperationException("Could not update workspace");
+        if (!trustedMsbuild)
+        {
+            snapshots.Clear();
+            documents.Clear();
+            foreach (var entry in nextDocuments) documents.Add(entry.Key, entry.Value);
+            fingerprints.Clear();
+        }
+        foreach (var entry in nextSnapshots) snapshots[entry.Key] = entry.Value;
+        foreach (var entry in nextFingerprints) fingerprints[entry.Key] = entry.Value;
     }
 
     // Only documents returned by the explicitly trusted MSBuild graph may enter
@@ -565,6 +575,21 @@ internal sealed class SourceEngine : IDisposable
     }
 
     private string CheckPath(string path) => CheckPath(path, null, null);
+
+    // Only canonical workspace keys admitted at trusted open reach this helper.
+    // Reuse lexical identity, never filesystem authority: validate each parent
+    // once per request and every leaf afresh. Reads still call uncached CheckPath.
+    private void CheckSnapshotPath(string file, HashSet<string> checkedAncestors, FileInfo info)
+    {
+        var parent = Path.GetDirectoryName(file)!;
+        if (!checkedAncestors.Contains(parent))
+        {
+            CheckPath(parent, checkedAncestors, null);
+            checkedAncestors.Add(parent);
+        }
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
+            throw new UnauthorizedAccessException("Symlink/reparse paths are not supported");
+    }
 
     private string CheckPath(string path, HashSet<string>? checkedAncestors, FileInfo? leafInfo)
     {

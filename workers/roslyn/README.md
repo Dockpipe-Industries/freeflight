@@ -67,7 +67,10 @@ rename validates all source bytes before computing previews. Other files have ev
 consistency while watcher notifications arrive (at most the five-second fallback on
 the next request), including same-size edits with preserved timestamps. Trusted refresh may share successful ancestor checks within one request while
 admitting cached snapshots; every leaf is checked afresh, and content reads use
-full uncached path validation. No path authority persists to the next request.
+full uncached path validation. Canonical trusted graph keys reuse their lexical identity; their parents are
+validated once per request and leaves freshly checked. Trusted snapshot/hash
+updates are staged as deltas until complete admission; failed refreshes do not
+commit partial semantic state. No path authority persists to the next request.
 External compiler inputs bypass this optimization, and rename retains full reads.
 Changed text
 is applied incrementally to stable Roslyn document IDs. This detects added/deleted

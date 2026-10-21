@@ -921,3 +921,26 @@ p90; small-graph reference p90 regressed in one session and remains documented.
 All 2,880 measured combined-comparison responses passed. Full receipts, rejected
 experiments, controls and proof obligations are in `docs/rc2-warm-refresh-followup.md`.
 No push, merge, deployment, Docker/service action or unrelated workspace change.
+
+## 2026-10-21 — Workflow-owned residual refresh investigation
+
+Added `benchmark.trusted` and its focused transaction-qualification workflow with
+workflow-local assets derived from the prior synthetic fixtures/drivers. Preparation
+pins source hashes/SDK/builds; qualification reuses native suites; ordinary fresh
+sessions and diagnostics remain separate. Raw JSON, tails, GC/JIT observations,
+expiry, median/p90/max and unfavorable comparisons are retained automatically.
+The identical-source control exposed large small-graph noise and remains recorded.
+
+A bounded local candidate avoids repeated lexical reconstruction for already
+canonical trusted graph keys while preserving fresh leaf checks, and stages only
+trusted snapshot/hash deltas before commit. Full uncached read validation remains.
+The test-only transaction guard verified all-or-nothing failure behavior for the
+exercised failures. First full-graph comparison improved ordinary outline medians
+from 12.7–13.4 to 8.4–8.6 ms. Small-graph outline p90 and expiry regressions remain
+explicit; this is M6 synthetic evidence, not the supplied Linux/Biztraak retest.
+See `docs/rc2-residual-refresh-investigation.md` for exact evidence and limits.
+No new push, merge, publication, deployment, service or active MCP change.
+The final five-stage workflow repeat also passed: 960 ordinary and 320 diagnostic
+measured responses, native suites and transaction guards. Full-graph outline
+medians were 12.58–12.76 ms baseline versus 8.62–8.87 ms candidate; small-graph
+reference p90 remained unfavorable in two sessions. Both workflow YAMLs validated.

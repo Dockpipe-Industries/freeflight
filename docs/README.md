@@ -164,3 +164,5 @@ Guarded search and MCP ownership: [profiling, retained regressions and repeat co
 Native attribution: [identical-binary controls, stage costs and recovery constraints](native-mcp-attribution.md).
 
 Shutdown correction: [deterministic cancellation lifetime proof](shutdown-lifetime.md).
+
+Ordinary timing controls: [balanced order and cadence crossover](query-position-controls.md).

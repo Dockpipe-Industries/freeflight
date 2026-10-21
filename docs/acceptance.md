@@ -468,3 +468,14 @@ Both worker harnesses now check EOF exit status. The broad worker qualification,
 16 incremental faults and transactional failure cases pass; earlier diagnostic
 failures remain recorded. Native/ordinary timing follow separately. See
 [source reasoning, receipts and repeat commands](shutdown-lifetime.md).
+
+Native diagnostic qualification of `6a06b1d` now passes the exit-status and crash-log
+gates, plus core protocol/process tests. Ordinary matched/control qualification
+passes 32 complete processes and 10,368 measured semantic checks. One additional
+completed process from an interrupted condition remains separately preserved.
+The incomplete condition was rejected, repeated under a new label after confirming
+no live processes, and validated against matching provenance. A within-process
+cadence crossover shows substantial context effects but does not identify a
+hardware/runtime mechanism. Latency cells remain mixed; the lifetime repair is a
+correctness acceptance, not a Glider win or a general performance claim. See
+[full timing tables, interruption audit and repeat commands](query-position-controls.md).

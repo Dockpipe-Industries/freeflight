@@ -6,6 +6,11 @@ cancellation source while its job removes and disposes that source. Calling
 `Cancel()` afterward throws. EOF/explicit shutdown escape the request-level catch;
 a late explicit cancel instead produces a spurious error response.
 
+The same vulnerable cancellation/disposal statements are present in shipped
+`97c1342` source. The deterministic executable proof here targets local ordinary
+and diagnostic source builds, not an injected or rerun shipped package. Earlier
+ordinary qualification did not prove absence of this race.
+
 `RequestCancellation` gives each in-progress `Cancel` call a lifetime lease.
 Completion prevents new cancellation calls and defers source disposal until the
 last existing call finishes. Cancellation callbacks execute outside the lifetime
@@ -69,3 +74,9 @@ Choose unused receipt labels for repeats. Toolchain paths are M6-local; substitu
 equivalent pinned installations elsewhere. These are local checks, not new remote
 platform qualification or a performance claim. Ordinary matched timing and native
 diagnostic qualification follow separately.
+
+The corrected native diagnostic qualification subsequently passed in
+`bin/.local/glider-comparison/position-lifetime-v2-fixed-diagnostic-qualification`,
+including native protocol/process tests and both worker suites with exit-status
+checks and crash-log rejection. No unhandled shutdown exception appeared. See
+[ordinary controls and their retained mixed results](query-position-controls.md).

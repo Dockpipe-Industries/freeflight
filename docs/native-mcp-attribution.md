@@ -13,6 +13,10 @@ are retained, but those qualification gates are **not clean**. The authoritative
 additive audit is `native-attribution-v1/qualification-review.json`; original
 receipts are preserved rather than rewritten to hide the test-harness gap.
 
+Follow-up: [the deterministic lifetime correction](shutdown-lifetime.md) at
+`6a06b1d` fixes this production race and passes a new diagnostic qualification.
+That does not relabel the failing receipts described in this historical pass.
+
 ## Reproduce
 
 Use `dockpipe --workflow benchmark.trusted.attribution` with a fresh

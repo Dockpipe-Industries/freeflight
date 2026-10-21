@@ -108,6 +108,7 @@ internal sealed class SourceEngine : IDisposable
 {
     private ResourcePolicy resources = new();
     private readonly List<FileInfo> trustedPaths = [];
+    private readonly Dictionary<string, Dictionary<string, string>> trustedDirectoryMembers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, FileSnapshot> snapshots = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, long> dirtyFiles = new(StringComparer.Ordinal);
     private FileSystemWatcher? watcher;
@@ -201,6 +202,7 @@ internal sealed class SourceEngine : IDisposable
             workspace.ClearSolution();
             documents.Clear();
             trustedPaths.Clear();
+            trustedDirectoryMembers.Clear();
             fingerprints.Clear();
             projectId = null;
             selectedProject = null;
@@ -240,6 +242,14 @@ internal sealed class SourceEngine : IDisposable
                 foreach (var entry in loadedDocuments) documents.Add(entry.Key, entry.Value);
                 trustedPaths.AddRange(documents.Keys.Select(path => new FileInfo(path)));
                 trustedPaths.Sort((left, right) => StringComparer.Ordinal.Compare(left.FullName, right.FullName));
+                foreach (var info in trustedPaths)
+                {
+                    if (externalCompilerInputs.Contains(info.FullName)) continue;
+                    var parent = Path.GetDirectoryName(info.FullName)!;
+                    if (!trustedDirectoryMembers.TryGetValue(parent, out var members))
+                        trustedDirectoryMembers[parent] = members = new(StringComparer.Ordinal);
+                    members.Add(info.Name, info.FullName);
+                }
                 projectId = workspace.CurrentSolution.ProjectIds[0];
                 await Refresh(token);
                 // Compilation is now safe to inspect: all source text came through
@@ -425,20 +435,23 @@ internal sealed class SourceEngine : IDisposable
             }
         }
         byte[]? readBuffer = null;
+        using var metadataBatch = OperatingSystem.IsMacOS() && checkedAncestors is not null
+            ? new DarwinMetadataBatch(trustedDirectoryMembers, resources.MaxDirectoryEntries, path => CheckPath(path)) : null;
         foreach (var info in files)
         {
             token.ThrowIfCancellationRequested();
             var file = info.FullName;
             snapshots.TryGetValue(file, out var cached);
+            DarwinMetadataBatch.Metadata? batchMetadata = null;
             if (checkedAncestors is not null && !externalCompilerInputs.Contains(file))
-                CheckSnapshotPath(file, checkedAncestors, info, cached?.Parent);
+                batchMetadata = CheckSnapshotPath(file, checkedAncestors, info, cached?.Parent, metadataBatch, token);
             else
             {
                 CheckCompilerInput(file);
                 info.Refresh();
             }
-            var length = info.Length;
-            var modified = info.LastWriteTimeUtc.Ticks;
+            var length = batchMetadata?.Length ?? info.Length;
+            var modified = batchMetadata?.Modified ?? info.LastWriteTimeUtc.Ticks;
             var generation = Interlocked.Read(ref invalidationGeneration);
             var dirty = dirtyFiles.GetValueOrDefault(file);
             var now = Environment.TickCount64;
@@ -592,7 +605,7 @@ internal sealed class SourceEngine : IDisposable
     // Only canonical workspace keys admitted at trusted open reach this helper.
     // Reuse lexical identity, never filesystem authority: validate each parent
     // once per request and every leaf afresh. Reads still call uncached CheckPath.
-    private void CheckSnapshotPath(string file, HashSet<string> checkedAncestors, FileInfo info, string? knownParent)
+    private DarwinMetadataBatch.Metadata? CheckSnapshotPath(string file, HashSet<string> checkedAncestors, FileInfo info, string? knownParent, DarwinMetadataBatch? batch, CancellationToken token)
     {
         var parent = knownParent ?? Path.GetDirectoryName(file)!;
         if (!checkedAncestors.Contains(parent))
@@ -600,11 +613,13 @@ internal sealed class SourceEngine : IDisposable
             CheckPath(parent, checkedAncestors, null);
             checkedAncestors.Add(parent);
         }
+        if (batch is not null && batch.TryGet(file, parent, token, out var metadata)) return metadata;
         // The object is reusable, its metadata is not. Refresh only after the
         // parent path is admitted, before any attribute/length/mtime is consumed.
         info.Refresh();
         if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
             throw new UnauthorizedAccessException("Symlink/reparse paths are not supported");
+        return null;
     }
 
     private string CheckPath(string path, HashSet<string>? checkedAncestors, FileInfo? leafInfo)

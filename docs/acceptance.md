@@ -373,3 +373,16 @@ p90/max values regressed. Candidate rejected for latency; shipped runtime restor
 The rejected patch, raw failures and all measurements remain local. See
 [iteration evidence and design proof obligations](glider-target-iteration.md).
 No push, PR, release, deployment or active configuration change.
+
+## Fresh Darwin metadata batching (2026-10-21)
+
+Request-local bounded native metadata batching passed focused malformed-record,
+ancestor replacement, symlink, resource, cancellation and descriptor lifetime
+proofs plus existing worker/native semantic, security, mutation and transactional
+qualification. All 4,800 ordinary worker, 1,600 diagnostic and 7,200 three-product
+MCP measured responses passed. This M6/APFS candidate improves MCP steady-state
+median/p90 across both synthetic graphs and cadences in this repeat. It does not
+beat Glider on tiny queries or unpaced search; expiry, extra allocation and the
+worker-only paced-search regression remain documented. Linux/Windows native
+qualification and other filesystem qualification are not claimed. Local only.
+See [complete evidence, failures, session tails and commands](fresh-metadata-batching.md).

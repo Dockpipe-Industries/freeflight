@@ -51,13 +51,15 @@ def instrument(path):
     # Time the whole normalization/check operation and the leaf attribute call separately.
     replace('        var full = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(root!, path));','        using var scope = BenchProfile.Scope("path");\n        var full = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(root!, path));')
     replace('leafInfo.Attributes : File.GetAttributes(current)', 'BenchProfile.Leaf(leafInfo) : BenchProfile.Attributes(current)')
-    if 'private void CheckSnapshotPath' in s:
+    if ' CheckSnapshotPath(' in s:
         parent = '        var parent = knownParent ?? Path.GetDirectoryName(file)!;' if 'var parent = knownParent' in s else '        var parent = Path.GetDirectoryName(file)!;'
         replace(parent, '        using var scope = BenchProfile.Scope("snapshotPath");\n'+parent)
         replace('\n        if ((info.Attributes & FileAttributes.ReparsePoint)', '\n        if ((BenchProfile.Leaf(info) & FileAttributes.ReparsePoint)')
     replace('            using var stream = OpenCompilerInput(file);', '            var openStart = Stopwatch.GetTimestamp();\n            using var stream = OpenCompilerInput(file);\n            BenchProfile.Add("open", openStart);')
     replace('IncrementalHash.CreateHash(HashAlgorithmName.SHA256)', 'BenchProfile.CreateHash()')
     replace('await stream.ReadAsync(buffer.AsMemory(), token)', 'await BenchProfile.Read(stream, buffer, token)')
+    if 'batch.TryGet(file, parent, token, out var metadata)' in s:
+        replace('batch.TryGet(file, parent, token, out var metadata)', 'BenchProfile.Batch(batch, file, parent, token, out var metadata)')
     replace('hash.AppendData(buffer, 0, count);', 'BenchProfile.Append(hash, buffer, count);')
     replace('await memory.WriteAsync(buffer.AsMemory(0, count), token);', 'await BenchProfile.Write(memory, buffer, count, token);')
     replace('Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant()', 'BenchProfile.FinishHash(hash)')
@@ -93,6 +95,8 @@ internal sealed class BenchProfile : EventListener
     public static void Add(string stage, long start) { var stages=Stages.Value!; stages[stage] = stages.GetValueOrDefault(stage) + Stopwatch.GetElapsedTime(start).TotalMilliseconds; }
     public static IDisposable Scope(string stage) => new Timed(stage);
     private sealed class Timed(string stage) : IDisposable { private readonly long start=Stopwatch.GetTimestamp(); public void Dispose()=>Add(stage,start); }
+    public static bool Batch(DarwinMetadataBatch batch, string file, string parent, CancellationToken token, out DarwinMetadataBatch.Metadata metadata)
+    { var start=Stopwatch.GetTimestamp(); try{return batch.TryGet(file,parent,token,out metadata);} finally{Add("bulkMetadata",start);} }
     public static IncrementalHash CreateHash() { var start=Stopwatch.GetTimestamp(); try{return IncrementalHash.CreateHash(HashAlgorithmName.SHA256);} finally{Add("hashCreate",start);} }
     public static async ValueTask<int> Read(FileStream stream, byte[] buffer, CancellationToken token) { var start=Stopwatch.GetTimestamp(); try{return await stream.ReadAsync(buffer.AsMemory(),token);} finally{Add("readIo",start);} }
     public static void Append(IncrementalHash hash, byte[] buffer, int count) { var start=Stopwatch.GetTimestamp(); try{hash.AppendData(buffer,0,count);} finally{Add("hashAppend",start);} }
@@ -115,4 +119,8 @@ internal sealed class BenchProfile : EventListener
     }
 }
 '''
+    if 'class DarwinMetadataBatch' not in '\n'.join(p.read_text() for p in path.parent.glob('*.cs')):
+        start=s.index('    public static bool Batch(')
+        end=s.index('    public static IncrementalHash CreateHash()',start)
+        s=s[:start]+s[end:]
     path.write_text(s)

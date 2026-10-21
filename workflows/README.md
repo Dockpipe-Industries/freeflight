@@ -57,3 +57,8 @@ It requires a local core build and does not modify active MCP configuration.
 `benchmark.trusted.glider` compares the frozen published bundle with isolated official
 Glider through MCP, using the existing trusted fixtures and semantic oracle. See
 [methodology, results and repeat command](../docs/glider-head-to-head.md).
+
+`benchmark.metadata` runs the macOS native metadata proof with generated test-only hooks.
+Set a fresh `FREEFLIGHT_METADATA_LABEL` and put the repository-pinned .NET SDK on PATH.
+The trusted benchmark automatically runs this proof for candidates containing the helper.
+See [batching evidence and repeat commands](../docs/fresh-metadata-batching.md).

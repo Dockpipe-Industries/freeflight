@@ -883,3 +883,22 @@ correction polls the required new-host 200 and old-host 404 outcomes for at most
 five seconds without repeating any mutation. Both outcomes remain mandatory.
 Publication of this test-only correction is pending explicit approval; no new
 qualification result is claimed.
+
+
+## 2026-10-21 — Local design and documentation correction
+
+- Replaced the flat green landing renderer with independently authored structured
+  QML, light-blue/dark-blue palettes, persistent theme selection, platform download
+  cards and source-backed guide navigation. Removed unsolicited competitor copy.
+- Inspected Cloud's bounded docs importer and semantic reader pattern. FreeFlight
+  imports seven maintained public guides with revision/hash provenance, sanitizes
+  Markdown, and supports search, navigation/history and code copying. No private
+  reference source or product claims were copied into the public repository.
+- Verified Cloud's /#company route; Company destinations are selected at build
+  time for staging and production. Preserved receiver, publication and access machinery.
+- Built both environment variants locally. Desktop/mobile light/dark rendering,
+  theme persistence, source-guide integrity, contrast, docs search/history/copy,
+  fallback content and Company links passed DockPipe site.test. Review screenshots
+  are generated locally; this correction has not been deployed or merged.
+- M6 review preview is loopback-only. A dedicated draft PR is the review boundary;
+  production and master remain untouched.

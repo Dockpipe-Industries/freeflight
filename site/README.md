@@ -2,9 +2,9 @@
 
 The product renderer is an independently authored Qt Quick/QuickControls2 application
 compiled to WebAssembly, following the inspected DockPipe site's production architecture.
-No private Cloud source or branding is copied. `index.html` is the authoritative authored
-six-section content; the build extracts it into the QML renderer and retains an accessible
-HTML view. Detailed documentation remains authoritative in `docs/`.
+No private Cloud source or branding is copied. The landing and installation views are structured QML; `index.html` retains an accessible
+six-section overview. Languages, configuration and contribution navigation open the
+source-backed semantic documentation reader. Maintained Markdown remains authoritative.
 
 There are no accounts, authentication, telemetry, database, API, billing or external fonts.
 Qt assets are delivered by one unprivileged static container. No server-side Qt process is
@@ -124,3 +124,55 @@ were compared byte-for-byte with the official5.0.5 source tag. Missing or altere
 texts fail source qualification. This closes the identified runtime-notice gap,
 not a blanket legal clearance for every dependency or future build configuration.
 See https://emscripten.org/docs/introducing_emscripten/emscripten_license.html.
+
+## Design and source-backed documentation review
+
+The follow-up typography review inspected actual browser-rendered Nucleon and
+DockPipe Cloud QML applications, built locally from Nucleon `654d66d4` and Cloud
+`5ca7fbd2`. The comparison builds used the existing Qt 6.12 / Emscripten 5.0.5
+Mac toolchain; they do not qualify those repositories' pinned Linux release kits.
+FreeFlight now embeds the same unmodified Inter and DejaVu Sans Mono font assets,
+retains their licenses in `NOTICES.txt`, and uses Qt Basic controls with consistent
+46-pixel primary actions. Its light-blue and dark-blue palettes remain independent.
+
+Credential-free loopback profiling did not reproduce a prolonged startup: the
+initial three-site samples reached loader completion in 217–442 ms, with repeated
+loads mostly 91–127 ms. These are local Chromium/software-rendering observations,
+not production network, full-stack cold-start, or input-latency acceptance results.
+
+Repeated browser captures exposed an intermittent blank workflow example while
+the rest of the Qt page remained visible. Compositing that fixed-color panel as
+one Qt layer retained its text in twelve repeated desktop/mobile light/dark loads.
+The browser smoke check now verifies visible glyph pixels inside the panel in
+both themes, in addition to saving screenshots. This is a repaint correction,
+not evidence of a startup-speed improvement.
+
+The local correction provides light-blue and dark-blue palettes with System/Light/Dark
+selection, saved in browser local storage. The Qt landing page uses a bounded hero,
+workflow panel and feature columns; small screens stack the content.
+
+`workflows/site.build/assets/documents.py` imports only the seven public guides in
+its explicit catalog. It records the exact checkout revision, per-file SHA-256,
+and whether guide bytes differ from that revision. Agent guidance, private state
+and arbitrary directories are excluded. The generated bundle is embedded in the
+existing `loader.js`; the deployed reader cannot browse the repository filesystem.
+
+The reader uses pinned Marked, DOMPurify and highlight.js packages, bundled locally
+without a CDN. Raw HTML is escaped, output is sanitized and external Markdown
+images are disabled. It supports title/body search, versioned source links,
+allowlisted in-app document links, browser history, selectable code and Copy buttons.
+Tables and code blocks scroll within their containers. Unsupported diagram fences
+remain readable source; this does not claim Cloud's complete renderer feature set.
+Library notices are appended to the served NOTICES.txt.
+
+Company destinations are selected from `FREEFLIGHT_SITE_ENV` at build time:
+`https://staging.dockpipe.com/#company` for staging and
+`https://dockpipe.com/#company` for production. No hostname inference occurs in the browser.
+
+After `dockpipe --workflow site.build`, `dockpipe --workflow site.preview` serves
+`http://127.0.0.1:4174/` only on loopback. This workflow does not deploy, enable
+delivery or modify infrastructure. `site.test` exercises both themes at desktop
+and mobile sizes, persistence, docs search/history/copy, Company routing, source
+integrity, contrast pairs, indexing and the accessible overview. Screenshots and
+receipts remain under `bin/.local/site-test`. Full screen-reader acceptance of
+Qt controls remains a separate limitation; the documentation body is semantic HTML.

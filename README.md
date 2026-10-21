@@ -55,7 +55,7 @@ chosen source folders. A compatible SDK and restored dependencies remain require
 Bundled workers need no separate paths or MCP configurations. File queries route
 lazily; project ambiguity is resolved through workspace tools.
 
-The published [trusted-loading preview](https://github.com/Dockpipe-Industries/freeflight/releases/tag/v0.1.0-preview.20261020.trusted.1997d38)
+The [qualified staging prerelease](https://github.com/Dockpipe-Industries/freeflight/releases/tag/v0.1.0-preview.20261020.rc2.staging.39524813103.c2a55ddeed79) includes source-folder routing. The older [trusted-loading preview](https://github.com/Dockpipe-Industries/freeflight/releases/tag/v0.1.0-preview.20261020.trusted.1997d38)
 still needs its documented `roots` plus `trustedRoots` configuration; it does not
 have this new routing. Follow the exact release's instructions. The alternative
 `--workspace /absolute/project` remains safe-source. See [workspace setup](docs/workspaces.md)

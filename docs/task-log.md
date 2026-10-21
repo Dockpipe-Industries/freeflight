@@ -977,3 +977,13 @@ Full-graph endpoint median/p90 improved in this repeat; one worker-only outline
 p90 regression remains retained. No Linux rerun or Glider win is claimed. The
 selected runtime is exactly the measured serial checkpoint, with no new runtime
 change after qualification. Hosted platform checks and staging delivery follow.
+
+## Same-machine Glider comparison (2026-10-21)
+
+Published FreeFlight `97c1342d9234` and official Glider 13.3.0 completed the local
+`benchmark.trusted.glider` workflow: 24 fresh processes, both synthetic graph sizes,
+unpaced and paced runs, all 9,600 measured semantic checks passed. Complete ranges
+are checked where exposed; missing Glider fields and cached-key interaction are
+disclosed. All maxima and setup failures are retained. Glider leads tiny operations;
+broad-search ordering reverses with cadence. No runtime or remote changes.
+See [full evidence and repeat command](glider-head-to-head.md).

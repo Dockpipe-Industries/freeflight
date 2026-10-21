@@ -345,7 +345,10 @@ claimed or authorized by these local checks.
 - [x] Five test-only failed-refresh guards per variant, including a deterministic
   post-admission ancestor swap rejected before any additional source bytes read.
 - [x] Native core tests and actual worker-project semantics through C++ MCP passed.
-- [ ] Final named-baseline/MCP comparisons and single-processor qualification.
+- [x] Final named-baseline/MCP comparisons and single-processor qualification.
+- [x] Paced comparison retained alongside unpaced results, including CPU and maximum-latency regressions.
+- [x] Rejected parallel admission after paced CPU/search/tail regressions; restored
+  the measured serial runtime while retaining expanded tests and experiment receipts.
 - [ ] Hosted self-contained/platform qualification and staging publication.
 
 See [sprint evidence](rc2-refresh-sprint.md). M6 synthetic measurements do not

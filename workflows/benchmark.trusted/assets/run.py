@@ -52,6 +52,7 @@ def prepare():
                   sessions=int(os.environ.get('FREEFLIGHT_TRUSTED_BENCH_SESSIONS', '3')),
                   rounds=int(os.environ.get('FREEFLIGHT_TRUSTED_BENCH_ROUNDS', '20')),
                   warmupSeconds=float(os.environ.get('FREEFLIGHT_TRUSTED_BENCH_WARMUP', '5')),
+                  roundIntervalSeconds=float(os.environ.get('FREEFLIGHT_TRUSTED_BENCH_INTERVAL','0')),
                   sizes=[int(x) for x in os.environ.get('FREEFLIGHT_TRUSTED_BENCH_SIZES', '433,5845').split(',')],
                   paddingBytes=int(os.environ.get('FREEFLIGHT_TRUSTED_BENCH_PADDING', '0')),
                   referenceCallers=int(os.environ.get('FREEFLIGHT_TRUSTED_BENCH_CALLERS','1')),
@@ -62,6 +63,7 @@ def prepare():
     assert 1 <= config['referenceCallers'] <= 1000 and 1 <= len(config['searchQuery']) <= 256
     assert config['firstVariant'] in ('baseline','candidate')
     assert all(sum(config['searchQuery'].casefold() in f'C{f}'.casefold() for f in range(count)) <= 1000 for count in config['sizes']), 'Search exceeds worker symbol limit'
+    assert 0 <= config['roundIntervalSeconds'] <= 10
     assert config['sessions'] >= 2 and config['rounds'] >= 10 and config['warmupSeconds'] >= 2
     assert set(config['sizes']) <= {16, 128, 256, 433, 1024, 2048, 5845} and 433 in config['sizes'], '433 fixture required for mutation qualification'
     # Copy only repository-owned worker inputs; never reuse dirty build outputs.
@@ -103,6 +105,8 @@ def prepare():
     config['fixtures'] = fixtures
     command([DOTNET, '--info'], 'dotnet-info.log')
     config['driverHashes'] = {p.name:digest(p) for p in Path(__file__).parent.glob('*.py')}
+    drivers=OUT/'driver-source';drivers.mkdir()
+    for name in config['driverHashes']:shutil.copyfile(Path(__file__).parent/name,drivers/name)
     save('provenance.json',config)
     print('Prepared pinned source/build/fixture receipts:', OUT, flush=True)
 
@@ -203,11 +207,13 @@ def measure(config):
                     assert opened['files']==int(size) and opened['projects']==fixture['projects'],opened
                     warmStart=time.monotonic(); round=0
                     def cycle(phase):
+                        cycleStart=time.monotonic()
                         for method,args in queries:
                             before,_=session.call('capabilities'); result,ms=session.call(method,**args); ident=session.seq
                             check(method,result); after,_=session.call('capabilities')
                             readCount=int(size)-(after['refreshStats']['reusedSnapshots']-before['refreshStats']['reusedSnapshots'])
                             receipt['samples'].append(dict(readDocuments=readCount,readBytes=after['refreshStats']['bytesRead']-before['refreshStats']['bytesRead'],id=ident,round=round,phase=phase,method=method,ms=ms,before=before['refreshStats'],after=after['refreshStats']))
+                        if config.get('roundIntervalSeconds',0)>0: time.sleep(max(0,config['roundIntervalSeconds']-(time.monotonic()-cycleStart)))
                     while round<3 or time.monotonic()-warmStart<config['warmupSeconds']:
                         cycle('warmup');round+=1
                     for round in range(config['rounds']):cycle('steady')
@@ -296,6 +302,8 @@ if __name__=='__main__':
             raise
     else:
         config=json.loads((OUT/'provenance.json').read_text())
+        if action in ('measure','summarize'):
+            for name,expected in config['driverHashes'].items():assert digest(Path(__file__).parent/name)==expected, 'Driver changed during run: '+name
         assert subprocess.check_output([DOTNET,'--version'],env=ENV).decode().strip()==config['sdk'], 'SDK changed since prepare'
         try:globals()[action](config)
         except Exception as error:

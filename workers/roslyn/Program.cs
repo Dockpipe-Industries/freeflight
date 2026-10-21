@@ -368,6 +368,10 @@ internal sealed class SourceEngine : IDisposable
 
     private async Task Refresh(CancellationToken token, string? forceFile = null, bool forceAll = false)
     {
+        // Admission-only sharing within this trusted refresh. Content reads below
+        // always revalidate the complete path without using this set.
+        var checkedAncestors = trustedMsbuild && !forceAll && watcher is not null
+            ? new HashSet<string>(StringComparer.Ordinal) : null;
         var files = new List<string>();
         var pending = new Stack<string>();
         if (!trustedMsbuild) pending.Push(root!);
@@ -415,8 +419,11 @@ internal sealed class SourceEngine : IDisposable
         foreach (var file in files)
         {
             token.ThrowIfCancellationRequested();
-            CheckCompilerInput(file);
             var info = new FileInfo(file);
+            if (checkedAncestors is not null && !externalCompilerInputs.Contains(file))
+                CheckPath(file, checkedAncestors, info);
+            else
+                CheckCompilerInput(file);
             var length = info.Length;
             var modified = info.LastWriteTimeUtc.Ticks;
             var generation = Interlocked.Read(ref invalidationGeneration);
@@ -433,6 +440,10 @@ internal sealed class SourceEngine : IDisposable
                 reusedSnapshots++;
                 continue;
             }
+            // Cached ancestor checks authorize snapshot admission, never a read.
+            // Preserve full validation immediately before opening source bytes.
+            if (checkedAncestors is not null && !externalCompilerInputs.Contains(file))
+                CheckPath(file);
             // Bounded read even when the file grows after enumeration.
             using var stream = OpenCompilerInput(file);
             using var memory = new MemoryStream();
@@ -553,7 +564,9 @@ internal sealed class SourceEngine : IDisposable
         return CheckPath(full);
     }
 
-    private string CheckPath(string path)
+    private string CheckPath(string path) => CheckPath(path, null, null);
+
+    private string CheckPath(string path, HashSet<string>? checkedAncestors, FileInfo? leafInfo)
     {
         var full = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(root!, path));
         var relative = Path.GetRelativePath(root!, full);
@@ -562,7 +575,12 @@ internal sealed class SourceEngine : IDisposable
         foreach (var segment in relative.Split(Path.DirectorySeparatorChar))
         {
             current = Path.Combine(current, segment);
-            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) throw new UnauthorizedAccessException("Symlink/reparse paths are not supported");
+            var isAncestor = !string.Equals(current, full, PathComparison);
+            if (isAncestor && checkedAncestors?.Contains(current) == true) continue;
+            // Reuse only this iteration's leaf metadata for length/mtime below.
+            var attributes = !isAncestor && leafInfo is not null ? leafInfo.Attributes : File.GetAttributes(current);
+            if ((attributes & FileAttributes.ReparsePoint) != 0) throw new UnauthorizedAccessException("Symlink/reparse paths are not supported");
+            if (isAncestor) checkedAncestors?.Add(current);
         }
         return full;
     }

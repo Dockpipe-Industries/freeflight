@@ -38,6 +38,7 @@ internal static class Program
         if (backgroundRecovery && !commandLine.Contains("--incremental-validation", StringComparer.Ordinal))
             throw new ArgumentException("Background recovery requires incremental validation");
         using var lifetime = new CancellationTokenSource();
+        var active = new ConcurrentDictionary<string, RequestCancellation>();
         var maintenance = backgroundRecovery ? Task.Run(async () =>
         {
             try
@@ -46,13 +47,24 @@ internal static class Program
                 {
                     await Task.Delay(1000, lifetime.Token);
                     await gate.WaitAsync(lifetime.Token);
-                    try { await engine.RecoverInBackground(lifetime.Token); }
+                    try
+                    {
+                        await engine.RecoverInBackground(lifetime.Token, async () =>
+                        {
+                            if (active.IsEmpty) return;
+                            gate.Release();
+                            await Task.Yield();
+                            // Always reacquire ownership, even after cancellation;
+                            // the outer finally must never release an unowned gate.
+                            await gate.WaitAsync();
+                            lifetime.Token.ThrowIfCancellationRequested();
+                        });
+                    }
                     finally { gate.Release(); }
                 }
             }
             catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         }) : Task.CompletedTask;
-        var active = new ConcurrentDictionary<string, RequestCancellation>();
         var jobs = new List<Task>();
         var outputGate = new object();
         void Reply(object value)
@@ -192,23 +204,29 @@ internal sealed class SourceEngine : IDisposable
     private long incrementalRefreshes;
     private bool backgroundReady;
     private bool backgroundReading;
+    private Func<Task>? backgroundYield;
+    private long refreshRevision;
+    private long backgroundAborts;
+    private sealed class BackgroundSupersededException : Exception { }
     private long backgroundAttempts;
     private long backgroundFailures;
     private string? backgroundLastError;
 
     // Called only while owning the same gate as Invoke. No concurrent engine
     // mutation, speculative content, relaxed deadline or partial publication.
-    public async Task RecoverInBackground(CancellationToken token)
+    public async Task RecoverInBackground(CancellationToken token, Func<Task>? yield = null)
     {
         if (!backgroundReady || !incrementalValidation || Environment.TickCount64 - recoveredAt < 4000) return;
         backgroundAttempts++;
         try
         {
             backgroundReading = true;
+            backgroundYield = yield;
             await Refresh(token, forceAll: true);
             backgroundLastError = null;
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+        catch (BackgroundSupersededException) { backgroundAborts++; }
         catch (Exception error)
         {
             backgroundFailures++;
@@ -217,7 +235,7 @@ internal sealed class SourceEngine : IDisposable
             // Keep the committed solution/time untouched and require foreground recovery.
             recoveredGeneration = -1;
         }
-        finally { backgroundReading = false; }
+        finally { backgroundReading = false; backgroundYield = null; }
     }
     private string Mode => trustedMsbuild ? "trusted-msbuild" : "safe-source";
     public SourceEngine(bool trustedMsbuild, bool incrementalValidation = false)
@@ -252,11 +270,12 @@ internal sealed class SourceEngine : IDisposable
             degradedFidelity = !trustedMsbuild || loadWarnings.Count > 0,
             edits = "preview-only",
             validationMode = incrementalValidation ? "incremental-with-recovery" : "strict",
-            refreshStats = new { bytesRead, readFiles, reusedSnapshots, invalidationGeneration, fullRecoveries, incrementalRefreshes, backgroundAttempts, backgroundFailures, backgroundLastError }
+            refreshStats = new { bytesRead, readFiles, reusedSnapshots, invalidationGeneration, fullRecoveries, incrementalRefreshes, backgroundAttempts, backgroundFailures, backgroundLastError, backgroundAborts }
         };
         if (method == "open")
         {
             backgroundReady = false;
+            refreshRevision++;
             var requested = Path.GetFullPath(args.GetProperty("root").GetString() ?? throw new ArgumentException("root is required"));
             if (!Directory.Exists(requested)) throw new DirectoryNotFoundException(requested);
             if (args.TryGetProperty("mode", out var mode) && mode.GetString() != Mode)
@@ -493,6 +512,7 @@ internal sealed class SourceEngine : IDisposable
 
     private async Task Refresh(CancellationToken token, string? forceFile = null, bool forceAll = false)
     {
+        var startRevision = refreshRevision;
         var recoveryStarted = Environment.TickCount64;
         var startGeneration = Interlocked.Read(ref invalidationGeneration);
         var changes = incrementalValidation ? dirtyFiles.ToArray() : [];
@@ -566,6 +586,15 @@ internal sealed class SourceEngine : IDisposable
             ? new DarwinMetadataBatch(trustedDirectoryMembers, resources.MaxDirectoryEntries, path => CheckPath(path)) : null;
         foreach (var info in files)
         {
+            if (backgroundReading && backgroundYield is not null)
+            {
+                // No input handle is live at this boundary. Foreground reads use
+                // their ordinary mode while the private background transaction waits.
+                backgroundReading = false;
+                try { await backgroundYield(); }
+                finally { backgroundReading = true; }
+                if (startRevision != refreshRevision) throw new BackgroundSupersededException();
+            }
             token.ThrowIfCancellationRequested();
             var file = info.FullName;
             snapshots.TryGetValue(file, out var cached);
@@ -651,7 +680,10 @@ internal sealed class SourceEngine : IDisposable
             fingerprints.Clear();
         }
         foreach (var entry in nextSnapshots) snapshots[entry.Key] = entry.Value;
+        var contentChanged = (backgroundReading || backgroundYield is not null) &&
+            nextFingerprints.Any(entry => !fingerprints.TryGetValue(entry.Key, out var old) || old != entry.Value);
         foreach (var entry in nextFingerprints) fingerprints[entry.Key] = entry.Value;
+        if (contentChanged) refreshRevision++;
         if (incrementalValidation)
         {
             committedBytes = bytes;

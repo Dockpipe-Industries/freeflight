@@ -30,6 +30,22 @@ def instrument(path):
         }
 ''' + method[closing:]
     result = source[:start] + guarded + source[end:]
+    # A cooperative background transaction permits an independently committed
+    # foreground transaction while its private preparation is suspended. Compare
+    # failure against that latest legitimate state, not the state before yielding.
+    # Foreground Refresh has its own guard. Capture in finally even if the
+    # foreground semantic operation throws after successfully refreshing content.
+    yield_finally = '                finally { backgroundReading = true; }'
+    if yield_finally in result:
+        assert result.count(yield_finally) == 1
+        result = result.replace(yield_finally, '''                finally
+                {
+                    backgroundReading = true;
+                    beforeDocuments = documents.ToArray();
+                    beforeFingerprints = fingerprints.ToArray();
+                    beforeSnapshots = snapshots.ToArray();
+                    beforeSolution = workspace.CurrentSolution;
+                }''')
     anchor = '            // Cached ancestor checks authorize snapshot admission, never a read.'
     assert result.count(anchor) == 1
     result = result.replace(anchor, '            // Generated test-only seam; never part of a production/timed build.\n            if (forceFile == file && File.Exists(Path.Combine(root!, ".swap-before-read")))\n            {\n                File.Delete(Path.Combine(root!, ".swap-before-read"));\n                var directory = Path.GetDirectoryName(file)!;\n                Directory.Move(directory, Path.Combine(root!, ".saved-ancestor"));\n                Directory.CreateSymbolicLink(directory, Path.Combine(Path.GetDirectoryName(root!)!, "outside-ancestor"));\n                Console.Error.WriteLine("BENCH_PRE_READ_SWAP_EXECUTED");\n            }\n' + anchor)

@@ -8,10 +8,38 @@ else:
  config=json.loads((receipt/'provenance.json').read_text())
  size=os.environ.get('FREEFLIGHT_BACKGROUND_SIZE','433');assert size in ('433','5845')
  dotnet=config['dotnet'];source=str(receipt/'candidate/source');fixture=config['fixtures'][size]['root']
- destination=str(receipt/('background-adversarial-'+size))
+ proofLabel=os.environ.get('FREEFLIGHT_BACKGROUND_PROOF_LABEL','background-adversarial-'+size)
+ assert proofLabel and all(c.isalnum() or c in '-_' for c in proofLabel)
+ destination=str(receipt/proofLabel)
 out=pathlib.Path(destination);out.mkdir(exist_ok=False)
 copy=out/'source';shutil.copytree(source,copy)
 program=copy/'workers/roslyn/Program.cs';s=program.read_text()
+cooperative='BackgroundSupersededException' in s
+if cooperative:
+ anchor='        if (method != "open" && new[]';pos=s.index(anchor)
+ s=s[:pos]+'''        if (method == "test.cooperate")
+        {
+            var action=args.GetProperty("action").GetString();
+            var coopFile=args.GetProperty("file").GetString()!;
+            var project=args.GetProperty("project").GetString()!;
+            var beforeAborts=backgroundAborts; var beforeFull=fullRecoveries;
+            recoveredAt -= 5001;
+            var callbacks=0;
+            await RecoverInBackground(token, async () =>
+            {
+                if (++callbacks != 2) return;
+                if (action == "change") File.WriteAllText(coopFile, File.ReadAllText(coopFile).Replace("=> 1", "=> 2"));
+                if (action == "reopen")
+                    await Invoke("open", JsonSerializer.SerializeToElement(new { root, project }), token);
+                else if (action == "full")
+                    await Invoke("rename", JsonSerializer.SerializeToElement(new { file=coopFile, line=0, character=45, newName="Next" }), token);
+                else
+                    await Invoke("symbols", JsonSerializer.SerializeToElement(new { file=coopFile }), token);
+            });
+            return new { aborted=backgroundAborts-beforeAborts, full=fullRecoveries-beforeFull,
+                hash=fingerprints[coopFile], text=(await workspace.CurrentSolution.GetDocument(documents[coopFile])!.GetTextAsync(token)).ToString() };
+        }
+''' + s[pos:]
 s=s.replace('    private long backgroundAttempts;', '    private bool testOverflow, testCancel, testHold, testSwap;\n    private string? testDirty;\n    private long backgroundAttempts;')
 s=s.replace('        backgroundAttempts++;', '''        backgroundAttempts++;
         if (testHold)
@@ -126,6 +154,21 @@ try:
  edit=next(x for x in r['result']['edits'] if x['file']==str(target))
  assert edit['expectedSha256']==hashlib.sha256(target.read_bytes()).hexdigest()
  checks.append(dict(case='fresh target and rename preview hash after idle recovery'))
+ if cooperative:
+  target.write_bytes(original.replace(b'=> 0',b'=> 1'))
+  r=call('test.cooperate',action='change',file=str(target),project=str(project.relative_to(root)))['result']
+  assert r['aborted']==1 and r['full']==1, r # expired foreground refresh, not the stale background transaction
+  assert r['hash']==hashlib.sha256(target.read_bytes()).hexdigest() and r['text']==target.read_text()
+  checks.append(dict(case='foreground content commit supersedes staged background bytes'))
+  r=call('test.cooperate',action='unchanged',file=str(target),project=str(project.relative_to(root)))['result']
+  assert r['aborted']==0 and r['full']==2,r # both transactions read, neither changes content
+  checks.append(dict(case='unchanged foreground refresh permits background completion'))
+  r=call('test.cooperate',action='full',file=str(target),project=str(project.relative_to(root)))['result']
+  assert r['aborted']==1,r
+  checks.append(dict(case='unchanged foreground full recovery supersedes older recovery'))
+  r=call('test.cooperate',action='reopen',file=str(target),project=str(project.relative_to(root)))['result']
+  assert r['aborted']==1 and r['hash']==hashlib.sha256(target.read_bytes()).hexdigest(),r
+  checks.append(dict(case='reopen invalidates suspended background transaction'))
  # Real timer holds the production gate; request cancellation must still reply.
  state('hold');deadline=time.monotonic()+5
  while not (root/'.background-entered').exists() and time.monotonic()<deadline:time.sleep(.01)

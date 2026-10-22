@@ -681,7 +681,8 @@ internal sealed class SourceEngine : IDisposable
         }
         foreach (var entry in nextSnapshots) snapshots[entry.Key] = entry.Value;
         var contentChanged = (backgroundReading || backgroundYield is not null) &&
-            nextFingerprints.Any(entry => !fingerprints.TryGetValue(entry.Key, out var old) || old != entry.Value);
+            ((incrementalValidation && recover && !backgroundReading) ||
+             nextFingerprints.Any(entry => !fingerprints.TryGetValue(entry.Key, out var old) || old != entry.Value));
         foreach (var entry in nextFingerprints) fingerprints[entry.Key] = entry.Value;
         if (contentChanged) refreshRevision++;
         if (incrementalValidation)

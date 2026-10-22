@@ -23,7 +23,7 @@ if cooperative:
             var coopFile=args.GetProperty("file").GetString()!;
             var project=args.GetProperty("project").GetString()!;
             var beforeAborts=backgroundAborts; var beforeFull=fullRecoveries;
-            recoveredAt -= 5001;
+            recoveredAt = Environment.TickCount64 - 4001;
             var callbacks=0;
             await RecoverInBackground(token, async () =>
             {
@@ -157,11 +157,11 @@ try:
  if cooperative:
   target.write_bytes(original.replace(b'=> 0',b'=> 1'))
   r=call('test.cooperate',action='change',file=str(target),project=str(project.relative_to(root)))['result']
-  assert r['aborted']==1 and r['full']==1, r # expired foreground refresh, not the stale background transaction
+  assert r['aborted']==1 and r['full']==0, r # foreground target refresh supersedes the staged transaction
   assert r['hash']==hashlib.sha256(target.read_bytes()).hexdigest() and r['text']==target.read_text()
   checks.append(dict(case='foreground content commit supersedes staged background bytes'))
   r=call('test.cooperate',action='unchanged',file=str(target),project=str(project.relative_to(root)))['result']
-  assert r['aborted']==0 and r['full']==2,r # both transactions read, neither changes content
+  assert r['aborted']==0 and r['full']==1,r # unchanged target refresh leaves the background transaction valid
   checks.append(dict(case='unchanged foreground refresh permits background completion'))
   r=call('test.cooperate',action='full',file=str(target),project=str(project.relative_to(root)))['result']
   assert r['aborted']==1,r

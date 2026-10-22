@@ -6,12 +6,13 @@ if len(sys.argv)>1:
 else:
  receipt=pathlib.Path.cwd()/'bin/.local/benchmarks/trusted'/os.environ['FREEFLIGHT_BACKGROUND_RECEIPT']
  config=json.loads((receipt/'provenance.json').read_text())
- dotnet=config['dotnet'];source=str(receipt/'candidate/source');fixture=config['fixtures']['433']['root']
- destination=str(receipt/'background-followup-proof')
+ size=os.environ.get('FREEFLIGHT_BACKGROUND_SIZE','433');assert size in ('433','5845')
+ dotnet=config['dotnet'];source=str(receipt/'candidate/source');fixture=config['fixtures'][size]['root']
+ destination=str(receipt/('background-adversarial-'+size))
 out=pathlib.Path(destination);out.mkdir(exist_ok=False)
 copy=out/'source';shutil.copytree(source,copy)
 program=copy/'workers/roslyn/Program.cs';s=program.read_text()
-s=s.replace('    private long backgroundAttempts;', '    private bool testOverflow, testCancel, testHold;\n    private string? testDirty;\n    private long backgroundAttempts;')
+s=s.replace('    private long backgroundAttempts;', '    private bool testOverflow, testCancel, testHold, testSwap;\n    private string? testDirty;\n    private long backgroundAttempts;')
 s=s.replace('        backgroundAttempts++;', '''        backgroundAttempts++;
         if (testHold)
         {
@@ -28,6 +29,7 @@ s=s[:pos]+'''        if (method == "test.background")
             if (action == "overflow") testOverflow = true;
             if (action == "cancel") testCancel = true;
             if (action == "hold") { testHold = true; recoveredAt -= 5001; }
+            if (action == "swap") testSwap = true;
             if (action == "dirty") testDirty = args.GetProperty("file").GetString();
             if (action == "sweep") { recoveredAt -= 5001; await RecoverInBackground(token); }
             return new { recoveredAt, recoveredGeneration, committedBytes, backgroundAttempts,
@@ -41,17 +43,32 @@ s=s[:pos]+'''        if (method == "test.background")
 anchor='        token.ThrowIfCancellationRequested();\n        if (incrementalValidation && startGeneration'
 assert s.count(anchor)==1
 s=s.replace(anchor,'''        if (testOverflow) { testOverflow=false; Interlocked.Increment(ref invalidationGeneration); }
-        if (testDirty is not null) { MarkDirty(testDirty); testDirty=null; }
+        if (testDirty is not null)
+        {
+            File.WriteAllText(testDirty, File.ReadAllText(testDirty).Replace("=> 0", "=> 6"));
+            MarkDirty(testDirty); testDirty=null;
+        }
         if (testCancel) { testCancel=false; throw new OperationCanceledException(); }
 '''+anchor)
 program.write_text(s)
 from transaction import instrument
 instrument(program)
+s=program.read_text();anchor='            // Cached ancestor checks authorize snapshot admission, never a read.'
+assert s.count(anchor)==1
+s=s.replace(anchor,'''            if (testSwap)
+            {
+                testSwap=false;
+                var parent=Path.GetDirectoryName(file)!;
+                Directory.Move(parent, Path.Combine(root!, ".background-saved"));
+                Directory.CreateSymbolicLink(parent, Path.Combine(Path.GetDirectoryName(root!)!, "outside"));
+            }
+'''+anchor);program.write_text(s)
 with (out/'build.log').open('w') as log:
  subprocess.run([dotnet,'build',str(copy/'workers/roslyn/FreeFlight.Roslyn.csproj'),'-c','Release','--disable-build-servers','--artifacts-path',str(out/'build')],check=True,stdout=log,stderr=subprocess.STDOUT)
 root=out/'fixture';shutil.copytree(fixture,root)
 with (out/'restore.log').open('w') as log:
- subprocess.run([dotnet,'restore',str(root/'source/P01/P01.csproj')],check=True,stdout=log,stderr=subprocess.STDOUT)
+ project=sorted((root/'source').glob('P*/P*.csproj'))[-1]
+ subprocess.run([dotnet,'restore',str(project)],check=True,stdout=log,stderr=subprocess.STDOUT)
 dll=out/'build/bin/FreeFlight.Roslyn/release/FreeFlight.Roslyn.dll'
 log=(out/'worker.stderr').open('w');p=subprocess.Popen([dotnet,str(dll),'--trusted-msbuild','--incremental-validation','--background-recovery'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=log,text=True)
 q=queue.Queue()
@@ -64,10 +81,11 @@ def call(method,**params):
  r=q.get(timeout=60);assert r['id']==seq,r;return r
 def state(action='state',**params):
  r=call('test.background',action=action,**params);assert 'result' in r,r;return r['result']
-target=root/'source/P00/Nested/C0.cs';late=root/'source/P01/Nested/C431.cs'
+target=root/'source/P00/Nested/C0.cs';late=sorted(p for p in (root/'source').rglob('*.cs') if p.parent.name=='Nested')[-1]
 original=target.read_bytes();lateBytes=late.read_bytes();stamp=target.stat()
+(out/'outside').mkdir();(out/'outside/C0.cs').write_bytes(original)
 try:
- assert 'result' in call('open',root=str(root),project='source/P01/P01.csproj')
+ assert 'result' in call('open',root=str(root),project=str(project.relative_to(root)))
  state('quiet');before=state()
  target.write_bytes(original.replace(b'=> 0',b'=> 9'));__import__('os').utime(target,ns=(stamp.st_atime_ns,stamp.st_mtime_ns))
  # Real production timer, with no event notification and no semantic trigger.
@@ -91,7 +109,17 @@ try:
   checks.append(dict(case=action+' during background sweep rejects transaction'))
  state('dirty',file=str(target));after=state('sweep')
  assert any(x['key']==str(target) for x in after['dirty'])
- checks.append(dict(case='event arriving during sweep remains pending'))
+ assert 'result' in call('symbols',file=str(late))
+ hashes={x['key']:x['value'] for x in state()['fingerprints']}
+ assert hashes[str(target)]==hashlib.sha256(target.read_bytes()).hexdigest()
+ checks.append(dict(case='edit after background read remains pending and next non-target query refreshes it'))
+ # Replace an admitted ancestor immediately before an uncached background read.
+ before=state();state('swap');failed=state('sweep')
+ assert target.parent.is_symlink() and failed['bytesRead']==before['bytesRead']
+ assert failed['fingerprints']==before['fingerprints'] and failed['snapshots']==before['snapshots']
+ target.parent.unlink();(root/'.background-saved').rename(target.parent)
+ assert 'result' in call('symbols',file=str(target))
+ checks.append(dict(case='background ancestor replacement rejected before content read'))
  # Foreground target still freshly read even between successful maintenance passes.
  target.write_bytes(original.replace(b'=> 0',b'=> 7'))
  r=call('rename',file=str(target),line=0,character=45,newName='Next');assert 'result' in r,r

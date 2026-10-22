@@ -33,6 +33,8 @@ internal static class Program
         using var engine = new SourceEngine(trustedMsbuild, commandLine.Contains("--incremental-validation", StringComparer.Ordinal));
         using var gate = new SemaphoreSlim(1);
         var backgroundRecovery = commandLine.Contains("--background-recovery", StringComparer.Ordinal);
+        if (backgroundRecovery && !OperatingSystem.IsMacOS())
+            throw new PlatformNotSupportedException("Experimental background recovery is qualified only on macOS");
         if (backgroundRecovery && !commandLine.Contains("--incremental-validation", StringComparer.Ordinal))
             throw new ArgumentException("Background recovery requires incremental validation");
         using var lifetime = new CancellationTokenSource();
@@ -189,6 +191,7 @@ internal sealed class SourceEngine : IDisposable
     private long fullRecoveries;
     private long incrementalRefreshes;
     private bool backgroundReady;
+    private bool backgroundReading;
     private long backgroundAttempts;
     private long backgroundFailures;
     private string? backgroundLastError;
@@ -201,6 +204,7 @@ internal sealed class SourceEngine : IDisposable
         backgroundAttempts++;
         try
         {
+            backgroundReading = true;
             await Refresh(token, forceAll: true);
             backgroundLastError = null;
         }
@@ -213,6 +217,7 @@ internal sealed class SourceEngine : IDisposable
             // Keep the committed solution/time untouched and require foreground recovery.
             recoveredGeneration = -1;
         }
+        finally { backgroundReading = false; }
     }
     private string Mode => trustedMsbuild ? "trusted-msbuild" : "safe-source";
     public SourceEngine(bool trustedMsbuild, bool incrementalValidation = false)
@@ -713,6 +718,10 @@ internal sealed class SourceEngine : IDisposable
 
     private FileStream OpenCompilerInput(string path)
     {
+        if (backgroundReading)
+            return DarwinSourceHandle.Open(path,
+                externalCompilerInputs.Contains(path) ? Path.GetPathRoot(path)! : root!,
+                () => throw new IOException("Background handle admission failed; foreground recovery required"));
         if (!externalCompilerInputs.Contains(path) || OperatingSystem.IsWindows())
             return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         // A declared FIFO must not block open before cancellation can be observed.

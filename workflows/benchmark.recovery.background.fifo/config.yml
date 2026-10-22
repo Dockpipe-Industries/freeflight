@@ -1,0 +1,9 @@
+name: benchmark.recovery.background.fifo
+description: Test whether opt-in idle recovery introduces a non-draining EOF path on a disposable FIFO.
+vault: none
+docker_preflight: false
+steps:
+  - id: eof
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/background_fifo.py

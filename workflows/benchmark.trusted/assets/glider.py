@@ -56,6 +56,8 @@ sizes=[int(x) for x in os.environ.get('FREEFLIGHT_GLIDER_SIZES','433,5845').spli
 assert rounds>=10 and sessions>=1 and warmup>=2 and set(sizes)<={433,5845}
 assert all(0<=x<=10 for x in intervals)
 diagnostic=os.environ.get('FREEFLIGHT_GLIDER_PROFILE')=='1'
+if diagnostic:
+    assert os.environ.get('FREEFLIGHT_GLIDER_SHARED_WORKER')=='1', 'Profile one worker source per run with shared worker; compare source profiles in separate runs'
 queryOrder=os.environ.get('FREEFLIGHT_GLIDER_QUERY_ORDER','fixed')
 assert queryOrder in ('fixed','rotating','balanced')
 queryGap=float(os.environ.get('FREEFLIGHT_GLIDER_QUERY_GAP','0'))

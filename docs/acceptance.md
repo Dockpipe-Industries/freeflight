@@ -492,3 +492,12 @@ no-follow open plus regular-handle validation passes the local FIFO/race/cancell
 probe. The invalid flag combination and incorrect event-only assumption remain in
 receipts. This is not a qualified parallel runtime: in-flight syscall termination
 and device-open effects remain limitations. See [native proof and design decision](recovery-handle-feasibility.md).
+
+2026-10-22 serial recovery qualification: retained experiments `b04d21f` and
+`c3ae753` reduce full recovery work, but neither is selected as a broad performance
+winner. The refined candidate passes worker/security/incremental/transaction and
+strengthened root-replacement gates; the earlier fallback fails that added gate.
+Across both comparisons, 54 fresh processes passed 8,856 measured semantic checks.
+Full recovery improves while ordinary reference p90 remains unfavorable. Active
+worker sources are restored exactly to `6a06b1d`; all samples and failed attempts
+remain. See [source attribution, timings and replay](serial-recovery-handles.md).

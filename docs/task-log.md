@@ -1166,3 +1166,30 @@ receipt: `bin/.local/benchmarks/recovery-handles/handles-qualified/result.json`.
 FIFO-specific feasibility established; no general syscall termination claim and
 no .NET/runtime integration, benchmark claim or remote action. Serial runtime and
 accepted lifetime fix remain unchanged. See `docs/recovery-handle-feasibility.md`.
+
+### 2026-10-21–22 — serial handle recovery prototypes and retained tradeoff
+
+Developed `b04d21f`, then recovery-only `c3ae753`, against runtime `6a06b1d`. The
+native handle primitive removes repeated pre-read pathname walks while retaining
+fresh reads, sorted byte accounting, external handling and transactional state.
+An added root-replacement negative control failed on the initial fallback; making
+kernel ELOOP terminal passes the strengthened proof. The baseline legacy root walk
+also accepts the negative control; no claim of race-free legacy path security.
+
+Two local worker qualification sets passed semantics/security, all sixteen
+incremental fault cases and five failed transactions per variant. The cleanup
+probe's initial descriptor-number oracle failed and was replaced with owned-handle
+state; that failure and the root-before failure remain. Native MCP comparisons,
+controls/repeats and separate profiles completed 54 fresh processes and 8,856
+measured semantic checks. The original two-source diagnostic setup was rejected
+before timing, then explicitly resumed with separate source profiles; its failure
+is not relabeled successful.
+
+Refined full post-idle medians: 158.782→143.227 ms unpaced and 157.967→134.446 ms
+paced. Each cadence has only two post-idle samples per variant; all maxima remain.
+Reference p90 is worse in the refined comparison: small graph +11.2%/+7.3%, full
++5.4%/+5.3%. Neither candidate is selected as a broad winner. Restored worker tree
+exactly to `6a06b1d`; both candidate commits and receipts remain recoverable.
+Docs/serial-recovery-handles.md contains complete tables, source-stage allocation/
+CPU evidence, known failures and repeat commands. No new Glider timing, Linux
+rerun, remote qualification, publication, configuration or service change.

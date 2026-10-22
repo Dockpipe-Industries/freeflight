@@ -107,3 +107,12 @@ for expected rejection results and limitations. It is not a latency benchmark.
 open and regular-handle admission proposal using disposable fixtures. It records
 negative race controls and descriptor ownership; it is not a runtime performance
 qualification. See `docs/recovery-handle-feasibility.md`.
+
+`benchmark.recovery.serial` qualifies the source-extracted serial handle primitive,
+including retained Git candidates when the active runtime has been restored.
+`benchmark.trusted.qualification` includes this proof whenever the frozen source
+contains the helper. `benchmark.recovery.compare` reuses the existing MCP oracle
+for paired comparisons, identical-binary controls and separate per-source profiles;
+`benchmark.recovery.summary` retains every sample and reports descriptive pooled
+post-idle quantiles. See `docs/serial-recovery-handles.md` for exact replay commands,
+rejected candidates, the restored runtime and remaining performance tradeoffs.

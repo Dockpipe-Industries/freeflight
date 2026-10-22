@@ -8,8 +8,12 @@ else:
  assert label and all(c.isalnum() or c in '-_' for c in label)
  out=root/'bin/.local/benchmarks/serial-handles'/label
 out.mkdir(parents=True,exist_ok=False)
-helper=(root/'workers/roslyn/DarwinSourceHandle.cs').read_text()
-source=(root/'workers/roslyn/Program.cs').read_text()
+sourceRef=os.environ.get('FREEFLIGHT_SERIAL_HANDLE_REF') if len(sys.argv)!=4 else None
+if sourceRef is None and not (root/'workers/roslyn/DarwinSourceHandle.cs').is_file():sourceRef='c3ae753'
+def source_bytes(name):
+ return subprocess.check_output(['git','show',sourceRef+':'+name],cwd=root) if sourceRef else (root/name).read_bytes()
+helper=source_bytes('workers/roslyn/DarwinSourceHandle.cs').decode()
+source=source_bytes('workers/roslyn/Program.cs').decode()
 injected=helper.replace('extern int NativeOpen(', 'extern int RealOpen(').replace('extern int DescriptorAttributes(', 'extern int RealAttributes(')
 anchor='    internal static FileStream Open('
 injected=injected.replace(anchor,'''    internal static Action? BeforeOpen, AfterOpen;
@@ -27,7 +31,7 @@ internal int Calls;
 internal FileStream Open(string path) { Calls++; CheckPath(path,null,null); return new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.ReadWrite|FileShare.Delete); }
 '''+check+'}\n')
 (out/'Proof.csproj').write_text('<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net11.0</TargetFramework><OutputType>Exe</OutputType><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup></Project>')
-(out/'global.json').write_bytes((root/'global.json').read_bytes())
+(out/'global.json').write_bytes(source_bytes('global.json'))
 (out/'Program.cs').write_text(r'''using FreeFlight.Roslyn;
 using System.Runtime.InteropServices;
 var root=Path.Combine(AppContext.BaseDirectory,"fixture");Directory.CreateDirectory(root);
@@ -78,4 +82,4 @@ static class Native {
 with (out/'output.log').open('w') as log:
  subprocess.run([sdk,'run','--project',str(out/'Proof.csproj'),'-c','Release','--disable-build-servers'],cwd=out,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=180)
 text=(out/'output.log').read_text();assert 'SERIAL_HANDLE_PROOF_PASSED' in text
-(out/'result.json').write_text(json.dumps(dict(status='passed',helperSha256=hashlib.sha256(helper.encode()).hexdigest(),programSha256=hashlib.sha256(source.encode()).hexdigest(),output=text),indent=2)+'\n');print(text)
+(out/'result.json').write_text(json.dumps(dict(status='passed',sourceRef=sourceRef,helperSha256=hashlib.sha256(helper.encode()).hexdigest(),programSha256=hashlib.sha256(source.encode()).hexdigest(),output=text),indent=2)+'\n');print(text)

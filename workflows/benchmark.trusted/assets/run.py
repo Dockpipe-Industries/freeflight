@@ -61,6 +61,9 @@ def prepare():
                   baselineArgs=['--incremental-validation'] if os.environ.get('FREEFLIGHT_TRUSTED_BENCH_BASELINE_INCREMENTAL') == '1' else [],
                   candidateArgs=['--incremental-validation'] if os.environ.get('FREEFLIGHT_TRUSTED_BENCH_INCREMENTAL') == '1' else [],
                   configuration='Release', transport='direct trusted worker; not full MCP', variants={})
+    if os.environ.get('FREEFLIGHT_TRUSTED_BENCH_BACKGROUND') == '1':
+        assert config['candidateArgs'], 'Background screening requires incremental mode'
+        config['candidateArgs'].append('--background-recovery')
     assert 0 <= config['paddingBytes'] <= 65536
     assert 1 <= config['referenceCallers'] <= 1000 and 1 <= len(config['searchQuery']) <= 256
     assert config['firstVariant'] in ('baseline','candidate')
@@ -154,6 +157,10 @@ def qualify(config):
         command([sys.executable, '-B', str(Path(__file__).with_name('incremental_tests.py')), DOTNET,
                  str(OUT/'candidate/source'), str(OUT/'candidate/incremental-proof'),
                  config['fixtures']['433']['root']], 'candidate-incremental-proof.log')
+    if '--background-recovery' in config.get('candidateArgs', []):
+        command([sys.executable, '-B', str(Path(__file__).with_name('background_tests.py')), DOTNET,
+                 str(OUT/'candidate/source'), str(OUT/'candidate/background-proof'),
+                 config['fixtures']['433']['root']], 'candidate-background-proof.log')
     save('qualification.json',dict(status='passed',variants=list(config['variants']),suites=['test_worker.py','test_trusted.py','mutations.py'],testHashes={name:digest(REPO/'workers/roslyn'/name) for name in ('test_worker.py','test_trusted.py')}))
 
 

@@ -25,13 +25,31 @@ internal static class Program
             detectEncodingFromByteOrderMarks: false, bufferSize: 4096, leaveOpen: true);
         using var output = new StreamWriter(Console.OpenStandardOutput(), utf8,
             bufferSize: 4096, leaveOpen: true) { AutoFlush = true, NewLine = "\n" };
-        if (commandLine.Any(argument => argument != "--trusted-msbuild" && argument != "--incremental-validation"))
-            throw new ArgumentException("Only --trusted-msbuild and --incremental-validation are accepted");
+        if (commandLine.Any(argument => argument != "--trusted-msbuild" && argument != "--incremental-validation" && argument != "--background-recovery"))
+            throw new ArgumentException("Only --trusted-msbuild, --incremental-validation and --background-recovery are accepted");
         var trustedMsbuild = commandLine.Contains("--trusted-msbuild", StringComparer.Ordinal);
         if (trustedMsbuild)
             Console.Error.WriteLine("WARNING: trusted MSBuild mode can execute repository code during project evaluation. This process is not a sandbox. No restore or production build is requested.");
         using var engine = new SourceEngine(trustedMsbuild, commandLine.Contains("--incremental-validation", StringComparer.Ordinal));
         using var gate = new SemaphoreSlim(1);
+        var backgroundRecovery = commandLine.Contains("--background-recovery", StringComparer.Ordinal);
+        if (backgroundRecovery && !commandLine.Contains("--incremental-validation", StringComparer.Ordinal))
+            throw new ArgumentException("Background recovery requires incremental validation");
+        using var lifetime = new CancellationTokenSource();
+        var maintenance = backgroundRecovery ? Task.Run(async () =>
+        {
+            try
+            {
+                while (true)
+                {
+                    await Task.Delay(1000, lifetime.Token);
+                    await gate.WaitAsync(lifetime.Token);
+                    try { await engine.RecoverInBackground(lifetime.Token); }
+                    finally { gate.Release(); }
+                }
+            }
+            catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        }) : Task.CompletedTask;
         var active = new ConcurrentDictionary<string, RequestCancellation>();
         var jobs = new List<Task>();
         var outputGate = new object();
@@ -88,7 +106,8 @@ internal static class Program
             catch (Exception ex) { Reply(new { id, error = new { message = ex.Message } }); }
         }
         foreach (var cancellation in active.Values) cancellation.Cancel();
-        await Task.WhenAll(jobs);
+        lifetime.Cancel();
+        await Task.WhenAll(jobs.Append(maintenance));
     }
 
     private static string? ReadBoundedLine(TextReader reader, int limit)
@@ -169,6 +188,32 @@ internal sealed class SourceEngine : IDisposable
     private long recoveredAt;
     private long fullRecoveries;
     private long incrementalRefreshes;
+    private bool backgroundReady;
+    private long backgroundAttempts;
+    private long backgroundFailures;
+    private string? backgroundLastError;
+
+    // Called only while owning the same gate as Invoke. No concurrent engine
+    // mutation, speculative content, relaxed deadline or partial publication.
+    public async Task RecoverInBackground(CancellationToken token)
+    {
+        if (!backgroundReady || !incrementalValidation || Environment.TickCount64 - recoveredAt < 4000) return;
+        backgroundAttempts++;
+        try
+        {
+            await Refresh(token, forceAll: true);
+            backgroundLastError = null;
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+        catch (Exception error)
+        {
+            backgroundFailures++;
+            backgroundLastError = error.Message;
+            // Never let an unsuccessful speculative sweep authorize a response.
+            // Keep the committed solution/time untouched and require foreground recovery.
+            recoveredGeneration = -1;
+        }
+    }
     private string Mode => trustedMsbuild ? "trusted-msbuild" : "safe-source";
     public SourceEngine(bool trustedMsbuild, bool incrementalValidation = false)
     {
@@ -186,7 +231,7 @@ internal sealed class SourceEngine : IDisposable
 
     public async Task<object> Invoke(string method, JsonElement args, CancellationToken token)
     {
-        if (method != "open" && new[] { "mode", "project", "trustedMsbuild", "trusted-msbuild", "csharp", "incrementalValidation", "incremental-validation" }.Any(name => args.TryGetProperty(name, out _)))
+        if (method != "open" && new[] { "mode", "project", "trustedMsbuild", "trusted-msbuild", "csharp", "incrementalValidation", "incremental-validation", "backgroundRecovery", "background-recovery" }.Any(name => args.TryGetProperty(name, out _)))
             throw new ArgumentException("Project selection and trust cannot be changed by semantic requests");
         if (method != "open" && args.TryGetProperty("resources", out _))
             throw new ArgumentException("Resource settings may only be supplied by the core when opening a workspace");
@@ -202,10 +247,11 @@ internal sealed class SourceEngine : IDisposable
             degradedFidelity = !trustedMsbuild || loadWarnings.Count > 0,
             edits = "preview-only",
             validationMode = incrementalValidation ? "incremental-with-recovery" : "strict",
-            refreshStats = new { bytesRead, readFiles, reusedSnapshots, invalidationGeneration, fullRecoveries, incrementalRefreshes }
+            refreshStats = new { bytesRead, readFiles, reusedSnapshots, invalidationGeneration, fullRecoveries, incrementalRefreshes, backgroundAttempts, backgroundFailures, backgroundLastError }
         };
         if (method == "open")
         {
+            backgroundReady = false;
             var requested = Path.GetFullPath(args.GetProperty("root").GetString() ?? throw new ArgumentException("root is required"));
             if (!Directory.Exists(requested)) throw new DirectoryNotFoundException(requested);
             if (args.TryGetProperty("mode", out var mode) && mode.GetString() != Mode)
@@ -282,6 +328,7 @@ internal sealed class SourceEngine : IDisposable
                         throw new ProjectLoadException("project_load_failed", "Project graph cannot resolve System.Object: " + project.Name,
                             selectedProject, "Inspect the installed targeting packs and required references; the partial graph is not usable.");
                 }
+                backgroundReady = true;
                 return new
                 {
                     root,

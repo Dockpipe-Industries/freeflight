@@ -1,0 +1,9 @@
+name: benchmark.recovery.background
+description: Follow up a frozen background-recovery candidate with timer contention and lifetime fault gates.
+vault: none
+docker_preflight: false
+steps:
+  - id: faults
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/background_followup_tests.py

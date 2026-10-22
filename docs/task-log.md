@@ -1193,3 +1193,16 @@ exactly to `6a06b1d`; both candidate commits and receipts remain recoverable.
 Docs/serial-recovery-handles.md contains complete tables, source-stage allocation/
 CPU evidence, known failures and repeat commands. No new Glider timing, Linux
 rerun, remote qualification, publication, configuration or service change.
+
+### 2026-10-22 — resumed bounded buffer screens
+
+Committed preserved serial evidence/restoration as `77304a7`; resumed repo.check
+passed. One-shot hashing (`8a43cb2`) and request-local buffer reuse (`e9c5ab3`)
+passed worker/security/incremental/transaction qualification, but both failed
+narrow performance screens. Reuse ownership proof passed nine retained-text cases.
+24 fresh processes (16 ordinary, eight diagnostic) passed 960 steady and 96
+post-idle semantic checks. Hash full steady p90 ratios were 1.285–1.352; reuse
+outline/definition/reference p90 ratios 1.136/1.064/1.161 despite halving recovery
+allocation. No larger MCP/Glider matrix was justified. Restored runtime exactly
+to `6a06b1d`; candidate commits and raw receipts remain. No subagents, remote
+operations or configuration changes. See `docs/recovery-buffer-screen.md`.

@@ -509,9 +509,6 @@ internal sealed class SourceEngine : IDisposable
             }
         }
         byte[]? readBuffer = null;
-        // Request-local storage only. SourceText consumes the stream synchronously;
-        // reset its visible length for each fresh read so no prior suffix survives.
-        using var memory = new MemoryStream();
         using var metadataBatch = OperatingSystem.IsMacOS() && checkedAncestors is not null &&
             (!incrementalValidation || recover)
             ? new DarwinMetadataBatch(trustedDirectoryMembers, resources.MaxDirectoryEntries, path => CheckPath(path)) : null;
@@ -553,8 +550,7 @@ internal sealed class SourceEngine : IDisposable
             // Bounded read even when the file grows after enumeration.
             using var stream = OpenCompilerInput(file);
             readFiles++;
-            memory.SetLength(0);
-            memory.Position = 0;
+            using var memory = new MemoryStream();
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             var buffer = readBuffer ??= new byte[8192];
             int count;

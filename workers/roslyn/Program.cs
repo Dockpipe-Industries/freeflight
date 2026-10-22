@@ -551,7 +551,6 @@ internal sealed class SourceEngine : IDisposable
             using var stream = OpenCompilerInput(file);
             readFiles++;
             using var memory = new MemoryStream();
-            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             var buffer = readBuffer ??= new byte[8192];
             int count;
             while ((count = await ReadCompilerBytes(stream, buffer, token, OperatingSystem.IsMacOS() && !externalCompilerInputs.Contains(file))) != 0)
@@ -560,11 +559,14 @@ internal sealed class SourceEngine : IDisposable
                 bytes += count;
                 bytesRead += count;
                 ResourcePolicy.Check("maxWorkspaceBytes", root!, file, bytes, resources.MaxWorkspaceBytes);
-                hash.AppendData(buffer, 0, count);
                 await memory.WriteAsync(buffer.AsMemory(0, count), token);
             }
             memory.Position = 0;
-            nextFingerprints[file] = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+            token.ThrowIfCancellationRequested();
+            // The bounded bytes are already retained for possible Roslyn decoding.
+            // Hash exactly that fresh buffer once; do not reread or reuse old bytes.
+            nextFingerprints[file] = Convert.ToHexString(SHA256.HashData(
+                memory.GetBuffer().AsSpan(0, checked((int)memory.Length)))).ToLowerInvariant();
             nextSnapshots[file] = new FileSnapshot(memory.Length, modified, dirty, generation, now, cached?.Parent ?? Path.GetDirectoryName(file)!);
             // A freshly read exact-byte match cannot change Roslyn text. Keep the
             // refreshed snapshot/hash staged, but avoid allocating/decoding it again.

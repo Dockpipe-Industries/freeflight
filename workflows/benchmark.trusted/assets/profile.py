@@ -58,16 +58,22 @@ def instrument(path):
         replace('\n        if ((info.Attributes & FileAttributes.ReparsePoint)', '\n        if ((BenchProfile.Leaf(info) & FileAttributes.ReparsePoint)')
     open_call = '            using var stream = OpenCompilerInput(file, recover);' if 'OpenCompilerInput(file, recover)' in s else '            using var stream = OpenCompilerInput(file);'
     replace(open_call, '            var openStart = Stopwatch.GetTimestamp();\n'+open_call+'\n            BenchProfile.Add("open", openStart);')
-    replace('IncrementalHash.CreateHash(HashAlgorithmName.SHA256)', 'BenchProfile.CreateHash()')
+    buffered_hash = 'SHA256.HashData(\n                memory.GetBuffer().AsSpan(0, checked((int)memory.Length)))'
+    if buffered_hash in s:
+        replace(buffered_hash, 'BenchProfile.HashBuffer(memory)')
+    else:
+        replace('IncrementalHash.CreateHash(HashAlgorithmName.SHA256)', 'BenchProfile.CreateHash()')
     if 'await ReadCompilerBytes(' in s:
         replace('await ReadCompilerBytes(stream, buffer, token, OperatingSystem.IsMacOS() && !externalCompilerInputs.Contains(file))', 'await BenchProfile.ReadSelected(stream, buffer, token, OperatingSystem.IsMacOS() && !externalCompilerInputs.Contains(file))')
     else:
         replace('await stream.ReadAsync(buffer.AsMemory(), token)', 'await BenchProfile.Read(stream, buffer, token)')
     if 'batch.TryGet(file, parent, token, out var metadata)' in s:
         replace('batch.TryGet(file, parent, token, out var metadata)', 'BenchProfile.Batch(batch, file, parent, token, out var metadata)')
-    replace('hash.AppendData(buffer, 0, count);', 'BenchProfile.Append(hash, buffer, count);')
+    if 'hash.AppendData(buffer, 0, count);' in s:
+        replace('hash.AppendData(buffer, 0, count);', 'BenchProfile.Append(hash, buffer, count);')
     replace('await memory.WriteAsync(buffer.AsMemory(0, count), token);', 'await BenchProfile.Write(memory, buffer, count, token);')
-    replace('Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant()', 'BenchProfile.FinishHash(hash)')
+    if 'hash.GetHashAndReset()' in s:
+        replace('Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant()', 'BenchProfile.FinishHash(hash)')
     s=s.replace('info.Refresh();', 'BenchProfile.RefreshMetadata(info);')
     s+='''
 // Diagnostic build only: process-wide allocations/GC and runtime event observations.
@@ -102,6 +108,7 @@ internal sealed class BenchProfile : EventListener
     private sealed class Timed(string stage) : IDisposable { private readonly long start=Stopwatch.GetTimestamp(); public void Dispose()=>Add(stage,start); }
     public static bool Batch(DarwinMetadataBatch batch, string file, string parent, CancellationToken token, out DarwinMetadataBatch.Metadata metadata)
     { var start=Stopwatch.GetTimestamp(); try{return batch.TryGet(file,parent,token,out metadata);} finally{Add("bulkMetadata",start);} }
+    public static byte[] HashBuffer(MemoryStream memory) { var start=Stopwatch.GetTimestamp(); try{return SHA256.HashData(memory.GetBuffer().AsSpan(0,checked((int)memory.Length)));} finally{Add("hashBuffer",start);} }
     public static IncrementalHash CreateHash() { var start=Stopwatch.GetTimestamp(); try{return IncrementalHash.CreateHash(HashAlgorithmName.SHA256);} finally{Add("hashCreate",start);} }
     public static async ValueTask<int> ReadSelected(FileStream stream, byte[] buffer, CancellationToken token, bool inline)
     { var start=Stopwatch.GetTimestamp(); try { if(!inline)return await stream.ReadAsync(buffer.AsMemory(),token); token.ThrowIfCancellationRequested();return stream.Read(buffer,0,buffer.Length); } finally{Add("readIo",start);} }

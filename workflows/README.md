@@ -116,3 +116,9 @@ for paired comparisons, identical-binary controls and separate per-source profil
 `benchmark.recovery.summary` retains every sample and reports descriptive pooled
 post-idle quantiles. See `docs/serial-recovery-handles.md` for exact replay commands,
 rejected candidates, the restored runtime and remaining performance tradeoffs.
+
+`benchmark.recovery.buffer` verifies pinned Roslyn SourceText ownership for a
+retained reusable-buffer candidate after its worker screen. Set
+`FREEFLIGHT_BUFFER_RECEIPT` to a fresh completed trusted benchmark label. It checks
+shrinking/chunk-boundary/Unicode inputs through overwrite and disposal; it does
+not measure performance. See `docs/recovery-buffer-screen.md`.

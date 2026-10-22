@@ -501,3 +501,9 @@ Across both comparisons, 54 fresh processes passed 8,856 measured semantic check
 Full recovery improves while ordinary reference p90 remains unfavorable. Active
 worker sources are restored exactly to `6a06b1d`; all samples and failed attempts
 remain. See [source attribution, timings and replay](serial-recovery-handles.md).
+
+2026-10-22 resumed buffer qualification: no new runtime winner. Both hash and
+request-local buffer candidates passed fault/transaction gates but had unfavorable
+ordinary latency; all 24 fresh-process screen results remain. Buffer ownership
+passed against pinned Roslyn. Runtime restored to `6a06b1d`; no new MCP/Glider
+or cross-platform claim. See [screens and design constraint](recovery-buffer-screen.md).

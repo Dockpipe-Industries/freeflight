@@ -1,0 +1,9 @@
+name: benchmark.response.copies.context.audit
+description: Audit pacing context receipts without issuing new queries.
+vault: none
+docker_preflight: false
+steps:
+  - id: audit
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.response.copies.prepare/assets/context_audit.py

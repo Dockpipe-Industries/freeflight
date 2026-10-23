@@ -1206,3 +1206,331 @@ outline/definition/reference p90 ratios 1.136/1.064/1.161 despite halving recove
 allocation. No larger MCP/Glider matrix was justified. Restored runtime exactly
 to `6a06b1d`; candidate commits and raw receipts remain. No subagents, remote
 operations or configuration changes. See `docs/recovery-buffer-screen.md`.
+
+### 2026-10-22 — cooperative recovery resumed qualification
+
+Preserved the rejected semantic-model reuse source/patch/raw receipts, restored
+worker source exactly to performance candidate 94eb420, and retained the linked
+investigate/rc2-warm-refresh branch. The instruction-only hook was verified on a
+real Sol/medium bounded read-only review. Main js/dev and unrelated edits remain.
+
+Actual semaphore-handoff EOF shutdown and ordinary five-second foreground
+fallback during suspended maintenance pass. Idle accounting now proves successful
+full sweeps and exact bytes, not merely attempts. Twelve repeated idle windows pass;
+nine sweeps average 203.437 ms process CPU and 57.642 MB allocations each.
+
+Matched MCP comparison completed 36 fresh processes and 5,904 measured semantic
+checks across two graph sizes/cadences and three balanced product positions.
+All raw sessions and maxima remain. This is local qualification, not an overall
+performance win: definition latency and idle costs remain acceptance concerns.
+The initial missing-PyYAML preflight and symlink-alias idle rejection are retained.
+See docs/background-recovery.md for complete tables, receipts and limitations.
+No new runtime optimization, publication, merge, deployment or platform claim.
+
+### 2026-10-22 — definition/search and idle allocation screens
+
+Two new serial matched direct-worker screens against 94eb420 pass functional gates
+but are rejected on latency: background-only buffer reuse cuts idle allocations from
+57.642 to 33.194 MB/sweep descriptively, with reference p90 +22.6%; bounded two-project
+Roslyn search improves full-graph search p90 17.0%, with definition p90 +13.5%.
+All source, patches, raw sessions and rejection decisions are retained. Runtime
+worker files are restored exactly to 94eb420; main js/dev is untouched.
+
+The corrected five-second warmup attribution probe passes 200 checked post-warmup
+responses. Earlier timer/window mistakes have retained validity notes. Search passes
+104 oracle comparisons plus two-task cancellation/drain/error-order probes. Buffer
+ownership (nine cases), actual handoff/fallback and eight idle windows pass; six sweeps
+verify exact byte accounting, averaging 199.817 ms CPU and 33.194 MB allocations.
+Existing worker/security/mutation/incremental/background/transaction gates pass in
+both screens. No new overall win or competitor matrix is claimed. Allocation-stack,
+transport/wakeup, Glider idle costs and real/cross-platform qualification remain open.
+See docs/background-recovery.md for tables, receipts and replay. No publication.
+
+### 2026-10-22 — allocation stacks and definition boundary diagnostics
+
+Two isolated EventPipe traces verify six successful full sweeps (5,845 files and
+23,941,120 bytes each), zero lost events, and 3,227 managed-stack samples. Sampled
+byte attribution is 50.68% compiler path/attribute validation and 37.63% MemoryStream
+growth; measured allocation averages 57.606 MB/sweep. Exact per-type counts are not
+claimed. Raw traces, collector package lock/notices, generated source and hashes remain.
+
+Twelve matched direct/MCP diagnostic processes pass 960 ID-joined responses, including
+480 exact definitions. Burst direct/MCP medians are 0.062/0.140 ms; paced medians
+1.197/1.791 ms. Worker invocation and outer boundary both increase with pacing;
+gate median remains <=0.0005 ms. Position-stratified results and all sessions remain.
+Native protocol/process and generated worker/trusted suites pass. Two diagnostic
+setup/logging failures are preserved and excluded. Production C++/Roslyn files remain
+exactly 94eb420, with no application dependency/trust/default changes or publication.
+See docs/allocation-definition-costs.md for limits, receipts, replay and next steps.
+
+### 2026-10-22 — lexical path-string reuse screen
+
+A graph-bound lexical-only parent-string candidate preserves fresh component/leaf
+attribute checks and recovery. Twelve focused fresh-check/order equivalence cases,
+existing semantic/security/incremental/rollback gates, actual handoff/fallback and
+all twelve operation oracles pass. All-operation timing includes 960 exact measured
+responses; four-operation timing adds 640 ordinary and 320 diagnostic responses.
+
+Idle accounting proves six successful full sweeps across eight windows: 41.480 MB
+allocation and 197.230 ms CPU per sweep. Allocation is descriptively 28.0% below the
+prior 94eb420 run, but latency is mixed/unfavorable (full all-operation definition
+p90 +8.7%, signature help +14.9%). Candidate is rejected, archived with source/patch/
+raw receipts, and production source restored exactly to 94eb420. No larger competitor
+matrix or overall-win claim. See docs/path-string-screen.md. No publication.
+
+### 2026-10-22 — fresh native attribute candidate remains unaccepted
+
+A macOS getattrlist reparse-flag reader retains fresh component validation and original
+fallback. Thirty equivalence/fault/fallback cases pass; 2,000 warmed reads allocate
+zero measured managed bytes versus 480,000 for the original reader. One race-probe
+assertion error is preserved and corrected without changing production candidate code.
+Worker/security/trusted/incremental/background/rollback gates and actual handoff/fallback
+pass. Six verified idle sweeps average 46.888 MB allocations and184.375 ms CPU; this
+is a separate-run descriptive improvement, not matched statistical idle qualification.
+
+Four-operation and all-twelve-operation screens retain all adverse tails. A fixed-phase,
+position/predecessor-balanced confirmation adds4,608 exact responses across8 actual
+processes; symbols/references p90 remain about6% unfavorable. A duplicate-output-row
+bookkeeping bug is preserved, independently validated/corrected in separate derived
+files, and fixed for future runs; no timed requests or outliers were dropped.
+Production is restored exactly to94eb420. Candidate source/patch/raw receipts remain
+under perf-preservation and native-attributes-screen-v1. No overall-win claim or
+larger competitor matrix. See docs/native-attribute-screen.md. No publication.
+
+### 2026-10-22 — native attribute noise control and matched follow-up
+
+Eight identical-binary balanced processes pass4,608 exact all-operation responses;
+independent audit confirms identical commands, unique slots and balanced positions/
+predecessors. Tail variation differs by operation and does not erase adverse cells.
+Nine matched real MCP processes compare94eb420/native/Glider13.3.0 on the paced
+5,845-file graph, passing1,440 steady and3,220 total responses. Native references
+median is9.7% slower than94; search p90 is2.5% slower. Definition/search medians remain
+64.4%/5.4% slower than Glider. Every sample, adapter and position stratum is retained.
+
+Matched idle sources alternate order across eight serial processes and sixteen windows.
+Each source verifies six successful full sweeps with exact byte/publication accounting
+and no failures/aborts. Native managed allocation falls57.643→46.889 MB/sweep and CPU
+206.820→189.148 ms/sweep; GC pause increases2.975→3.508 ms/sweep. Short synthetic
+macOS evidence does not qualify native allocation, Glider idle or real/cross-platform
+behavior. Native candidate remains unaccepted; production runtime is byte-identical
+to94eb420 on investigate/rc2-warm-refresh. No commit or publication. See
+docs/native-attribute-screen.md for all receipts, limitations and replay. Next isolate
+reference median and definition/search boundary costs before another allocation design.
+
+### 2026-10-22 — reference and response-boundary isolation
+
+Extended generated diagnostics pass 1,280 joined responses across eight serial
+processes; a same-search-payload control adds 640 across four processes. Protocol/
+process tests 2/2 and generated semantic/security/trusted suites pass in each probe.
+Independent audits verify exact IDs, balanced positions/predecessors, semantic and
+replay identities. All 960 measured definition/reference requests read exactly one
+fresh 4,096-byte target; production validation/recovery is unchanged.
+
+Paced MCP medians: definition 0.470 ms (refresh 0.117, outside invocation 0.277);
+references 1.437 ms (FindReferences 0.823); search 23.143 ms (declarations 9.038,
+outside invocation 12.562). Same-payload replay still costs 9.629 ms end-to-end,
+including 7.788 ms core thread CPU, while worker invocation is 0.0009 ms. Core JSON
+parsing/envelope/serialization work is material. Nested scopes are not additive.
+These are instrumented synthetic diagnostics, not ordinary/Glider performance wins.
+Prior native reference session ratios 0.945/1.133/0.945 also show aggregate instability;
+all adverse results remain and the native source stays unaccepted.
+
+Runtime remains byte-identical to 94eb 420 in the preserved worktree; no publication.
+Receipts, source, raw sessions, per-position/per-session metrics and replay are in
+docs/reference-boundary-costs.md. Next screen a narrowly scoped JSON ownership/copy
+change while retaining dual content and all parser/security/cancellation contracts.
+
+### 2026-10-22 — JSON ownership screen remains unaccepted
+
+A move-only C++ response candidate preserves text/structured content, parser depth/
+size/ID checks, cancellation locking, errors and unchanged exact 94 workers/recovery.
+Both frozen cores pass native protocol/process gates and 24 current protocol tests,
+including 24 modern/legacy payload subcases. One legacy-handshake test-setup rejection
+against unchanged 94 is retained separately; corrected tests pass before all timing.
+
+All-twelve MCP screening passes 4,608 measured checks across both graphs. Full search
+median/p 90 improve 12.9%/10.7%, while full reference p 90 worsens 16.1% and small type-
+hierarchy p 90 worsens 22.0%. A separate repeated paced full-graph screen passes 1,536
+checks but definition/reference medians worsen 20.7%/28.9%, with search effectively
+unchanged. A generated same-payload control passes 192 checks and records 17.5% lower
+core thread CPU. This diagnostic benefit does not establish an ordinary overall win.
+All sessions/adverse cells/position strata remain; no larger Glider matrix is run.
+
+Candidate source/patch/decision is archived before restoring only its two runtime
+files to 94eb 420. The dual-content protocol test and reproducible workflows remain.
+No publication; main js/dev and unrelated changes are untouched. See
+[JSON response copies](json-response-copies.md) for raw receipts, qualification limits,
+replay and the predefined-control next step. Native allocation, Glider idle and
+real/cross-platform qualification remain open.
+
+### 2026-10-22 — lower core CPU versus paced latency controls
+
+Eight interleaved source/A/A processes pass 1,024 measured +1,024 acclimation exact
+responses with predefined within-process round/equal-gap blocks, measured actual gaps,
+verification costs and correlated client/core/worker IDs. All 1,364 warmup and 32
+initial oracles remain. All 768 targeted measured queries read one fresh 4,096-byte
+file; no foreground full recovery occurs. Same-binary label variation remains.
+Round search mean decomposition: outside invocation -1.536 ms, worker invocation
++2.056 ms, total +0.521 ms. Equalizing gaps does not universally rescue worker cost.
+
+A narrower four-process generated worker-CPU follow-up passes 512 measured +512
+acclimation, 680 warmup and 16 initial oracles, plus native-clock ABI/calibration and
+worker semantic/security/trusted gates. Equal-gap search worker wall/CPU ratios are
+1.393/1.413 while core CPU is 0.813; round search instead has essentially unchanged
+worker costs and client ratio 0.952. Worker process CPU includes parallel runtime/GC
+work and is not an off-CPU measure. Frequency/cache/scheduler causes are unmeasured.
+No adverse cells, acclimation records or outliers are removed; mean and nonlinear
+session-median estimates both remain. No accepted runtime or causal hardware claim.
+
+All production runtime remains exact `94eb420`; copy candidate stays archived/unaccepted.
+No publication, main checkout change or extra agents. See
+[copy pacing context](copy-pacing-context.md) for all receipts, counts, plans, limits,
+independent audits and replay. Next ordinary comparisons need actual-gap controls and
+stable session/position evidence before another response design or acceptance.
+
+### 2026-10-23 — ordinary matched gaps and session/position evidence
+
+Sixteen predefined serial ordinary processes pass 3,072 measured +3,084 warmup +64
+initial oracle =6,220 exact semantic/dual-content responses. Four source pairs and
+four identical-binary sham pairs use the same frozen worker/configuration and balanced
+positions/predecessors. Actual gaps, verification and round sleeps remain; no timing
+filters, replacements, instrumentation or performance-driven exclusions are applied.
+
+Source session median/p90 ratios: symbols 1.093/1.030, definition 1.117/1.043,
+references 1.263/0.963, search 1.015/0.996. Symbols/references are slower in all four
+chronological pairs; search directions vary. References improve at position zero but
+worsen at positions two/three in every pair. Same-binary variation and all adverse
+cells remain. Medians across position mixtures are nonlinear; aggregate p90 gains
+do not establish a reproducible overall win. No cause is attributed to CPU/frequency.
+
+Production stays exact `94eb420`; archived copy candidate remains unaccepted. No new
+Glider matrix, source change or publication. See [ordinary matched evidence](ordinary-matched-gaps.md)
+for raw receipts, every pair/position, actual gaps, replay and limits. Next isolate
+baseline reference position/predecessor sensitivity with a narrow predefined control
+before another response design; Glider idle/native allocation/real-platform gaps remain.
+
+### 2026-10-23 — baseline reference history and fixed-cadence wait placement
+
+A Sol/high design review precedes four serial ordinary baseline94 processes with
+full 24-order blocks and adjacent matched pacing pairs. All 3,072 measured +512
+acclimation +752 warmup +16 oracle responses pass. Position/predecessor associations
+repeat but interact: after-search references are faster at position 1 under round
+pacing, while slower at position 3. Gap-floor pacing changes achieved rate, so this
+descriptive result cannot isolate idle time or a runtime/hardware cause.
+
+Astra/high reviews the causal limits and proposes one executed fixed-cycle control.
+Four new serial baseline processes hold 250 ms cycle targets, symbols/definition/search
+slots, query order and predecessor fixed while relocating 25 ms waiting across refs.
+All 2,048 measured +512 acclimation +384 warmup +16 oracle responses pass. References
+median rises 2.523→3.930ms (ratio 1.558), worse in all 4 sessions/all 16 nested block pairs;
+p90 ratio 1.502. Actual cycle medians stay 250 ms, with 0 fixed-slot readiness overruns.
+Actual timer wake lateness is retained; no claim of perfectly equal realized starts.
+Request rate alone is insufficient in this fixed context, without locating the
+mechanism or transferring prior instrumented worker-CPU localization.
+
+Combined 7,312 exact semantic/dual-content responses; all raw phases, gaps, periods,
+paired blocks and adverse cells remain. No runtime change:28 production files exact94,
+validation/security/recovery preserved; copy candidate still archived/unaccepted.
+No publication or new Glider matrix. See [reference context](reference-position-context.md).
+Next localize the fixed-schedule extra reference cost with a separate narrow stage/CPU
+probe before any source remedy; Glider idle/native allocation/real-platform gaps remain.
+
+### 2026-10-23 — fixed-schedule reference stage and boundary attribution
+
+Four serial baseline processes (ordinary/probe/probe/ordinary), balanced incoming
+wait orders and unchanged 250 ms cycles, pass 2,048 measured +512 acclimation +384 warmup
++16 initial oracle =2,960 exact semantic/dual-content responses. Sol/high scope review
+finishes before timing. Existing generated observers/qualifications are reused by
+hash; no new runtime build. Fresh ordinary/probe reference mean/median penalties
+are positive in all 4 processes/all 16 nested pairs; median ratios 1.581/1.524. No fixed-slot
+readiness overruns; wake lateness and all actual periods remain.
+
+Probe wait-minus-immediate mean partitions: refresh/admission +0.2004/+0.2014ms,
+measured semantic stages +0.4833/+0.5758ms, invocation residual +0.0554/+0.0661ms,
+boundary +0.4977/+0.6185ms, totaling +1.2367/+1.4618ms. FindReferences adds
++0.4083/+0.4989ms; process invocation CPU increases but is parallel/background/GC
+inclusive, not foreground/instructions/offCPU. Separate receipt-only boundary
+algebra identifies increments around worker envelope, core routing and outer MCP/
+client; none is pure transport. No nested timer double counting or median subtraction.
+
+All 1,104 recorded targeted probe queries read 1×4,096 bytes; 368 searches read 0. No
+foreground full recoveries; background sweep accounting is not inferred. All
+phases/IDjoins/adversecells/meanidentities remain. Validation/security/recovery and
+28 production files stay exact94; archived copy candidate remains unaccepted. See
+[fixed-schedule attribution](reference-fixed-attribution.md) for receipts/replay/limits.
+Next distinguish work growth from execution/runtime-state effects in FindReferences
+and core routing before any remedy. No publication or Glider matrix.
+
+### 2026-10-23 — short work-counter qualification fails before FreeFlight timing
+
+Astra/high reviews a bounded process-instruction probe before collection. Public
+proc_pid_rusage own-process access works; initial native loop doubling passes
+(1.984/2.000/1.996), without profiling/settings/trust changes. xctrace is unavailable
+in the installed developer tools. Stronger exact-helper managed direct/async/joined
+calibration fails declared scaling bands; no FreeFlight probe is built or timed.
+All 90 work +500 empty +20 nested +1 ABI observations remain, including joined ratios
+4.441/1.438/3.023. This is not proof of broken counters or target instruction growth.
+
+A separately reviewed native-only small-complement calibration retains 224 nested
+and 2,000 empty observations. Scaling passes, but one routing-sized repeat range is
+6.6099%, above the declared 5% limit; resolution floor 39,524 instructions. It also stops
+before generated FreeFlight source/build/timing. No thresholds relaxed, samples
+removed, repeated failed calibration or benchmark matrix follows. A no-query audit
+recomputes both failure decisions; audit success does not convert qualification
+failures into passes. Draft post-gate build paths remain unexecuted/unqualified.
+
+Work-versus-runtime distinction remains unresolved for FindReferences/core routing;
+prior wall/CPU attribution remains within its existing limits. All 28 production files
+remain exact94 with fresh validation/security/recovery intact; prior local work and
+receipts remain, main unchanged, copy candidate unaccepted. See
+[qualification failures and receipts](reference-work-qualification.md). Next validate
+a suitable short-concurrent-work measurement path or separately define a defensible
+lower-precision question before another run. No publication/commit/Glider matrix.
+
+
+### 2026-10-23 — whole-block external work counters also fail qualification
+
+A separate bounded Astra/high review defines whole-process four-second work totals,
+without stage attribution. Two diagnosed setup errors (clock origins, then unequal
+CPU windows) remain in aggregate-work-calibration-v1/v2. Corrected v3 uses one clock
+domain, separate bracketed cumulative CPU checks and fixed complete-path warmup.
+Two fresh managed children retain all32windows/512measuredcycles and deterministic
+joined-task checksums. Structural and CPU-unit checks pass; all12paired composite
+instruction gates fail: doubling ratios1.115–2.131, predicted80M±5% increments instead
+19.44M–104.23M. No outliers removed or scaling gates relaxed; no unchanged retry.
+Empirical uncertainty195.82M includes whole-process scaffolding/runtime work and is
+not a hardware-resolution claim. Receipt-only audit reproduces the failure.
+
+Zero new FreeFlight queries/probe builds; no target matrix or optimization accepted.
+All28 production files remain exact94 on investigate/rc2-warm-refresh at94eb420;
+main js/dev unchanged and earlier local work/receipts preserved. Prior correctness
+results are preserved, not freshly rerun. FindReferences/core-routing work-versus-
+runtime attribution stays unresolved. Next use bounded structural review and the
+existing all-operation wall/CPU screens before another remedy. See
+[qualification evidence](reference-work-qualification.md#separate-whole-block-external-counter-qualification--2026-10-23).
+No commit, push, merge, publication, deployment or Glider matrix.
+
+
+### 2026-10-23 — structural worker-frame reader candidate screened and unaccepted
+
+Review finds repeated worker-response prefix scans and a full-frame substr copy.
+A generated-only incremental newline scan plus iterator-range JSON parse changes
+only Process::request; no worker/model/cache/validation/recovery/default change.
+Both frozen cores pass native protocol/process2/2 and current protocol24tests,
+including new coalesced-tail, fragmented Unicode and exact/over8MiB response tests.
+Unchanged exact94 worker qualifications are reused by identity, not freshly rerun.
+
+Matched ABBA screens cover all12operations on433/5845files:8serial processes and
+2304exact measured responses, both content forms, balanced positions/predecessors.
+Frozen any-cell ratio>1.10 stop gate triggers: full-graph references p90+56.3%, small
+callHierarchy p90+15.0%; full-graph search median improves1.9%. One candidate session
+concentrates the reference tail; both remain, with no causal/noise excuse. Receipt-only
+audit recomputes all ratios and rejection. No unchanged retry or larger matrix follows.
+Candidate source/binaries/diff/logs/receipts remain archived under response-copies/
+worker-frame-view-v1. All28 production files stay exact94 in the preserved worktree;
+main and earlier work remain. See [structural review and every operation result](reference-structural-review.md).
+Next review immutable worker request ownership/dispatch without weakening independent
+cancellation, gate handoff or shutdown. Glider/idle/real-repository gaps remain.
+No commit, push, merge, publication or deployment.
+
+2026-10-23: [Performance checkpoint and remote-execution handoff](performance-handoff.md) records the requested js/dev consolidation, ignored receipt transfer requirements, unaccepted experiments and next A/A controls. Existing qualification limits remain.

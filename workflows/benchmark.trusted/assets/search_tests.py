@@ -122,13 +122,74 @@ internal static class SearchProof
     }
 }
 ''')
+# For the bounded-project candidate, exercise real task draining and project-order
+# failure selection in generated source, in addition to the unchanged API oracle.
+semantic = copy / 'workers/roslyn/SemanticQueries.cs'
+if 'FindProjectDeclarations(' in semantic.read_text():
+    text = semantic.read_text()
+    old = 'SymbolFinder.FindSourceDeclarationsAsync(project, predicate, SymbolFilter.TypeAndMember, token)'
+    assert text.count(old) == 1
+    semantic.write_text(text.replace(old, 'SearchProbe.Query(project, predicate, token)'))
+    proof = copy / 'workers/roslyn/SearchProof.cs'
+    text = proof.read_text()
+    old = '        Console.WriteLine(JsonSerializer.Serialize(new { status = "passed", checks, cancellation = true, coldMissAvoidsCompilation = true }));'
+    assert text.count(old) == 1
+    text = text.replace(old, '        await SearchProbe.Prove(solution);\n' + old)
+    text += r'''
+internal static class SearchProbe
+{
+    private static bool Enabled;
+    private static string Mode = "hold";
+    private static int Active, Peak, Started;
+    public static async Task<IEnumerable<ISymbol>> Query(Project project, Func<string,bool> predicate, CancellationToken token)
+    {
+        if (!Enabled) return await Microsoft.CodeAnalysis.FindSymbols.SymbolFinder.FindSourceDeclarationsAsync(
+            project,predicate,SymbolFilter.TypeAndMember,token);
+        Interlocked.Increment(ref Started);
+        var count=Interlocked.Increment(ref Active);
+        int peak;
+        while(count>(peak=Volatile.Read(ref Peak)) && Interlocked.CompareExchange(ref Peak,count,peak)!=peak) { }
+        try
+        {
+            if(Mode=="hold") await Task.Delay(Timeout.Infinite,token);
+            else { await Task.Delay(project.Name=="P0"?30:1,token); throw new InvalidOperationException(project.Name); }
+            return Array.Empty<ISymbol>();
+        }
+        finally { Interlocked.Decrement(ref Active); }
+    }
+    public static async Task Prove(Solution solution)
+    {
+        Enabled=true;
+        try
+        {
+            using var cancel=new CancellationTokenSource();
+            var pending=SemanticQueries.WorkspaceSymbols(solution,"Value",cancel.Token);
+            var deadline=DateTime.UtcNow.AddSeconds(5);
+            while(Volatile.Read(ref Active)<2 && DateTime.UtcNow<deadline) await Task.Delay(1);
+            cancel.Cancel();
+            var cancelled=false;
+            try { await pending; } catch(OperationCanceledException) { cancelled=true; }
+            if(!cancelled || Active!=0 || Peak!=2 || Started!=2) throw new Exception("Bounded search did not cancel/drain exactly two tasks");
+            Active=Peak=Started=0;Mode="fail";
+            var error="";
+            try { await SemanticQueries.WorkspaceSymbols(solution,"Value",CancellationToken.None); }
+            catch(InvalidOperationException e) { error=e.Message; }
+            if(error!="P0" || Active!=0 || Peak>2 || Started!=2) throw new Exception("Search failure order/drain changed: "+error);
+            Console.WriteLine("Passed two-project bound, in-flight cancellation/drain, and original project failure precedence.");
+        }
+        finally { Enabled=false; }
+    }
+}
+'''
+    proof.write_text(text)
+
 with (out / 'build.log').open('w') as log:
     subprocess.run([dotnet, 'build', str(copy/'workers/roslyn/FreeFlight.Roslyn.csproj'), '-c', 'Release',
                     '-p:StartupObject=FreeFlight.Roslyn.SearchProof', '--disable-build-servers',
                     '--artifacts-path', str(out/'build')], check=True, stdout=log, stderr=subprocess.STDOUT)
 dll = out/'build/bin/FreeFlight.Roslyn/release/FreeFlight.Roslyn.dll'
 with (out/'result.log').open('w') as log:
-    subprocess.run([dotnet, str(dll)], check=True, stdout=log, stderr=subprocess.STDOUT)
+    subprocess.run([dotnet, str(dll)], check=True, stdout=log, stderr=subprocess.STDOUT, timeout=60)
 result = json.loads((out/'result.log').read_text().splitlines()[-1])
 result['oracleCommit'] = 'd8232ec49ce5e17af11b5032aedb40fd38ef0754'
 result['oracleSha256'] = hashlib.sha256(oracle).hexdigest()

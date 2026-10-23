@@ -1,0 +1,9 @@
+name: benchmark.response.copies.prepare
+description: Freeze, build and qualify matched baseline/candidate MCP response cores.
+vault: none
+docker_preflight: false
+steps:
+  - id: prepare
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.response.copies.prepare/assets/prepare.py

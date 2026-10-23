@@ -25,6 +25,8 @@ injected=injected.replace(anchor,'''    internal static Action? BeforeOpen, Afte
 '''+anchor)
 (out/'DarwinSourceHandle.cs').write_text(injected)
 check=source[source.index('    private string CheckPath(string path, HashSet<string>?'):source.index('    private static string ResolveRoot')]
+if 'internal static class DarwinPathAttributes' in source:
+    (out/'DarwinPathAttributes.cs').write_text('using System.Runtime.InteropServices;\n'+source[source.index('internal static class DarwinPathAttributes'):])
 (out/'Fallback.cs').write_text('''sealed class Original(string root) {
 private const StringComparison PathComparison=StringComparison.Ordinal;
 internal int Calls;

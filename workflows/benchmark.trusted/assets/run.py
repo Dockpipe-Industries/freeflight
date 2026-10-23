@@ -61,6 +61,9 @@ def prepare():
                   baselineArgs=['--incremental-validation'] if os.environ.get('FREEFLIGHT_TRUSTED_BENCH_BASELINE_INCREMENTAL') == '1' else [],
                   candidateArgs=['--incremental-validation'] if os.environ.get('FREEFLIGHT_TRUSTED_BENCH_INCREMENTAL') == '1' else [],
                   configuration='Release', transport='direct trusted worker; not full MCP', variants={})
+    if os.environ.get('FREEFLIGHT_TRUSTED_BENCH_BASELINE_BACKGROUND') == '1':
+        assert config['baselineArgs'], 'Background baseline requires incremental mode'
+        config['baselineArgs'].append('--background-recovery')
     if os.environ.get('FREEFLIGHT_TRUSTED_BENCH_BACKGROUND') == '1':
         assert config['candidateArgs'], 'Background screening requires incremental mode'
         config['candidateArgs'].append('--background-recovery')
@@ -150,7 +153,7 @@ def qualify(config):
             command([sys.executable,'-B',str(Path(__file__).with_name('serial_handle_tests.py')),DOTNET,str(OUT/variant/'source'),str(OUT/variant/'serial-handle-proof')],variant+'-serial-handle-proof.log')
         if platform.system() == 'Darwin' and 'ReadCompilerBytes(' in (OUT/variant/'source/workers/roslyn/Program.cs').read_text():
             command([sys.executable,'-B',str(Path(__file__).with_name('expiry_tests.py')),DOTNET,str(OUT/variant/'source'),str(OUT/variant/'expiry-proof')],variant+'-expiry-proof.log')
-    if 'FindCompilationDeclarations(' in (OUT/'candidate/source/workers/roslyn/SemanticQueries.cs').read_text():
+    if any(marker in (OUT/'candidate/source/workers/roslyn/SemanticQueries.cs').read_text() for marker in ('FindCompilationDeclarations(', 'FindProjectDeclarations(')):
         command([sys.executable, '-B', str(Path(__file__).with_name('search_tests.py')), DOTNET,
                  str(OUT/'candidate/source'), str(OUT/'candidate/search-proof')], 'candidate-search-proof.log')
     if config.get('candidateArgs'):

@@ -1,0 +1,9 @@
+name: benchmark.reference.reader.prepare
+description: Freeze and qualify bounded worker-frame parsing candidate against exact94.
+vault: none
+docker_preflight: false
+steps:
+  - id: prepare
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.reader.prepare/assets/prepare.py

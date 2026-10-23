@@ -1,0 +1,9 @@
+name: benchmark.recovery.background.gaps
+description: Verify actual cooperative gate handoff shutdown and five-second suspended-maintenance fallback.
+vault: none
+docker_preflight: false
+steps:
+  - id: gaps
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/background_gap_tests.py

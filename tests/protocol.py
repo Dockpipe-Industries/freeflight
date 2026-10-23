@@ -56,6 +56,46 @@ class ProtocolTests(unittest.TestCase):
         self.assertTrue(tools[0]["annotations"]["readOnlyHint"])
         self.assertFalse(tools[2]["annotations"]["readOnlyHint"])
 
+    def test_dual_content_payload_ownership(self):
+        worker = self.root / "payload.py"
+        worker.write_text("import json,sys\nfor line in sys.stdin:\n"
+            " r=json.loads(line)\n"
+            " v={'operations':['payload']} if r['method']=='capabilities' else "
+            "(r['params']['value'] if r['method']=='payload' else {})\n"
+            " print(json.dumps({'id':r['id'],'result':v}),flush=True)\n")
+        self.config.write_text(json.dumps({"roots": [str(self.root)],
+            "engines": {"payload": [sys.executable, str(worker)]}}))
+        self.restart(["--config", str(self.config)])
+        payloads = [{}, [], None, True, False, 0, -42, 1.25, "José-日本語\n\"\\",
+            {"resultType": "inner", "_meta": {"inner": True}, "items": [None, False]},
+            [{"name": "日本語", "value": i} for i in range(1024)],
+            {"large": "é日本語\n\"\\" * 16384}]
+        for modern in (True, False):
+            if not modern:
+                self.restart(["--config", str(self.config)])
+                self.call("initialize", {"protocolVersion": "2025-11-25", "capabilities": {},
+                    "clientInfo": {"name": "payload-test", "version": "1"}}, modern=False)
+                self.process.stdin.write(json.dumps({"jsonrpc": "2.0",
+                    "method": "notifications/initialized"}) + "\n")
+                self.process.stdin.flush()
+            for payload in payloads:
+                with self.subTest(modern=modern, kind=type(payload).__name__):
+                    response = self.call("tools/call", {"name": "semantic.query", "arguments": {
+                        "root": str(self.root), "language": "payload", "operation": "payload",
+                        "arguments": {"value": payload}}}, modern=modern)["result"]
+                    self.assertFalse(response["isError"])
+                    self.assertEqual(len(response["content"]), 1)
+                    self.assertEqual(response["content"][0]["type"], "text")
+                    self.assertEqual(json.loads(response["content"][0]["text"]), payload)
+                    structured = payload if isinstance(payload, dict) else {"items": payload}
+                    self.assertEqual(response["structuredContent"], structured)
+                    if modern:
+                        self.assertEqual(response["resultType"], "complete")
+                        self.assertIn("io.modelcontextprotocol/serverInfo", response["_meta"])
+                    else:
+                        self.assertNotIn("resultType", response)
+                        self.assertNotIn("_meta", response)
+
     def test_csharp_operator_policy_validation(self):
         invalid_policies = [[], None, {"mode": True}, {"mode": "trust-me"},
                        {"unknown": "value"}, {"project": "App.csproj"},

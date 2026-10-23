@@ -1,0 +1,9 @@
+name: benchmark.trusted.operations
+description: Screen all twelve semantic operations using frozen baseline/candidate receipts.
+vault: none
+docker_preflight: false
+steps:
+  - id: all-operations
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.recovery.paths/assets/all_operations.py

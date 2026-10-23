@@ -1,0 +1,9 @@
+name: benchmark.definition.cost.audit
+description: Audit correlated operation-boundary receipts without rerunning timing.
+vault: none
+docker_preflight: false
+steps:
+  - id: audit
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.definition.cost/assets/audit.py

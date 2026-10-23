@@ -1,0 +1,9 @@
+name: benchmark.recovery.background.idle
+description: Measure isolated idle CPU, allocations, GC and I/O for a frozen background candidate.
+vault: none
+docker_preflight: false
+steps:
+  - id: idle
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/background_idle.py

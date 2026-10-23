@@ -4,3 +4,8 @@
 # Vendored official MCPB schemas, fixtures and license have upstream byte hashes.
 # Preserve their exact bytes rather than applying any text conversion.
 /workflows/package.native/assets/schema/** -text
+
+# Historical evidence and patches are byte-addressed. A blank unified-diff context
+# line intentionally contains one space; preserve it rather than stripping it.
+/benchmarks/evidence/**/*.gz -text
+/benchmarks/reconstruction/**/*.patch -text -whitespace

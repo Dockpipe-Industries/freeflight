@@ -15,6 +15,7 @@ for item in required:
     if not (root / item).is_file():
         raise SystemExit(f"Missing required file: {item}")
 tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=root).decode().split("\0")
+evidence_sizes = {}
 for item in filter(None, tracked):
     path = Path(item)
     if path.parts[0] in {"bin", "build"} or any(
@@ -23,10 +24,18 @@ for item in filter(None, tracked):
     if path.suffix in {".exe", ".dll", ".dylib", ".so", ".o", ".a", ".pyc"}:
         raise SystemExit(f"Tracked binary: {item}")
     file = root / path
+    if len(path.parts) >= 4 and path.parts[:2] == ("benchmarks", "evidence") and file.is_file():
+        checkpoint = path.parts[2]
+        evidence_sizes[checkpoint] = evidence_sizes.get(checkpoint, 0) + file.stat().st_size
+        if path.suffix == ".gz" and file.stat().st_size > 1024 * 1024:
+            raise SystemExit(f"Evidence blob exceeds 1 MiB: {item}")
     if file.is_file():
         data = file.read_bytes()
         if re.search(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", data):
             raise SystemExit(f"Private-key marker: {item}")
+for checkpoint, size in evidence_sizes.items():
+    if size > 10 * 1024 * 1024:
+        raise SystemExit(f"Evidence checkpoint exceeds 10 MiB: {checkpoint}")
 routes = yaml.safe_load((root / "docs/agents/index.yaml").read_text())
 backlog = yaml.safe_load((root / "docs/agents/task-index.yaml").read_text())
 assert routes.get("schema") == 1 and isinstance(routes.get("tasks"), dict)

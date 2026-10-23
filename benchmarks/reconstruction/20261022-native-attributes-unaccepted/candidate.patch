@@ -1,0 +1,59 @@
+diff --git a/workers/roslyn/Program.cs b/workers/roslyn/Program.cs
+index cbc786a..d56c997 100644
+--- a/workers/roslyn/Program.cs
++++ b/workers/roslyn/Program.cs
+@@ -818,7 +818,7 @@ internal sealed class SourceEngine : IDisposable
+             var isAncestor = !string.Equals(current, full, PathComparison);
+             if (isAncestor && checkedAncestors?.Contains(current) == true) continue;
+             // Reuse only this iteration's leaf metadata for length/mtime below.
+-            var attributes = !isAncestor && leafInfo is not null ? leafInfo.Attributes : File.GetAttributes(current);
++            var attributes = !isAncestor && leafInfo is not null ? leafInfo.Attributes : DarwinPathAttributes.ReadReparseFlag(current);
+             if ((attributes & FileAttributes.ReparsePoint) != 0) throw new UnauthorizedAccessException("Symlink/reparse paths are not supported");
+             if (isAncestor) checkedAncestors?.Add(current);
+         }
+@@ -845,3 +845,45 @@ internal sealed class SourceEngine : IDisposable
+         workspace.Dispose();
+     }
+ }
++
++// A fresh, allocation-light reparse flag read, never an attribute cache.
++// All other attribute bits and metadata remain owned by their existing readers.
++internal static class DarwinPathAttributes
++{
++    [StructLayout(LayoutKind.Sequential)]
++    private struct Attributes
++    {
++        public ushort Count, Reserved;
++        public uint Common, Volume, Directory, File, Fork;
++    }
++
++    [DllImport("libSystem.B.dylib", EntryPoint = "getattrlist", SetLastError = true)]
++    private static extern int PathAttributes([MarshalAs(UnmanagedType.LPUTF8Str)] string path,
++        ref Attributes attributes, ref byte buffer, nuint size, ulong options);
++
++    internal static FileAttributes ReadReparseFlag(string path)
++    {
++        if (OperatingSystem.IsMacOS())
++        {
++            const uint common = 0x80000000 | 8; // returned attributes, vnode type
++            var attributes = new Attributes { Count = 5, Common = common };
++            Span<byte> data = stackalloc byte[28];
++            data.Clear();
++            // NOFOLLOW applies to this walk's final component; CheckPath still
++            // checks every earlier component afresh, in the original order.
++            if (PathAttributes(path, ref attributes, ref MemoryMarshal.GetReference(data), 28, 9) == 0 &&
++                U32(data, 0) == 28 && U32(data, 4) == common &&
++                U32(data, 8) == 0 && U32(data, 12) == 0 && U32(data, 16) == 0 && U32(data, 20) == 0)
++            {
++                var type = U32(data, 24);
++                if (type is >= 1 and <= 7)
++                    return type == 5 ? FileAttributes.ReparsePoint : 0;
++            }
++        }
++        // Fresh original authority, including original errors; no cached fallback.
++        return File.GetAttributes(path);
++    }
++
++    private static uint U32(ReadOnlySpan<byte> data, int offset) =>
++        System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(data[offset..]);
++}

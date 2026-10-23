@@ -192,3 +192,5 @@ Follow-up: [work-versus-execution counter qualification failures](reference-work
 Follow-up: [structural reference/core review and reader-screen rejection](reference-structural-review.md).
 
 2026-10-23: [Performance checkpoint and remote-execution handoff](performance-handoff.md) records the requested js/dev consolidation, ignored receipt transfer requirements, unaccepted experiments and next A/A controls. Existing qualification limits remain.
+
+[Small benchmark evidence and rebuild policy](../benchmarks/README.md) supersedes transferring ignored build trees.

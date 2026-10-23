@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "candidates": [
+    {
+      "path": "20261022-background-buffer-rejected/candidate.patch",
+      "sha256": "dfbed2bab58c39f3ffb61684eb144ec68ca7a729b73826a6b26a5c542e703a51",
+      "baseCommit": "94eb4207c8ffd2d5544bca8a52dcb8d451285015",
+      "appliesToBase": true,
+      "resultHashes": {
+        "workers/roslyn/Program.cs": "ebe95bf50845e3e10515a225f6faa440787ad4da368cb680c1d4cb0166ec5804"
+      }
+    },
+    {
+      "path": "20261022-instruction-hook-resume/experiment.patch",
+      "sha256": "526929485ddf723678677920fa16af15cd8b6e3f1f248bd787af05c9503a556d",
+      "baseCommit": "94eb4207c8ffd2d5544bca8a52dcb8d451285015",
+      "appliesToBase": true,
+      "resultHashes": {
+        "workers/roslyn/Program.cs": "0db95766fc1d0a63c22aa59c93180ac0bbc84e7cfd4834b3474f14f6a91d8c4c"
+      }
+    },
+    {
+      "path": "20261022-json-copies-unaccepted/candidate.patch",
+      "sha256": "8982ef7442066d932deaf49f980b93678c97358ada3da21d024e455fb2a282ee",
+      "baseCommit": "94eb4207c8ffd2d5544bca8a52dcb8d451285015",
+      "appliesToBase": true,
+      "resultHashes": {
+        "src/main.cpp": "e92bec8ca57d263541f138bf11725d7abfc71ecffc5ab3006132bbe336552399",
+        "src/server.cpp": "0cc4e05d332246e1f99dfbdc94b01241601f1922ce28bbf5e607561a51c5d4e7",
+        "tests/protocol.py": "aff5d4a0263b51d60b1abf7eef404620d2404376381c4f8bb54fa16db1c72527"
+      }
+    },
+    {
+      "path": "20261022-native-attributes-unaccepted/candidate.patch",
+      "sha256": "cd223343ea9c68c09968121e07b1b8fc1a05f51b06891255150b0c2a26bbdb92",
+      "baseCommit": "94eb4207c8ffd2d5544bca8a52dcb8d451285015",
+      "appliesToBase": true,
+      "resultHashes": {
+        "workers/roslyn/Program.cs": "f6d374e2f23f88a7f0a9529912dee8e01d78dffb0f77619c3dbc9aaffd44d9b4"
+      }
+    },
+    {
+      "path": "20261022-path-strings-rejected/candidate.patch",
+      "sha256": "3f7479a4b420837a74b2e203d26441a5793b8c5113d15809b0c474597916e84f",
+      "baseCommit": "94eb4207c8ffd2d5544bca8a52dcb8d451285015",
+      "appliesToBase": true,
+      "resultHashes": {
+        "workers/roslyn/Program.cs": "ed7fdd5f9c5d130c6d29ae26751049ae0238965137af7e6371cb8813ba69c311"
+      }
+    },
+    {
+      "path": "20261022-project-search-rejected/candidate.patch",
+      "sha256": "cc0956a79b2627ddcc10ca782b531310612f222a975cc534bd7f9ecce57a3d17",
+      "baseCommit": "94eb4207c8ffd2d5544bca8a52dcb8d451285015",
+      "appliesToBase": true,
+      "resultHashes": {
+        "workers/roslyn/SemanticQueries.cs": "2bd06a0f7862661f6e8a5625f31d75e277bf82df601d309dccf751df59b4ea4b"
+      }
+    }
+  ]
+}

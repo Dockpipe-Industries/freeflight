@@ -1,0 +1,28 @@
+diff --git a/workers/roslyn/Program.cs b/workers/roslyn/Program.cs
+index cbc786a..42ac0de 100644
+--- a/workers/roslyn/Program.cs
++++ b/workers/roslyn/Program.cs
+@@ -581,6 +581,8 @@ internal sealed class SourceEngine : IDisposable
+             }
+         }
+         byte[]? readBuffer = null;
++        // Private to this background transaction; nested foreground refreshes retain fresh buffers.
++        using var backgroundMemory = backgroundReading ? new MemoryStream() : null;
+         using var metadataBatch = OperatingSystem.IsMacOS() && checkedAncestors is not null &&
+             (!incrementalValidation || recover)
+             ? new DarwinMetadataBatch(trustedDirectoryMembers, resources.MaxDirectoryEntries, path => CheckPath(path)) : null;
+@@ -631,7 +633,13 @@ internal sealed class SourceEngine : IDisposable
+             // Bounded read even when the file grows after enumeration.
+             using var stream = OpenCompilerInput(file);
+             readFiles++;
+-            using var memory = new MemoryStream();
++            using var foregroundMemory = backgroundMemory is null ? new MemoryStream() : null;
++            var memory = backgroundMemory ?? foregroundMemory!;
++            if (backgroundMemory is not null)
++            {
++                memory.SetLength(0);
++                memory.Position = 0;
++            }
+             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+             var buffer = readBuffer ??= new byte[8192];
+             int count;

@@ -835,3 +835,23 @@ cancellation, gate handoff or shutdown. Glider/idle/real-repository gaps remain.
 No commit, push, merge, publication or deployment.
 
 2026-10-23: [Performance checkpoint and remote-execution handoff](performance-handoff.md) records the requested js/dev consolidation, ignored receipt transfer requirements, unaccepted experiments and next A/A controls. Existing qualification limits remain.
+
+
+### 2026-10-23 — compact Git evidence replaces blanket build-tree transfer
+
+Supersedes the18GB handoff requirement. Git retains a bounded evidence checkpoint
+(10MiB maximum;1MiB compressed-object maximum), original hashes/paths, complete-file
+JSON/JSONL samples including failures, and small source reconstruction patches.
+Builds/caches/SDKs/copied sources/generated fixtures stay ignored and rebuildable.
+Capture discovers1026JSON/JSONL files, deduplicates647objects, stores514in Git and
+catalogs133external objects (~108MiB compressed) for optional historical analysis/R2.
+External original measurements are not rebuildable and are not silently counted as
+Git-retained evidence. Bulk diagnostic logs/traces are explicitly outside this export.
+No original files were deleted or uploaded.
+
+`benchmark.evidence.check` validates hashes/budgets without old build trees and
+reconstructs all6preserved rejected source candidates from exact94 plus tiny patches.
+Contract tests cover lossless deduplication, relocation, overflow, tampering, traversal,
+size limits and symlink/private-key exclusion. These are archival/source checks, not
+new benchmark/runtime passes. See [small benchmark assets](../benchmarks/README.md)
+and [updated handoff](performance-handoff.md). Unrelated local edits remain untouched.

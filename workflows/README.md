@@ -258,3 +258,11 @@ native/current protocol gates. The existing response screen supports its manifes
 fixture/balance/metric and rejection receipts without new queries. Fresh preparation
 labels refuse overwrite; the original candidate failed its narrow screen and must
 not be rerun unchanged seeking acceptance. See [structural reader review](../docs/reference-structural-review.md).
+
+
+`benchmark.evidence` captures completed JSON/JSONL receipts into deduplicated,
+lossless objects with1MiB/blob and10MiB/checkpoint Git budgets. Larger observations
+are cataloged external; build/source/fixture/cache trees and bulk diagnostics stay
+ignored. `benchmark.evidence.check` checks Git object integrity and candidate source
+reconstruction without old build outputs. No uploads or deletion occur. See
+[small benchmark asset policy](../benchmarks/README.md) and its fresh-label usage.

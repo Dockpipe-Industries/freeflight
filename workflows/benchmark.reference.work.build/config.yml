@@ -1,0 +1,9 @@
+name: benchmark.reference.work.build
+description: Calibrate the exact managed work-counter path, then qualify generated-only baseline probes.
+vault: none
+docker_preflight: false
+steps:
+  - id: prepare
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.work.prepare/assets/prepare.py

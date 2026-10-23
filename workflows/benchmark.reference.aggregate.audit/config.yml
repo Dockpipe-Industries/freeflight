@@ -1,0 +1,9 @@
+name: benchmark.reference.aggregate.audit
+description: Recompute frozen aggregate calibration gates from retained receipts only.
+vault: none
+docker_preflight: false
+steps:
+  - id: audit
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.aggregate.prepare/assets/audit.py

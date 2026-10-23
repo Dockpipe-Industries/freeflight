@@ -1,0 +1,9 @@
+name: benchmark.recovery.allocations
+description: Sample allocation stacks inside verified successful recovery sweeps.
+vault: none
+docker_preflight: false
+steps:
+  - id: profile
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.recovery.allocations/assets/measure.py

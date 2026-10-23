@@ -1,0 +1,9 @@
+name: benchmark.response.copies.ordinary.audit
+description: Recheck ordinary matched receipts and session/position evidence without new timings.
+vault: none
+docker_preflight: false
+steps:
+  - id: audit
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.response.copies.prepare/assets/ordinary_audit.py

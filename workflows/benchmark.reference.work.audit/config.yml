@@ -1,0 +1,9 @@
+name: benchmark.reference.work.audit
+description: Verify retained successful and failed work-counter calibrations without rerunning them.
+vault: none
+docker_preflight: false
+steps:
+  - id: audit
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.work.prepare/assets/audit.py

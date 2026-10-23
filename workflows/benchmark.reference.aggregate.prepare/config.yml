@@ -1,0 +1,9 @@
+name: benchmark.reference.aggregate.prepare
+description: Qualify external whole-block counters before any target queries.
+vault: none
+docker_preflight: false
+steps:
+  - id: qualify
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.aggregate.prepare/assets/prepare.py

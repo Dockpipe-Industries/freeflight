@@ -1,0 +1,13 @@
+name: benchmark.reference.attribution.audit
+description: Replay fixed-schedule reference attribution without new requests.
+vault: none
+docker_preflight: false
+steps:
+  - id: audit
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.context/assets/attribution_audit.py
+  - id: boundaries
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.context/assets/boundary_audit.py

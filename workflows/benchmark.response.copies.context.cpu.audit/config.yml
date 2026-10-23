@@ -1,0 +1,9 @@
+name: benchmark.response.copies.context.cpu.audit
+description: Audit worker CPU pacing context receipts without new measurements.
+vault: none
+docker_preflight: false
+steps:
+  - id: audit
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.response.copies.prepare/assets/context_cpu_audit.py

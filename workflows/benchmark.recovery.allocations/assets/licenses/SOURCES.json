@@ -1,0 +1,20 @@
+{
+  "scope": "Diagnostic collector only; not application or distributed worker dependencies",
+  "packages": {
+    "Microsoft.Diagnostics.Tracing.TraceEvent": "4.0.0",
+    "Microsoft.Diagnostics.NETCore.Client": "0.2.750501"
+  },
+  "license": "MIT as declared by pinned package nuspecs",
+  "sources": [
+    {
+      "file": "traceevent-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/microsoft/perfview/main/LICENSE.TXT",
+      "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310"
+    },
+    {
+      "file": "diagnostics-client-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/dotnet/diagnostics/ad724c4b85e7ae775e42f393c6e95a7557a57954/LICENSE.TXT",
+      "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310"
+    }
+  ]
+}

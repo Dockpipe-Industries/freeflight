@@ -1,0 +1,9 @@
+name: benchmark.response.copies.profile
+description: Measure generated-core CPU with identical retained search replay payloads.
+vault: none
+docker_preflight: false
+steps:
+  - id: profile
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.response.copies.prepare/assets/profile.py

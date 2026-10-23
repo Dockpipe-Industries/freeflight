@@ -1,0 +1,9 @@
+name: benchmark.response.copies.audit
+description: Audit response-copy receipts and retain all per-session results without new timings.
+vault: none
+docker_preflight: false
+steps:
+  - id: audit
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.response.copies.prepare/assets/audit.py

@@ -66,11 +66,15 @@ cadenceCrossover=os.environ.get('FREEFLIGHT_GLIDER_CADENCE_CROSSOVER')=='1'
 if cadenceCrossover:
     assert queryOrder=='balanced' and rounds%8==0 and intervals==[.1] and queryGap==.02
     assert os.environ.get('FREEFLIGHT_GLIDER_IDENTICAL_CONTROL')=='1'
+productOrder=os.environ.get('FREEFLIGHT_GLIDER_PRODUCT_ORDER','reversed')
+assert productOrder in ('reversed','balanced')
 requestedProducts=os.environ.get('FREEFLIGHT_GLIDER_PRODUCTS')
 requestedProducts=requestedProducts.split(',') if requestedProducts else None
 if requestedProducts:
     assert len(requestedProducts)>=2 and len(set(requestedProducts))==len(requestedProducts)
     assert set(requestedProducts)<={'freeflight','local-baseline','candidate','glider'}
+    if productOrder=='balanced':assert sessions%len(requestedProducts)==0, 'Balance every product position'
+elif productOrder=='balanced':raise AssertionError('Balanced product order requires explicit products')
 if diagnostic:
     from native_profile import install_client
     install_client(client)
@@ -103,7 +107,7 @@ for size in sizes:
     assert all(hashes[n]==v for n,v in old['hashes'].items() if n.endswith('.cs'))
     fixtures[str(size)]={**old,'root':str(root),'project':'Comparison.sln','hashes':hashes,'aggregateSha256':hashlib.sha256(json.dumps(hashes,sort_keys=True).encode()).hexdigest()}
 provenance=dict(officialPackageVerification=json.loads((BASE/'official-package-verification.json').read_text()),bundleSdkPinSha256=sha(BUNDLE.parent/'global.json'),releaseManifestSha256=sha(releasePath),sourceCommit=release['sourceCommit'],releaseTag=release['tag'],freeflightBinarySha256=sha(BUNDLE/'bin/freeflight'),bundleManifestSha256=sha(BUNDLE/'SHA256SUMS'),gliderVersion='13.3.0',gliderCommand=str(GLIDER),gliderFiles={str(p.relative_to(GLIDER.parent)):sha(p) for p in GLIDER.parent.rglob('*') if p.is_file()},sdk='10.0.402',sdkRoot=str(SDK),platform=platform.platform(),architecture=platform.machine(),rounds=rounds,sessions=sessions,warmupSeconds=warmup,intervals=intervals,fixtures=fixtures,originalProvenanceSha256=sha(origin),driverHashes={str(p.relative_to(trusted.REPO)):sha(p) for p in [Path(__file__),Path(client.__file__),Path(trusted.__file__)]},limitations=['Synthetic source graph, not Biztraak.','Source bytes and graph retained; both target net10.0 with SDK 10.0.402 instead of prior net11.0.','Published self-contained FreeFlight uses its bundled runtime; Glider uses existing .NET 10.0.13.','Glider definition/search omit columns and reference ends; exact source declarations are qualified separately and missing fields are not fabricated.','Reference symbol keys are discovered and validated before timing.','Contract differences in per-request freshness/security are not normalized away.'])
-provenance.update(diagnostic=diagnostic,queryOrder=queryOrder,queryGapSeconds=queryGap,cadenceCrossover=cadenceCrossover,requestedProducts=requestedProducts)
+provenance.update(productOrder=productOrder,diagnostic=diagnostic,queryOrder=queryOrder,queryGapSeconds=queryGap,cadenceCrossover=cadenceCrossover,requestedProducts=requestedProducts)
 profileAsset=Path(__file__).with_name('native_profile.py')
 provenance['driverHashes'][str(profileAsset.relative_to(trusted.REPO))]=sha(profileAsset)
 provenance['driverHashes'][str(Path(__file__).with_name('profile.py').relative_to(trusted.REPO))]=sha(Path(__file__).with_name('profile.py'))
@@ -229,6 +233,7 @@ if os.environ.get('FREEFLIGHT_GLIDER_IDENTICAL_CONTROL')=='1':
     provenance['identicalBinaryControl']=True
 if diagnostic:
     assert provenance.get('sharedWorker') and 'candidateCore' in provenance
+if productOrder=='balanced':provenance['orderPolicy']='Cyclic product rotation; every requested product occupies each process position once per cycle'
 save(OUT/'provenance.json',provenance)
 if os.environ.get('FREEFLIGHT_GLIDER_PREPARE_ONLY') == '1':
     save(OUT/'qualification-only.json',{'status':'passed','timedProcesses':0,'note':'Preparation/native gates only; no latency claim.'})
@@ -388,7 +393,10 @@ try:
                 else:order=['freeflight','glider'] if pair%2==0 else ['glider','freeflight']
                 if requestedProducts:
                     assert all(x not in ('candidate','local-baseline') or (candidateCommand if x=='candidate' else localBaselineCommand) for x in requestedProducts)
-                    order=requestedProducts if pair%2==0 else list(reversed(requestedProducts))
+                    if productOrder=='balanced':
+                        rotation=pair%len(requestedProducts)
+                        order=requestedProducts[rotation:]+requestedProducts[:rotation]
+                    else:order=requestedProducts if pair%2==0 else list(reversed(requestedProducts))
                 for offset,variant in enumerate(order):run_session(variant,fixtures[str(size)],size,interval,pair*len(order)+offset)
     rows=[]
     for r in records:

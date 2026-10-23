@@ -1,0 +1,13 @@
+name: benchmark.response.copies.context.cpu
+description: Correlate worker process CPU and wall stages in a bounded pacing crossover.
+vault: none
+docker_preflight: false
+steps:
+  - id: measure
+    kind: host
+    cwd: repo
+    cmd: FREEFLIGHT_CONTEXT_CPU=1 python3 -B workflows/benchmark.response.copies.prepare/assets/context.py
+  - id: audit
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.response.copies.prepare/assets/context_cpu_audit.py

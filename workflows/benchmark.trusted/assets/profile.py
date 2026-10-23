@@ -51,7 +51,11 @@ def instrument(path):
         BenchProfile.Bytes = bytesRead - bytesBefore; BenchProfile.Reused = reusedSnapshots - reusedBefore;''')
     # Time the whole normalization/check operation and the leaf attribute call separately.
     replace('        var full = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(root!, path));','        using var scope = BenchProfile.Scope("path");\n        var full = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(root!, path));')
-    replace('leafInfo.Attributes : File.GetAttributes(current)', 'BenchProfile.Leaf(leafInfo) : BenchProfile.Attributes(current)')
+    native_attributes = 'DarwinPathAttributes.ReadReparseFlag(current)' in s
+    if native_attributes:
+        replace('leafInfo.Attributes : DarwinPathAttributes.ReadReparseFlag(current)', 'BenchProfile.Leaf(leafInfo) : BenchProfile.NativeAttributes(current)')
+    else:
+        replace('leafInfo.Attributes : File.GetAttributes(current)', 'BenchProfile.Leaf(leafInfo) : BenchProfile.Attributes(current)')
     if ' CheckSnapshotPath(' in s:
         parent = '        var parent = knownParent ?? Path.GetDirectoryName(file)!;' if 'var parent = knownParent' in s else '        var parent = Path.GetDirectoryName(file)!;'
         replace(parent, '        using var scope = BenchProfile.Scope("snapshotPath");\n'+parent)
@@ -74,6 +78,10 @@ def instrument(path):
     replace('await memory.WriteAsync(buffer.AsMemory(0, count), token);', 'await BenchProfile.Write(memory, buffer, count, token);')
     if 'hash.GetHashAndReset()' in s:
         replace('Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant()', 'BenchProfile.FinishHash(hash)')
+    if 'trustedValidationParents.TryGetValue(path' in s:
+        replace('        foreach (var parent in parents)', '        using var lexicalScope = BenchProfile.Scope("path");\n        foreach (var parent in parents)')
+        replace('File.GetAttributes(parent) & FileAttributes.ReparsePoint', 'BenchProfile.Attributes(parent) & FileAttributes.ReparsePoint')
+        replace('File.GetAttributes(path) & FileAttributes.ReparsePoint', 'BenchProfile.Attributes(path) & FileAttributes.ReparsePoint')
     s=s.replace('info.Refresh();', 'BenchProfile.RefreshMetadata(info);')
     s+='''
 // Diagnostic build only: process-wide allocations/GC and runtime event observations.
@@ -133,6 +141,11 @@ internal sealed class BenchProfile : EventListener
     }
 }
 '''
+    if native_attributes:
+        old = '    public static FileAttributes Attributes(string path)'
+        added = '    public static FileAttributes NativeAttributes(string path) { var start=Stopwatch.GetTimestamp(); Interlocked.Increment(ref Attrs); try{return DarwinPathAttributes.ReadReparseFlag(path);} finally{Add("attributes",start);} }\n'
+        assert s.count(old)==1
+        s=s.replace(old,added+old)
     if 'class DarwinMetadataBatch' not in '\n'.join(p.read_text() for p in path.parent.glob('*.cs')):
         start=s.index('    public static bool Batch(')
         end=s.index('    public static IncrementalHash CreateHash()',start)
@@ -141,7 +154,9 @@ internal sealed class BenchProfile : EventListener
 
     semantic_path = path.with_name('SemanticQueries.cs')
     semantic = semantic_path.read_text()
-    declaration = ('        var symbols = await FindCompilationDeclarations(solution, query, token);'
+    declaration = ('        var symbols = await FindProjectDeclarations(solution, query, token);'
+                   if 'FindProjectDeclarations(' in semantic else
+                   '        var symbols = await FindCompilationDeclarations(solution, query, token);'
                    if 'FindCompilationDeclarations(' in semantic else
                    '        var symbols = await SymbolFinder.FindSourceDeclarationsAsync(solution,')
     returned = '        return Ordered(symbols, token).Where(symbol => !symbol.IsImplicitlyDeclared).Select(Item).ToArray();'

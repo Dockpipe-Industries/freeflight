@@ -855,3 +855,25 @@ Contract tests cover lossless deduplication, relocation, overflow, tampering, tr
 size limits and symlink/private-key exclusion. These are archival/source checks, not
 new benchmark/runtime passes. See [small benchmark assets](../benchmarks/README.md)
 and [updated handoff](performance-handoff.md). Unrelated local edits remain untouched.
+
+- 2026-11-17 local repair: NU1510 warning recovery now passes exact project-bound
+  restore-evidence tests and rejects Error records and promoted MSBuild errors.
+  Safe-source and trusted suites passed with the installed bundle runtime.
+  Live MCP application-project navigation passed on a five-project graph, including
+  exact mutation definition and outgoing call locations. Full-solution loading is
+  still blocked by a documentation project's missing references. This is a local
+  two-file worker installation, not a new published distribution or platform pass.
+
+- 2026-11-19 Go navigation: the opt-in gopls worker passed its Linux fixture and
+  five exact navigation tasks on the DockPipe checkout. Core protocol and
+  process tests passed. Go installation and cross-platform release qualification
+  remain open. See [Go navigation results](go-navigation.md).
+
+- 2026-11-19 navigation follow-up: the optimized Go worker passed core and
+  DockPipe checks. The five-task warm median dropped from 495 to 33.4 ms and
+  exact/scoped citations cut the payload from 610 to 151 tokens. The first
+  pass rose from 1,068 to 1,181 ms. Python, C++, and PipeLang passed seven
+  local MCP fixture and real-source tests. The 34 TypeScript/JavaScript tests
+  and the existing C#/TS MCP integration passed. Hosted Codex comparison,
+  cross-platform qualification and bundle provisioning remain open.
+  See [navigation results](go-navigation.md).

@@ -243,10 +243,10 @@ does not supply every older target's reference assemblies.
 
 Roslyn's public workspace diagnostic can lose the underlying MSBuild warning
 severity ([upstream issue 75182](https://github.com/dotnet/roslyn/issues/75182)).
-An isolated restored fixture with NU1603/NU1903/NU1701 Warning entries reproduces
+An isolated restored fixture with NU1510/NU1603/NU1903/NU1701 Warning entries reproduces
 this on the pinned 5.9.0 worker. Recovery requires the exact diagnostic message and
 project path to match a bounded, project-bound assets-file Warning record
-for one of those three codes. No substring-based blanket Failure suppression is
+for one of those four codes. No substring-based blanket Failure suppression is
 used. Restore Error records and unmatched workspace failures reject loading. Supported
 binary-logger replay also rejects real MSBuild errors (including promoted warnings)
 and missing evaluated assets; no log is uploaded or intentionally retained.

@@ -135,6 +135,9 @@ fs::path Server::route(const fs::path &root, const fs::path &file, const std::st
                         entry.path().filename() == "jsconfig.json" ||
                         entry.path().filename() == "package.json")) {
                 package = cursor;
+            } else if (language == "go" && package.empty() &&
+                       (entry.path().filename() == "go.mod" || entry.path().filename() == "go.work")) {
+                package = cursor;
             }
         }
         if (cursor == root)
@@ -320,8 +323,25 @@ Json Server::tools() const {
 Server::Engine &Server::engine(const fs::path &root, const std::string &language,
                                std::stop_token stop) {
     const auto command = commands_.find(language);
-    if (command == commands_.end())
+    const bool projectNavigation =
+        language == "go" || language == "python" || language == "cpp" || language == "pipelang";
+    if (command == commands_.end()) {
+        if (language == "go")
+            throw EngineError(
+                {{"code", "go_backend_unavailable"},
+                 {"message", "Go engine is not configured; configure engines.go at startup"}});
+        if (projectNavigation)
+            throw EngineError(
+                {{"code", "lsp_backend_unavailable"},
+                 {"message", "Language engine is not configured in operator startup policy"}});
         throw std::runtime_error("Language engine is not configured");
+    }
+    if (projectNavigation &&
+        !std::any_of(trustedRoots_.begin(), trustedRoots_.end(),
+                     [&](const auto &trusted) { return within(trusted, root); }))
+        throw EngineError(
+            {{"code", language == "go" ? "go_workspace_not_trusted" : "lsp_workspace_not_trusted"},
+             {"message", "Project indexing requires an operator startup trustedRoots entry"}});
     const auto key = pathToUtf8(root) + "\n" + language;
     if (auto found = engines_.find(key); found != engines_.end())
         return found->second;
@@ -507,9 +527,20 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
                     languages.insert("typescript");
                 else if (ext == ".js" || ext == ".jsx" || ext == ".mjs" || ext == ".cjs")
                     languages.insert("javascript");
+                else if (ext == ".go")
+                    languages.insert("go");
+                else if (ext == ".py" || ext == ".pyi")
+                    languages.insert("python");
+                else if (ext == ".cpp" || ext == ".cxx" || ext == ".cc" || ext == ".hpp" ||
+                         ext == ".hxx" || ext == ".hh" || ext == ".cppm" || ext == ".ixx")
+                    languages.insert("cpp");
+                else if (ext == ".pipe")
+                    languages.insert("pipelang");
                 if (ext == ".sln" || ext == ".slnx" || ext == ".csproj" ||
                     filename == "tsconfig.json" || filename == "jsconfig.json" ||
-                    filename == "package.json")
+                    filename == "package.json" || filename == "go.mod" || filename == "go.work" ||
+                    filename == "pyproject.toml" || filename == "pyrightconfig.json" ||
+                    filename == "compile_commands.json")
                     projects.push_back(pathToUtf8(entry.path()));
             }
             std::sort(projects.begin(), projects.end());
@@ -585,7 +616,11 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
             throw EngineError(response["error"]);
         return response.at("result");
     } catch (const EngineError &error) {
-        engines_.erase(key);
+        const auto code = error.detail.contains("code") && error.detail["code"].is_string()
+                              ? error.detail["code"].get<std::string>()
+                              : std::string{};
+        if (code != "lsp_index_pending" && code != "lsp_invalid_query" && code != "go_invalid_query")
+            engines_.erase(key);
         auto detail = error.detail;
         detail["workspaceRoot"] = pathToUtf8(root);
         throw EngineError(std::move(detail));

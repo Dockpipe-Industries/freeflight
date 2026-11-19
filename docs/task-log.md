@@ -1554,3 +1554,61 @@ Contract tests cover lossless deduplication, relocation, overflow, tampering, tr
 size limits and symlink/private-key exclusion. These are archival/source checks, not
 new benchmark/runtime passes. See [small benchmark assets](../benchmarks/README.md)
 and [updated handoff](performance-handoff.md). Unrelated local edits remain untouched.
+
+## 2026-11-17: Local NU1510 trusted-loader repair
+
+At installed source revision 39c3cc83, project-bound NU1510 Warning records were
+flattened into Roslyn Failure diagnostics and rejected. Added only NU1510 to the
+existing exact-message, project-bound warning recovery allowlist. Warnings remain
+visible with degraded fidelity; actual MSBuild errors still reject loading.
+
+The restored fixture reproduced this failure before the repair. Safe-source and
+trusted suites passed after it, including NU1510 Error records and warnings
+promoted to MSBuild errors. The same suites passed with the installed bundle's
+unchanged self-contained runtime. Built with installed SDK 11.0.100; the temporary
+test checkout SDK override was restored afterward. Native build/test commands were
+used because the pinned preview SDK is not installed. No dependencies were changed.
+
+Installed only the worker assembly and symbols, retaining original files and a
+patch under the operator's local share directory. Reopened the application project
+through the live MCP endpoint: five projects and 3,903 files loaded. Freeflight
+resolved the requested mutation method and its outgoing service-interface call.
+The full solution still rejects its documentation project for missing references;
+that separate check was not weakened. No consumer source, Git commit or push.
+
+## 2026-11-19 Go navigation
+
+Added one optional gopls worker behind the existing FreeFlight MCP and
+startup-only trusted-root policy. The worker translates supported LSP operations
+and returns bounded in-workspace locations. It leaves Go project semantics with
+gopls and uses the existing process lifetime, cancellation and recovery policy.
+
+On Linux x86-64, `core.build` and `core.test` passed with a local CMake 3.31.6 and
+the repository's hash-verified JSON 3.12.0 archive. `integration.go` passed the
+small fixture and five exact DockPipe MCP answers with gopls 0.23.0, Go 1.26.10
+and Node 24.11.1. DockPipe source and Go manifests checked by the suite retained
+their hashes. The fixed tool and offline same-model benchmarks, along with the follow-up
+language assessment, are in [Go navigation and the next language](go-navigation.md).
+
+## 2026-11-19: Navigation performance and additional engines
+
+Retained a bounded Go open-document set so gopls can reuse typed packages,
+with fresh bounded reads for every open overlay. Added module preflight to
+report invalid or unsupported project metadata before gopls starts. Added
+exact symbol output, workspace-relative scope and opt-in one-based citations.
+Six paired DockPipe sessions per arm verified all five exact answers. Warm
+five-task latency fell from 495 to 33.4 ms. The first pass rose from 1,068 to
+1,181 ms. Exact/scoped citation payloads used 151 tokens compared with 610 for
+the original output. The offline Codex CLI comparison used Qwen3-4B with
+read-only tools in a loopback-only namespace.
+
+Added optional Pyright 1.1.414, clangd 20.1.8 and PipeLang workers using the
+same stdio transport and startup workspace trust. `integration.lsp` passed
+seven tests including real FreeFlight Python packaging helpers, the FreeFlight
+C++ core with an operator-prepared compilation database, and the DockPipe
+PipeLang workflow's six cross-module references. `integration.go` passed all
+four tests. `core.test`, the 34 TypeScript/JavaScript worker tests, the Roslyn
+safe-source suite with the prebuilt worker, and the C#/TS MCP integration
+passed on Linux. Node-to-Node stdio checks used an isolated namespace with
+local socketpairs available. See the [worker guide](../workers/lsp/README.md)
+and [benchmark report](go-navigation.md).

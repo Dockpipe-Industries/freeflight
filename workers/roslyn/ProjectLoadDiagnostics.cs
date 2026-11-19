@@ -22,7 +22,7 @@ internal sealed record LoadWarning(string code, string message, string project,
 /// </summary>
 internal static class ProjectLoadDiagnostics
 {
-    private static readonly HashSet<string> Recoverable = ["NU1603", "NU1701", "NU1903"];
+    private static readonly HashSet<string> Recoverable = ["NU1510", "NU1603", "NU1701", "NU1903"];
     private sealed record Evidence(string Project, string Assets, string Code, string Message, string Level);
 
     public static List<LoadWarning> Classify(string root, string selected, Solution solution,

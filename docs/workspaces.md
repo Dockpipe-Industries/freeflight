@@ -211,7 +211,7 @@ status are deliberately distinct. Warnings remain visible until reload; source
 compiler diagnostics remain available through the diagnostics operation.
 
 Roslyn 5.9 can report NuGet warnings as workspace failures. The repair accepts only
-NU1603, NU1701 and NU1903 messages that exactly match Warning records in the same
+NU1510, NU1603, NU1701 and NU1903 messages that exactly match Warning records in the same
 project's standard `obj/project.assets.json`. Vulnerability advisories remain
 visible and set degraded fidelity; they are not suppressed or fixed. Unknown
 failures, restore Error records, missing metadata references and empty/unusable
@@ -237,3 +237,19 @@ Missing standard assets then produce `restore_required`. Customized or inherited
 intermediate paths without evaluated evidence fail conservatively with inspection
 guidance; FreeFlight does not implement its own MSBuild evaluator or guess that
 restore will repair every failure. Custom layouts need separate qualification.
+
+## Go module workspaces
+
+The optional [Go worker](../workers/go/README.md) opens an explicitly trusted Go
+module or `go.work` workspace. Select the module root with `workspace.open`,
+then inspect `engine.capabilities` for supported queries. Workspace discovery
+recognizes `.go` files, `go.mod`, and `go.work`. The Go worker returns compact
+workspace-relative locations.
+
+## Python, C++, and PipeLang navigation
+
+The optional [stdio language-server workers](../workers/lsp/README.md) require
+explicit startup trust for the selected project. Python uses Pyright's static
+workspace, C++ uses an operator-supplied compilation database, and PipeLang uses
+an operator-selected entry and source roots. The same workspace lifecycle and
+capability discovery apply to all three.

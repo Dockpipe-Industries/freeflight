@@ -6,6 +6,9 @@ core.build/core.test own C++; workers.typescript and workers.roslyn own internal
 workers; integration.test validates the one endpoint; site.build stages the site;
 repo.check validates guidance/layout; package.native qualifies complete artifacts;
 registry.check validates registry metadata. build/test/check compose those tasks.
+The opt-in `integration.go` workflow qualifies gopls through MCP with the
+[Go worker setup](../workers/go/README.md). The opt-in `integration.lsp`
+workflow checks the [Python, C++, and PipeLang workers](../workers/lsp/README.md).
 
 Generated output is bin/.local; engine state is bin/.dockpipe. Helper scripts are
 workflow-local assets for validation, cross-platform staging or artifact inspection,

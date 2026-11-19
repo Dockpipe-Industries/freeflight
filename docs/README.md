@@ -30,6 +30,12 @@ evaluation, which can execute repository targets/imports and requires a compatib
 runs inside Node. Semantic compilation excludes repository plugins, custom
 generators and analyzers. See SECURITY.md and worker READMEs for boundaries.
 
+The optional [Go engine](../workers/go/README.md) uses the official gopls server
+for workspace symbols, definitions and references. See the
+[navigation report](go-navigation.md) for qualification and benchmarks. The
+[Python, C++, and PipeLang engines](../workers/lsp/README.md) expose the same
+read-only navigation operations through their native language servers.
+
 ## Developer setup
 
 See [developer onboarding](development.md) for setup, startup and safe cleanup.

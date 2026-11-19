@@ -53,7 +53,7 @@ before semantic compilation. Trusted mode requires a compatible installed .NET S
 default safe-source mode remains self-contained. See workers/roslyn/README.md for
 the explicit configuration, tested project scope and remaining fidelity limitations.
 
-Trusted project warning recovery is narrow: NU1603/NU1701/NU1903 require exact,
+Trusted project warning recovery is narrow: NU1510/NU1603/NU1701/NU1903 require exact,
 project-bound Warning evidence from restore assets; warnings, including vulnerability
 advisories, remain visible with degraded fidelity. Unknown load failures remain
 fatal. Restore assets are untrusted data and are size/depth bounded; reading them
@@ -83,3 +83,24 @@ sandbox: concurrent hostile directory replacement and trusted MSBuild execution
 retain the limitations described above. The catalogue does not independently prove
 that a package is benign: the operator has already authorized the project's design-
 time evaluation and its declared compiler inputs. No analyzers/generators are enabled.
+
+The optional Go worker requires an explicit startup `trustedRoots` entry for
+the selected project in addition to its configured absolute worker, gopls and Go
+toolchain paths. It starts gopls in stdio mode with a restricted environment, a
+separate cache and telemetry disabled. The Go environment disables automatic
+toolchain switching, module fetching, VCS, cgo and external package drivers.
+gopls and Go can read build metadata, the toolchain, the operator-provisioned
+module cache and local module paths selected by project metadata. This is
+trusted project analysis within the existing worker process boundary. A
+`go.work` or local module replacement can refer outside the selected root.
+FreeFlight canonicalizes returned paths and omits external locations. Client
+requests cannot change trust, toolchain paths, the module cache, or gopls options.
+
+The optional Python, C++, and PipeLang workers use the same startup project
+trust. Python uses a configured Pyright module with interpreter discovery
+disabled. C++ consumes an operator-supplied compilation database and does not
+execute its compiler commands. clangd config discovery and query-driver probing
+are disabled. PipeLang uses configured absolute tool paths and explicit source
+roots contained in the selected workspace. These are normal local-process
+boundaries. The servers can read dependencies and build metadata under the
+operator's permissions. Returned paths are canonicalized to the selected root.

@@ -136,7 +136,8 @@ fs::path Server::route(const fs::path &root, const fs::path &file, const std::st
                         entry.path().filename() == "package.json")) {
                 package = cursor;
             } else if (language == "go" && package.empty() &&
-                       (entry.path().filename() == "go.mod" || entry.path().filename() == "go.work")) {
+                       (entry.path().filename() == "go.mod" ||
+                        entry.path().filename() == "go.work")) {
                 package = cursor;
             }
         }
@@ -619,7 +620,8 @@ Json Server::call(const std::string &name, const Json &arguments, std::stop_toke
         const auto code = error.detail.contains("code") && error.detail["code"].is_string()
                               ? error.detail["code"].get<std::string>()
                               : std::string{};
-        if (code != "lsp_index_pending" && code != "lsp_invalid_query" && code != "go_invalid_query")
+        if (code != "lsp_index_pending" && code != "lsp_invalid_query" &&
+            code != "go_invalid_query")
             engines_.erase(key);
         auto detail = error.detail;
         detail["workspaceRoot"] = pathToUtf8(root);

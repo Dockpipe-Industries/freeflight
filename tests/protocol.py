@@ -1,4 +1,5 @@
 """Black-box MCP framing, versioning, validation and workspace security tests."""
+import faulthandler
 import json
 import pathlib
 import subprocess
@@ -58,11 +59,20 @@ class ProtocolTests(unittest.TestCase):
 
     def test_dual_content_payload_ownership(self):
         worker = self.root / "payload.py"
-        worker.write_text("import json,sys\nfor line in sys.stdin:\n"
-            " r=json.loads(line)\n"
-            " v={'operations':['payload']} if r['method']=='capabilities' else "
-            "(r['params']['value'] if r['method']=='payload' else {})\n"
-            " print(json.dumps({'id':r['id'],'result':v}),flush=True)\n")
+        worker.write_text(
+            "import json, sys\n"
+            "for line in sys.stdin.buffer:\n"
+            "    request = json.loads(line)\n"
+            "    method = request['method']\n"
+            "    if method == 'capabilities':\n"
+            "        result = {'operations': ['payload']}\n"
+            "    elif method == 'payload':\n"
+            "        result = request['params']['value']\n"
+            "    else:\n"
+            "        result = {}\n"
+            "    print(json.dumps({'id': request['id'], 'result': result}), flush=True)\n",
+            encoding="utf-8",
+        )
         self.config.write_text(json.dumps({"roots": [str(self.root)],
             "engines": {"payload": [sys.executable, str(worker)]}}))
         self.restart(["--config", str(self.config)])
@@ -617,4 +627,5 @@ for line in sys.stdin:
 
 
 if __name__ == "__main__":
+    faulthandler.dump_traceback_later(60, repeat=True)
     unittest.main()

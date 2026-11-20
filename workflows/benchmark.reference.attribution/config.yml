@@ -1,0 +1,13 @@
+name: benchmark.reference.attribution
+description: Compare fresh ordinary controls with preserved baseline stage/CPU probes under the fixed schedule.
+vault: none
+docker_preflight: false
+steps:
+  - id: measure
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.context/assets/attribution.py
+  - id: audit
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.context/assets/attribution_audit.py

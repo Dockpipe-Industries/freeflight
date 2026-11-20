@@ -1,0 +1,13 @@
+name: benchmark.recovery.paths
+description: Prove lexical path reuse retains fresh checks, then screen all semantic APIs.
+vault: none
+docker_preflight: false
+steps:
+  - id: fresh-paths
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.recovery.paths/assets/proof.py
+  - id: all-operations
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.recovery.paths/assets/all_operations.py

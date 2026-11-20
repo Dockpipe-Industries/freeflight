@@ -1,0 +1,9 @@
+name: benchmark.reference.work.prepare
+description: Calibrate unprivileged process work counters before generating any reference work probe.
+vault: none
+docker_preflight: false
+steps:
+  - id: capabilities
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.work.prepare/assets/capabilities.py

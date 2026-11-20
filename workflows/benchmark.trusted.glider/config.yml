@@ -1,0 +1,9 @@
+name: benchmark.trusted.glider
+description: Compare frozen shipped FreeFlight and pinned Glider through actual MCP endpoints.
+vault: none
+docker_preflight: false
+steps:
+  - id: compare
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/glider.py

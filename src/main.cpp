@@ -99,6 +99,8 @@ int runMain(const std::vector<std::string> &argv) {
                 {"csharp", {freeflight::pathToUtf8(roslyn)}}};
         }
         freeflight::Server server(config);
+        // The writer flushes responses under outputMutex. Keep stdin reads independent.
+        std::cin.tie(nullptr);
         std::mutex outputMutex;
         auto send = [&](Json response) {
             std::lock_guard guard(outputMutex);

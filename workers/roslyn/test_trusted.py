@@ -47,6 +47,7 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
     try:
         assert call("capabilities")["result"]["fidelity"] == "trusted-msbuild"
         opened = call("open", root=str(root), project="App/App.csproj")
+        assert "result" in opened, opened
         assert opened["result"]["projects"] == 2, opened
         # Initial project documents use inert placeholders; every source must have
         # its guarded snapshot installed before the following cross-project queries.
@@ -70,13 +71,16 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
             {"code": "NU1603", "level": "Warning", "message": "Fixture depends on Example (>= 1.0.0) but Example 1.0.0 was not found. Example 1.0.1 was resolved instead."},
             {"code": "NU1903", "level": "Warning", "message": "Package Example 1.0.1 has a known high severity vulnerability, https://example.invalid/advisory"},
             {"code": "NU1701", "level": "Warning", "message": "Package Example was restored using .NETFramework instead of net10.0. This package may not be fully compatible with your project."},
+            {"code": "NU1510", "level": "Warning", "message": "PackageReference Example will not be pruned. This package is automatically available and does not need to be referenced explicitly. Remove the PackageReference item."},
         ]
         def set_logs(logs):
             data = json.loads(original_assets)
             data["logs"] = [{**entry, "libraryId": "Example", "targetGraphs": ["net10.0"]} for entry in logs]
             assets.write_text(json.dumps(data))
         set_logs(warning_logs)
-        opened = call("open", root=str(root), project="App/App.csproj")["result"]
+        response = call("open", root=str(root), project="App/App.csproj")
+        assert "result" in response, response
+        opened = response["result"]
         assert opened["selectedProject"].replace("\\", "/") == "App/App.csproj", opened
         assert opened["degradedFidelity"] is True, opened
         warnings = opened["loadWarnings"]
@@ -102,10 +106,11 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
         rejected = call("open", root=str(root), project="App/App.csproj")["error"]
         assert rejected["code"] == "project_load_failed", rejected
         # The same warning-looking text with Error severity must remain fatal.
-        set_logs([{**warning_logs[0], "level": "Error"}])
-        rejected = call("open", root=str(root), project="App/App.csproj")["error"]
-        assert rejected["code"] == "project_load_failed", rejected
-        assert "NU1603" in json.dumps(rejected) and "Error" in json.dumps(rejected), rejected
+        for warning in (warning_logs[0], warning_logs[-1]):
+            set_logs([{**warning, "level": "Error"}])
+            rejected = call("open", root=str(root), project="App/App.csproj")["error"]
+            assert rejected["code"] == "project_load_failed", rejected
+            assert warning["code"] in json.dumps(rejected) and "Error" in json.dumps(rejected), rejected
         assets.write_text(original_assets)
         # A genuine design-time MSBuild error cannot be waved through simply
         # because project objects were still returned by MSBuildWorkspace.
@@ -127,11 +132,13 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
         assets.write_text(original_assets)
         # MSBuild can promote a persisted Warning to a genuine Error according
         # to operator project policy. The original assets severity cannot override it.
-        set_logs([warning_logs[1]])
-        project.write_text(original_project.replace("</PropertyGroup>", "<MSBuildWarningsAsErrors>NU1903</MSBuildWarningsAsErrors></PropertyGroup>"))
-        rejected = call("open", root=str(root), project="App/App.csproj")["error"]
-        assert rejected["code"] == "project_load_failed", rejected
-        assert warning_logs[1]["message"] in json.dumps(rejected), rejected
+        for warning in (warning_logs[1], warning_logs[-1]):
+            set_logs([warning])
+            policy = f'<MSBuildWarningsAsErrors>{warning["code"]}</MSBuildWarningsAsErrors></PropertyGroup>'
+            project.write_text(original_project.replace("</PropertyGroup>", policy))
+            rejected = call("open", root=str(root), project="App/App.csproj")["error"]
+            assert rejected["code"] == "project_load_failed", rejected
+            assert warning["message"] in json.dumps(rejected), rejected
         project.write_text(original_project)
         assets.write_text(original_assets)
         # Removing real restore evidence justifies restore guidance; no restore
@@ -273,4 +280,4 @@ with tempfile.TemporaryDirectory(prefix="trusted-roslyn-", dir=repo / "bin/.loca
         print("Trusted MSBuild project settings, cross-project definition/references, diagnostics, refresh and boundary tests passed")
     finally:
         process.stdin.close()
-        process.wait(timeout=15)
+        assert process.wait(timeout=15) == 0, "trusted worker failed during EOF shutdown"

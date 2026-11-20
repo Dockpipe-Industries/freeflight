@@ -1,0 +1,9 @@
+name: benchmark.recovery.compare
+description: Serial handle MCP comparison, identical-binary controls and separate diagnostics.
+vault: none
+docker_preflight: false
+steps:
+  - id: compare
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/serial_compare.py

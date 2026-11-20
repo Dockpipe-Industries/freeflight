@@ -1,0 +1,9 @@
+name: benchmark.reference.reader.audit
+description: Audit complete reader screen receipts without new queries.
+vault: none
+docker_preflight: false
+steps:
+  - id: audit
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.reader.prepare/assets/audit.py

@@ -332,7 +332,7 @@ try:
     print("Roslyn semantic navigation, implementations, types, signatures, hierarchies, limits, preview, refresh, boundary, no-MSBuild, malformed input, and cancellation checks passed")
 finally:
     process.stdin.close()
-    process.wait(timeout=15)
+    assert process.wait(timeout=15) == 0, "worker failed during EOF shutdown"
 
 # Invalid raw UTF-8 is rejected deterministically instead of silently decoding as ACP
 # or replacement characters. A decoding failure closes this worker stream safely.

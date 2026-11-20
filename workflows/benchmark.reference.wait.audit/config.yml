@@ -1,0 +1,9 @@
+name: benchmark.reference.wait.audit
+description: Audit the fixed-cycle reference wait-placement receipts without new requests.
+vault: none
+docker_preflight: false
+steps:
+  - id: audit
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.context/assets/wait_audit.py

@@ -1,0 +1,17 @@
+name: benchmark.evidence.check
+description: Verify compact Git evidence and archival contract tests without original build trees.
+vault: none
+docker_preflight: false
+steps:
+  - id: contract-tests
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.evidence/assets/test_evidence.py
+  - id: verify
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.evidence/assets/evidence.py verify
+  - id: reconstruct
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.evidence/assets/reconstruct.py

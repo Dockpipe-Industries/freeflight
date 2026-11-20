@@ -1,0 +1,9 @@
+name: integration.go
+description: Qualify optional gopls navigation through the FreeFlight MCP endpoint.
+vault: none
+docker_preflight: false
+steps:
+  - id: go-navigation
+    kind: host
+    cwd: repo
+    cmd: python3 -B tests/go_navigation.py -v

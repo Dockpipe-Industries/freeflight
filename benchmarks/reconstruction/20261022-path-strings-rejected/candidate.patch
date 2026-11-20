@@ -1,0 +1,78 @@
+diff --git a/workers/roslyn/Program.cs b/workers/roslyn/Program.cs
+index cbc786a..f15b48a 100644
+--- a/workers/roslyn/Program.cs
++++ b/workers/roslyn/Program.cs
+@@ -141,6 +141,8 @@ internal sealed class SourceEngine : IDisposable
+ {
+     private ResourcePolicy resources = new();
+     private readonly List<FileInfo> trustedPaths = [];
++    // Lexical strings only, bounded by the admitted graph; never cached attributes.
++    private readonly Dictionary<string, string[]> trustedValidationParents = new(StringComparer.Ordinal);
+     private readonly Dictionary<string, Dictionary<string, string>> trustedDirectoryMembers = new(StringComparer.Ordinal);
+     private readonly Dictionary<string, FileSnapshot> snapshots = new(StringComparer.Ordinal);
+     private readonly ConcurrentDictionary<string, long> dirtyFiles = new(StringComparer.Ordinal);
+@@ -287,6 +289,7 @@ internal sealed class SourceEngine : IDisposable
+             workspace.ClearSolution();
+             documents.Clear();
+             trustedPaths.Clear();
++            trustedValidationParents.Clear();
+             trustedPathIndex.Clear();
+             committedBytes = 0;
+             recoveredGeneration = -1;
+@@ -342,6 +345,7 @@ internal sealed class SourceEngine : IDisposable
+                 }
+                 projectId = workspace.CurrentSolution.ProjectIds[0];
+                 await Refresh(token);
++                BuildTrustedValidationParents();
+                 // Compilation is now safe to inspect: all source text came through
+                 // the bounded snapshot reader, and analyzer/generator references
+                 // were removed. A partial graph without core types is not usable.
+@@ -784,7 +788,47 @@ internal sealed class SourceEngine : IDisposable
+         return CheckPath(full);
+     }
+ 
+-    private string CheckPath(string path) => CheckPath(path, null, null);
++    private void BuildTrustedValidationParents()
++    {
++        // First Refresh has already admitted the bounded graph. Share each
++        // directory's immutable prefix strings across its files; retain no stat data.
++        var directories = new Dictionary<string, string[]>(StringComparer.Ordinal);
++        foreach (var info in trustedPaths)
++        {
++            if (externalCompilerInputs.Contains(info.FullName)) continue;
++            var parent = Path.GetDirectoryName(info.FullName)!;
++            if (!directories.TryGetValue(parent, out var prefixes))
++            {
++                var relative = Path.GetRelativePath(root!, parent);
++                if (relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, PathComparison) || Path.IsPathRooted(relative))
++                    throw new UnauthorizedAccessException("Path escapes workspace");
++                var parts = new List<string>();
++                var current = root!;
++                if (relative != ".")
++                    foreach (var segment in relative.Split(Path.DirectorySeparatorChar))
++                    {
++                        current = Path.Combine(current, segment);
++                        parts.Add(current);
++                    }
++                directories.Add(parent, prefixes = parts.ToArray());
++            }
++            trustedValidationParents.Add(info.FullName, prefixes);
++        }
++    }
++
++    private string CheckPath(string path)
++    {
++        // Exact canonical graph keys only. Alternate spellings and arbitrary
++        // requests retain the original normalization and containment checks.
++        if (!trustedValidationParents.TryGetValue(path, out var parents))
++            return CheckPath(path, null, null);
++        foreach (var parent in parents)
++            if ((File.GetAttributes(parent) & FileAttributes.ReparsePoint) != 0)
++                throw new UnauthorizedAccessException("Symlink/reparse paths are not supported");
++        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
++            throw new UnauthorizedAccessException("Symlink/reparse paths are not supported");
++        return path;
++    }
+ 
+     // Only canonical workspace keys admitted at trusted open reach this helper.
+     // Reuse lexical identity, never filesystem authority: validate each parent

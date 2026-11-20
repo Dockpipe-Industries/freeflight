@@ -1,0 +1,9 @@
+name: benchmark.evidence
+description: Capture bounded lossless benchmark evidence; no builds, uploads or source deletion.
+vault: none
+docker_preflight: false
+steps:
+  - id: capture
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.evidence/assets/evidence.py capture

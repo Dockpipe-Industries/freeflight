@@ -1,0 +1,13 @@
+name: benchmark.response.copies.context
+description: Correlate pacing, worker and core costs with source and identical-binary controls.
+vault: none
+docker_preflight: false
+steps:
+  - id: measure
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.response.copies.prepare/assets/context.py
+  - id: audit
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.response.copies.prepare/assets/context_audit.py

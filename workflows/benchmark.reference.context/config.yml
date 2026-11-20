@@ -1,0 +1,13 @@
+name: benchmark.reference.context
+description: Isolate baseline reference position and predecessor observations with complete query-order blocks.
+vault: none
+docker_preflight: false
+steps:
+  - id: measure
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.context/assets/run.py
+  - id: audit
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.context/assets/audit.py

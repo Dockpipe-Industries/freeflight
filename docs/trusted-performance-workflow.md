@@ -152,3 +152,5 @@ Recovery requires complete passed raw measurements and no existing summary; it
 verifies source binaries/fixtures and records a separate recovery receipt. It does
 not restart processes or overwrite original provenance. Other failed measurements
 require a new label and investigation rather than summary-only recovery.
+
+For the published-product comparison through MCP, see [Glider head-to-head](glider-head-to-head.md).

@@ -1,0 +1,9 @@
+name: benchmark.recovery.buffer
+description: Prove pinned Roslyn text ownership before accepting request-local buffer reuse.
+vault: none
+docker_preflight: false
+steps:
+  - id: ownership
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/buffer_tests.py

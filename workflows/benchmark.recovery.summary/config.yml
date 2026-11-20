@@ -1,0 +1,9 @@
+name: benchmark.recovery.summary
+description: Retain every serial handle candidate/control sample and join separate diagnostics.
+vault: none
+docker_preflight: false
+steps:
+  - id: summarize
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/serial_summary.py

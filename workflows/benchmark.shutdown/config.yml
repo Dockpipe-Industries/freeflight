@@ -1,0 +1,9 @@
+name: benchmark.shutdown
+description: Deterministic cancellation/disposal race proof against pinned before and local after sources.
+vault: none
+docker_preflight: false
+steps:
+  - id: prove
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/shutdown_tests.py

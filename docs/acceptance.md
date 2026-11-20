@@ -877,3 +877,10 @@ and [updated handoff](performance-handoff.md). Unrelated local edits remain unto
   and the existing C#/TS MCP integration passed. Hosted Codex comparison,
   cross-platform qualification and bundle provisioning remain open.
   See [navigation results](go-navigation.md).
+
+### Staging promotion audit repair
+
+The local official MCP client suite and all three locked npm audits passed.
+The pinned nginx/Alpine image served the local fixture under the hardened
+runtime profile and passed the high/critical Trivy audit. Hosted Qt/Wasm images
+and the exact promotion candidate require their separate CI results.

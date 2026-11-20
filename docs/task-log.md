@@ -1612,3 +1612,17 @@ safe-source suite with the prebuilt worker, and the C#/TS MCP integration
 passed on Linux. Node-to-Node stdio checks used an isolated namespace with
 local socketpairs available. See the [worker guide](../workers/lsp/README.md)
 and [benchmark report](go-navigation.md).
+
+### Staging promotion audit repair
+
+The November 19 promotion run failed the locked MCP client dependency audit.
+Refreshed four transitive entries within the existing official SDK dependency
+ranges. The official client MCP checks passed and npm reported zero findings in
+the client, site tooling and TypeScript production graphs.
+
+Pinned the upstream nginx 1.31.7 Alpine image and exact signed Alpine package
+updates for the serving container. A local Linux x86-64 image built from the
+serving Dockerfile passed health, asset byte and staging robots header checks
+as UID 101 with a read-only root filesystem. Trivy 0.76.0 found zero high or
+critical vulnerabilities in that saved test image. Hosted CI qualifies both
+actual Qt/Wasm site images separately.

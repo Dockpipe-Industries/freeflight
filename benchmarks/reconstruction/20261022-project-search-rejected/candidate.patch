@@ -1,0 +1,49 @@
+diff --git a/workers/roslyn/SemanticQueries.cs b/workers/roslyn/SemanticQueries.cs
+index 0107b1d..ff68d3e 100644
+--- a/workers/roslyn/SemanticQueries.cs
++++ b/workers/roslyn/SemanticQueries.cs
+@@ -50,11 +50,42 @@ internal static class SemanticQueries
+     public static async Task<object> WorkspaceSymbols(Solution solution, string query, CancellationToken token)
+     {
+         if (query.Length is < 1 or > 256) throw new ArgumentException("query must contain 1 to 256 characters");
+-        var symbols = await SymbolFinder.FindSourceDeclarationsAsync(solution,
+-            name => name.Contains(query, StringComparison.OrdinalIgnoreCase), SymbolFilter.TypeAndMember, token);
++        var symbols = await FindProjectDeclarations(solution, query, token);
+         return Ordered(symbols, token).Where(symbol => !symbol.IsImplicitlyDeclared).Select(Item).ToArray();
+     }
+ 
++    private static async Task<IEnumerable<ISymbol>> FindProjectDeclarations(Solution solution,
++        string query, CancellationToken token)
++    {
++        Func<string, bool> predicate = name => name.Contains(query, StringComparison.OrdinalIgnoreCase);
++        if (solution.ProjectIds.Count < 2)
++            return await SymbolFinder.FindSourceDeclarationsAsync(solution, predicate, SymbolFilter.TypeAndMember, token);
++        var found = new List<ISymbol>();
++        // The pinned solution API performs these same project queries serially.
++        // Bound parallel work to two immutable project views; retain every query,
++        // original project order, and the final exact-result sorting/limit below.
++        for (var offset = 0; offset < solution.ProjectIds.Count; offset += 2)
++        {
++            token.ThrowIfCancellationRequested();
++            var batch = solution.ProjectIds.Skip(offset).Take(2).Select(id =>
++            {
++                var project = solution.GetProject(id)!;
++                return Task.Run(() => SymbolFinder.FindSourceDeclarationsAsync(project, predicate, SymbolFilter.TypeAndMember, token), token);
++            }).ToArray();
++            try { await Task.WhenAll(batch); }
++            catch
++            {
++                // All started queries have drained. Report the earliest failed
++                // project in original order rather than completion/race order.
++                foreach (var task in batch)
++                    if (!task.IsCompletedSuccessfully) await task;
++                throw;
++            }
++            foreach (var task in batch) found.AddRange(await task);
++        }
++        return found;
++    }
++
+     public static object TypeInfo(SemanticModel model, SyntaxNode syntax, int position, ISymbol? symbol, CancellationToken token)
+     {
+         var node = syntax.FindToken(Math.Min(position, Math.Max(0, syntax.FullSpan.End - 1))).Parent;

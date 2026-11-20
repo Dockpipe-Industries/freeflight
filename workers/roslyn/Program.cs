@@ -25,14 +25,46 @@ internal static class Program
             detectEncodingFromByteOrderMarks: false, bufferSize: 4096, leaveOpen: true);
         using var output = new StreamWriter(Console.OpenStandardOutput(), utf8,
             bufferSize: 4096, leaveOpen: true) { AutoFlush = true, NewLine = "\n" };
-        if (commandLine.Any(argument => argument != "--trusted-msbuild"))
-            throw new ArgumentException("Only --trusted-msbuild is accepted");
+        if (commandLine.Any(argument => argument != "--trusted-msbuild" && argument != "--incremental-validation" && argument != "--background-recovery"))
+            throw new ArgumentException("Only --trusted-msbuild, --incremental-validation and --background-recovery are accepted");
         var trustedMsbuild = commandLine.Contains("--trusted-msbuild", StringComparer.Ordinal);
         if (trustedMsbuild)
             Console.Error.WriteLine("WARNING: trusted MSBuild mode can execute repository code during project evaluation. This process is not a sandbox. No restore or production build is requested.");
-        using var engine = new SourceEngine(trustedMsbuild);
+        using var engine = new SourceEngine(trustedMsbuild, commandLine.Contains("--incremental-validation", StringComparer.Ordinal));
         using var gate = new SemaphoreSlim(1);
-        var active = new ConcurrentDictionary<string, CancellationTokenSource>();
+        var backgroundRecovery = commandLine.Contains("--background-recovery", StringComparer.Ordinal);
+        if (backgroundRecovery && !OperatingSystem.IsMacOS())
+            throw new PlatformNotSupportedException("Experimental background recovery is qualified only on macOS");
+        if (backgroundRecovery && !commandLine.Contains("--incremental-validation", StringComparer.Ordinal))
+            throw new ArgumentException("Background recovery requires incremental validation");
+        using var lifetime = new CancellationTokenSource();
+        var active = new ConcurrentDictionary<string, RequestCancellation>();
+        var maintenance = backgroundRecovery ? Task.Run(async () =>
+        {
+            try
+            {
+                while (true)
+                {
+                    await Task.Delay(1000, lifetime.Token);
+                    await gate.WaitAsync(lifetime.Token);
+                    try
+                    {
+                        await engine.RecoverInBackground(lifetime.Token, async () =>
+                        {
+                            if (active.IsEmpty) return;
+                            gate.Release();
+                            await Task.Yield();
+                            // Always reacquire ownership, even after cancellation;
+                            // the outer finally must never release an unowned gate.
+                            await gate.WaitAsync();
+                            lifetime.Token.ThrowIfCancellationRequested();
+                        });
+                    }
+                    finally { gate.Release(); }
+                }
+            }
+            catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        }) : Task.CompletedTask;
         var jobs = new List<Task>();
         var outputGate = new object();
         void Reply(object value)
@@ -67,7 +99,7 @@ internal static class Program
                 if (method == "shutdown") break;
                 if (active.Count >= 32) throw new InvalidOperationException("Worker request queue is full");
                 var key = id.GetRawText();
-                var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+                var cts = new RequestCancellation(TimeSpan.FromSeconds(60));
                 if (!active.TryAdd(key, cts)) { cts.Dispose(); throw new ArgumentException("Duplicate request id"); }
                 jobs.RemoveAll(t => t.IsCompleted);
                 jobs.Add(Task.Run(async () =>
@@ -88,7 +120,8 @@ internal static class Program
             catch (Exception ex) { Reply(new { id, error = new { message = ex.Message } }); }
         }
         foreach (var cancellation in active.Values) cancellation.Cancel();
-        await Task.WhenAll(jobs);
+        lifetime.Cancel();
+        await Task.WhenAll(jobs.Append(maintenance));
     }
 
     private static string? ReadBoundedLine(TextReader reader, int limit)
@@ -108,12 +141,14 @@ internal sealed class SourceEngine : IDisposable
 {
     private ResourcePolicy resources = new();
     private readonly List<FileInfo> trustedPaths = [];
+    private readonly Dictionary<string, Dictionary<string, string>> trustedDirectoryMembers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, FileSnapshot> snapshots = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, long> dirtyFiles = new(StringComparer.Ordinal);
     private FileSystemWatcher? watcher;
     private long invalidationGeneration;
     private long changeSequence;
     private long bytesRead;
+    private long readFiles;
     private long reusedSnapshots;
     private sealed record FileSnapshot(long Length, long Modified, long Dirty, long Generation, long ValidatedAt, string Parent);
 
@@ -160,8 +195,56 @@ internal sealed class SourceEngine : IDisposable
     private readonly HashSet<string> externalCompilerInputs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<DocumentId>> externalDocuments = new(StringComparer.Ordinal);
     private readonly bool trustedMsbuild;
+    private readonly bool incrementalValidation;
+    private readonly Dictionary<string, FileInfo> trustedPathIndex = new(StringComparer.Ordinal);
+    private long committedBytes;
+    private long recoveredGeneration = -1;
+    private long recoveredAt;
+    private long fullRecoveries;
+    private long incrementalRefreshes;
+    private bool backgroundReady;
+    private bool backgroundReading;
+    private Func<Task>? backgroundYield;
+    private long refreshRevision;
+    private long backgroundAborts;
+    private sealed class BackgroundSupersededException : Exception { }
+    private long backgroundAttempts;
+    private long backgroundFailures;
+    private string? backgroundLastError;
+
+    // Called only while owning the same gate as Invoke. No concurrent engine
+    // mutation, speculative content, relaxed deadline or partial publication.
+    public async Task RecoverInBackground(CancellationToken token, Func<Task>? yield = null)
+    {
+        if (!backgroundReady || !incrementalValidation || Environment.TickCount64 - recoveredAt < 4000) return;
+        backgroundAttempts++;
+        try
+        {
+            backgroundReading = true;
+            backgroundYield = yield;
+            await Refresh(token, forceAll: true);
+            backgroundLastError = null;
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+        catch (BackgroundSupersededException) { backgroundAborts++; }
+        catch (Exception error)
+        {
+            backgroundFailures++;
+            backgroundLastError = error.Message;
+            // Never let an unsuccessful speculative sweep authorize a response.
+            // Keep the committed solution/time untouched and require foreground recovery.
+            recoveredGeneration = -1;
+        }
+        finally { backgroundReading = false; backgroundYield = null; }
+    }
     private string Mode => trustedMsbuild ? "trusted-msbuild" : "safe-source";
-    public SourceEngine(bool trustedMsbuild) => this.trustedMsbuild = trustedMsbuild;
+    public SourceEngine(bool trustedMsbuild, bool incrementalValidation = false)
+    {
+        if (incrementalValidation && !trustedMsbuild)
+            throw new ArgumentException("Incremental validation requires trusted MSBuild mode");
+        this.trustedMsbuild = trustedMsbuild;
+        this.incrementalValidation = incrementalValidation;
+    }
     private string? selectedProject;
     private List<LoadWarning> loadWarnings = [];
     private ProjectId? projectId;
@@ -171,7 +254,7 @@ internal sealed class SourceEngine : IDisposable
 
     public async Task<object> Invoke(string method, JsonElement args, CancellationToken token)
     {
-        if (method != "open" && new[] { "mode", "project", "trustedMsbuild", "trusted-msbuild", "csharp" }.Any(name => args.TryGetProperty(name, out _)))
+        if (method != "open" && new[] { "mode", "project", "trustedMsbuild", "trusted-msbuild", "csharp", "incrementalValidation", "incremental-validation", "backgroundRecovery", "background-recovery" }.Any(name => args.TryGetProperty(name, out _)))
             throw new ArgumentException("Project selection and trust cannot be changed by semantic requests");
         if (method != "open" && args.TryGetProperty("resources", out _))
             throw new ArgumentException("Resource settings may only be supplied by the core when opening a workspace");
@@ -186,10 +269,13 @@ internal sealed class SourceEngine : IDisposable
             loadWarnings,
             degradedFidelity = !trustedMsbuild || loadWarnings.Count > 0,
             edits = "preview-only",
-            refreshStats = new { bytesRead, reusedSnapshots, invalidationGeneration }
+            validationMode = incrementalValidation ? "incremental-with-recovery" : "strict",
+            refreshStats = new { bytesRead, readFiles, reusedSnapshots, invalidationGeneration, fullRecoveries, incrementalRefreshes, backgroundAttempts, backgroundFailures, backgroundLastError, backgroundAborts }
         };
         if (method == "open")
         {
+            backgroundReady = false;
+            refreshRevision++;
             var requested = Path.GetFullPath(args.GetProperty("root").GetString() ?? throw new ArgumentException("root is required"));
             if (!Directory.Exists(requested)) throw new DirectoryNotFoundException(requested);
             if (args.TryGetProperty("mode", out var mode) && mode.GetString() != Mode)
@@ -201,6 +287,11 @@ internal sealed class SourceEngine : IDisposable
             workspace.ClearSolution();
             documents.Clear();
             trustedPaths.Clear();
+            trustedPathIndex.Clear();
+            committedBytes = 0;
+            recoveredGeneration = -1;
+            recoveredAt = 0;
+            trustedDirectoryMembers.Clear();
             fingerprints.Clear();
             projectId = null;
             selectedProject = null;
@@ -240,6 +331,15 @@ internal sealed class SourceEngine : IDisposable
                 foreach (var entry in loadedDocuments) documents.Add(entry.Key, entry.Value);
                 trustedPaths.AddRange(documents.Keys.Select(path => new FileInfo(path)));
                 trustedPaths.Sort((left, right) => StringComparer.Ordinal.Compare(left.FullName, right.FullName));
+                foreach (var info in trustedPaths) trustedPathIndex.Add(info.FullName, info);
+                foreach (var info in trustedPaths)
+                {
+                    if (externalCompilerInputs.Contains(info.FullName)) continue;
+                    var parent = Path.GetDirectoryName(info.FullName)!;
+                    if (!trustedDirectoryMembers.TryGetValue(parent, out var members))
+                        trustedDirectoryMembers[parent] = members = new(StringComparer.Ordinal);
+                    members.Add(info.Name, info.FullName);
+                }
                 projectId = workspace.CurrentSolution.ProjectIds[0];
                 await Refresh(token);
                 // Compilation is now safe to inspect: all source text came through
@@ -252,6 +352,7 @@ internal sealed class SourceEngine : IDisposable
                         throw new ProjectLoadException("project_load_failed", "Project graph cannot resolve System.Object: " + project.Name,
                             selectedProject, "Inspect the installed targeting packs and required references; the partial graph is not usable.");
                 }
+                backgroundReady = true;
                 return new
                 {
                     root,
@@ -370,13 +471,62 @@ internal sealed class SourceEngine : IDisposable
         }
     }
 
+    // The pinned Darwin runtime queues a synchronous read for ReadAsync; it checks
+    // cancellation before that read and does not interrupt an in-flight syscall.
+    // Invoke already runs on a worker task, so avoid a second work item per chunk.
+    // Keep the same bounded read, pre-read token check and subsequent accounting /
+    // cancellation checks. External inputs and other platforms retain ReadAsync.
+    private static ValueTask<int> ReadCompilerBytes(FileStream stream, byte[] buffer, CancellationToken token, bool inline)
+    {
+        if (!inline) return stream.ReadAsync(buffer.AsMemory(), token);
+        token.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(stream.Read(buffer, 0, buffer.Length));
+    }
+
+    // The catalogue is immutable until reopen. Unknown paths may be directories,
+    // project membership changes or aliases: recover conservatively rather than
+    // guessing whether their descendants can affect an existing compilation.
+    private List<FileInfo> SelectIncrementalFiles(KeyValuePair<string, long>[] changes,
+        string? forceFile, ref bool recover, CancellationToken token)
+    {
+        if (recover) return trustedPaths;
+        var selected = new HashSet<string>(externalCompilerInputs, StringComparer.Ordinal);
+        if (forceFile is not null)
+        {
+            if (!trustedPathIndex.ContainsKey(forceFile))
+                throw new ArgumentException("File is not in the C# workspace");
+            selected.Add(forceFile);
+        }
+        foreach (var change in changes)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!trustedPathIndex.ContainsKey(change.Key))
+            {
+                recover = true;
+                return trustedPaths;
+            }
+            selected.Add(change.Key);
+        }
+        return selected.Order(StringComparer.Ordinal).Select(path => trustedPathIndex[path]).ToList();
+    }
+
     private async Task Refresh(CancellationToken token, string? forceFile = null, bool forceAll = false)
     {
+        var startRevision = refreshRevision;
+        var recoveryStarted = Environment.TickCount64;
+        var startGeneration = Interlocked.Read(ref invalidationGeneration);
+        var changes = incrementalValidation ? dirtyFiles.ToArray() : [];
+        var recover = incrementalValidation && (forceAll || watcher is null ||
+            recoveredGeneration != startGeneration || recoveryStarted - recoveredAt >= 5000);
+        var selectedFiles = incrementalValidation
+            ? SelectIncrementalFiles(changes, forceFile, ref recover, token) : null;
+        // Every selected incremental input is read, including exact external inputs.
+        // A recovery is a content sweep even when length and timestamps match.
         // Admission-only sharing within this trusted refresh. Content reads below
         // always revalidate the complete path without using this set.
         var checkedAncestors = trustedMsbuild && !forceAll && watcher is not null
             ? new HashSet<string>(StringComparer.Ordinal) : null;
-        var files = trustedMsbuild ? trustedPaths : new List<FileInfo>();
+        var files = selectedFiles ?? (trustedMsbuild ? trustedPaths : new List<FileInfo>());
         var pending = new Stack<string>();
         if (!trustedMsbuild) pending.Push(root!);
         long bytes = 0;
@@ -404,8 +554,14 @@ internal sealed class SourceEngine : IDisposable
                 files.Add(new FileInfo(path));
             }
         }
-        ResourcePolicy.Check("maxFiles", root!, root!, files.Count, resources.MaxFiles);
+        ResourcePolicy.Check("maxFiles", root!, root!, trustedMsbuild ? trustedPaths.Count : files.Count, resources.MaxFiles);
         bytes = 0; // Count actual bytes again; stat values can change during a read.
+        if (incrementalValidation && !recover)
+        {
+            bytes = committedBytes;
+            foreach (var info in files)
+                if (snapshots.TryGetValue(info.FullName, out var old)) bytes -= old.Length;
+        }
         if (!trustedMsbuild) files.Sort((left, right) => StringComparer.Ordinal.Compare(left.FullName, right.FullName));
         var solution = workspace.CurrentSolution;
         // Trusted membership changes only on reopen. Stage only refreshed entries;
@@ -425,25 +581,38 @@ internal sealed class SourceEngine : IDisposable
             }
         }
         byte[]? readBuffer = null;
+        using var metadataBatch = OperatingSystem.IsMacOS() && checkedAncestors is not null &&
+            (!incrementalValidation || recover)
+            ? new DarwinMetadataBatch(trustedDirectoryMembers, resources.MaxDirectoryEntries, path => CheckPath(path)) : null;
         foreach (var info in files)
         {
+            if (backgroundReading && backgroundYield is not null)
+            {
+                // No input handle is live at this boundary. Foreground reads use
+                // their ordinary mode while the private background transaction waits.
+                backgroundReading = false;
+                try { await backgroundYield(); }
+                finally { backgroundReading = true; }
+                if (startRevision != refreshRevision) throw new BackgroundSupersededException();
+            }
             token.ThrowIfCancellationRequested();
             var file = info.FullName;
             snapshots.TryGetValue(file, out var cached);
+            DarwinMetadataBatch.Metadata? batchMetadata = null;
             if (checkedAncestors is not null && !externalCompilerInputs.Contains(file))
-                CheckSnapshotPath(file, checkedAncestors, info, cached?.Parent);
+                batchMetadata = CheckSnapshotPath(file, checkedAncestors, info, cached?.Parent, metadataBatch, token);
             else
             {
                 CheckCompilerInput(file);
                 info.Refresh();
             }
-            var length = info.Length;
-            var modified = info.LastWriteTimeUtc.Ticks;
+            var length = batchMetadata?.Length ?? info.Length;
+            var modified = batchMetadata?.Modified ?? info.LastWriteTimeUtc.Ticks;
             var generation = Interlocked.Read(ref invalidationGeneration);
             var dirty = dirtyFiles.GetValueOrDefault(file);
             var now = Environment.TickCount64;
             ResourcePolicy.Check("maxFileBytes", root!, file, length, resources.MaxFileBytes);
-            if (!forceAll && !string.Equals(file, forceFile, PathComparison) && watcher is not null &&
+            if (!incrementalValidation && !forceAll && !string.Equals(file, forceFile, PathComparison) && watcher is not null &&
                 cached is not null && cached.Length == length && cached.Modified == modified &&
                 cached.Generation == generation && cached.Dirty == dirty && now - cached.ValidatedAt < 5000 &&
                 documents.ContainsKey(file))
@@ -455,15 +624,18 @@ internal sealed class SourceEngine : IDisposable
             }
             // Cached ancestor checks authorize snapshot admission, never a read.
             // Preserve full validation immediately before opening source bytes.
-            if (checkedAncestors is not null && !externalCompilerInputs.Contains(file))
+            if (incrementalValidation)
+                CheckCompilerInput(file);
+            else if (checkedAncestors is not null && !externalCompilerInputs.Contains(file))
                 CheckPath(file);
             // Bounded read even when the file grows after enumeration.
             using var stream = OpenCompilerInput(file);
+            readFiles++;
             using var memory = new MemoryStream();
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             var buffer = readBuffer ??= new byte[8192];
             int count;
-            while ((count = await stream.ReadAsync(buffer.AsMemory(), token)) != 0)
+            while ((count = await ReadCompilerBytes(stream, buffer, token, OperatingSystem.IsMacOS() && !externalCompilerInputs.Contains(file))) != 0)
             {
                 ResourcePolicy.Check("maxFileBytes", root!, file, memory.Length + count, resources.MaxFileBytes);
                 bytes += count;
@@ -497,6 +669,8 @@ internal sealed class SourceEngine : IDisposable
                     solution = solution.WithDocumentText(id, source);
         }
         token.ThrowIfCancellationRequested();
+        if (incrementalValidation && startGeneration != Interlocked.Read(ref invalidationGeneration))
+            throw new IOException("Watcher invalidated during refresh; full recovery remains required");
         if (!ReferenceEquals(solution, workspace.CurrentSolution) && !workspace.TryApplyChanges(solution)) throw new InvalidOperationException("Could not update workspace");
         if (!trustedMsbuild)
         {
@@ -506,7 +680,26 @@ internal sealed class SourceEngine : IDisposable
             fingerprints.Clear();
         }
         foreach (var entry in nextSnapshots) snapshots[entry.Key] = entry.Value;
+        var contentChanged = (backgroundReading || backgroundYield is not null) &&
+            ((incrementalValidation && recover && !backgroundReading) ||
+             nextFingerprints.Any(entry => !fingerprints.TryGetValue(entry.Key, out var old) || old != entry.Value));
         foreach (var entry in nextFingerprints) fingerprints[entry.Key] = entry.Value;
+        if (contentChanged) refreshRevision++;
+        if (incrementalValidation)
+        {
+            committedBytes = bytes;
+            if (recover)
+            {
+                recoveredAt = recoveryStarted;
+                recoveredGeneration = startGeneration;
+                fullRecoveries++;
+            }
+            else incrementalRefreshes++;
+            // Acknowledge only captured versions after successful publication.
+            // Concurrent events, failed/cancelled work and overflow remain pending.
+            foreach (var change in changes)
+                ((ICollection<KeyValuePair<string, long>>)dirtyFiles).Remove(change);
+        }
     }
 
     // Only documents returned by the explicitly trusted MSBuild graph may enter
@@ -558,6 +751,10 @@ internal sealed class SourceEngine : IDisposable
 
     private FileStream OpenCompilerInput(string path)
     {
+        if (backgroundReading)
+            return DarwinSourceHandle.Open(path,
+                externalCompilerInputs.Contains(path) ? Path.GetPathRoot(path)! : root!,
+                () => throw new IOException("Background handle admission failed; foreground recovery required"));
         if (!externalCompilerInputs.Contains(path) || OperatingSystem.IsWindows())
             return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         // A declared FIFO must not block open before cancellation can be observed.
@@ -592,7 +789,7 @@ internal sealed class SourceEngine : IDisposable
     // Only canonical workspace keys admitted at trusted open reach this helper.
     // Reuse lexical identity, never filesystem authority: validate each parent
     // once per request and every leaf afresh. Reads still call uncached CheckPath.
-    private void CheckSnapshotPath(string file, HashSet<string> checkedAncestors, FileInfo info, string? knownParent)
+    private DarwinMetadataBatch.Metadata? CheckSnapshotPath(string file, HashSet<string> checkedAncestors, FileInfo info, string? knownParent, DarwinMetadataBatch? batch, CancellationToken token)
     {
         var parent = knownParent ?? Path.GetDirectoryName(file)!;
         if (!checkedAncestors.Contains(parent))
@@ -600,11 +797,13 @@ internal sealed class SourceEngine : IDisposable
             CheckPath(parent, checkedAncestors, null);
             checkedAncestors.Add(parent);
         }
+        if (batch is not null && batch.TryGet(file, parent, token, out var metadata)) return metadata;
         // The object is reusable, its metadata is not. Refresh only after the
         // parent path is admitted, before any attribute/length/mtime is consumed.
         info.Refresh();
         if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
             throw new UnauthorizedAccessException("Symlink/reparse paths are not supported");
+        return null;
     }
 
     private string CheckPath(string path, HashSet<string>? checkedAncestors, FileInfo? leafInfo)

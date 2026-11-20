@@ -26,18 +26,19 @@ def summary(values):
 
 
 class Session:
-    def __init__(self, root, directory, installation=REPO, *, engines=None, configuration=None, sample_memory=True):
+    def __init__(self, root, directory, installation=REPO, *, engines=None, configuration=None, sample_memory=True, command=None, environment=None, standard_mcp=False, working_directory=None):
         binary = installation / 'bin/.local/build/freeflight'
         if not binary.exists():
             binary = installation / 'bin/.local/build/Release/freeflight.exe'
         self.binary = binary
         node, dotnet = shutil.which('node'), shutil.which('dotnet')
-        assert dotnet and (engines is not None or node) and binary.is_file(), 'Run DockPipe build before benchmarking'
+        assert command is not None or (dotnet and (engines is not None or node) and binary.is_file()), 'Run DockPipe build before benchmarking'
         config = directory / 'freeflight.json'
         config.write_text(json.dumps({'roots': [str(root)], **(configuration or {}), 'engines': engines if engines is not None else {
             'typescript': [node, str(installation / 'bin/.local/typescript/worker.mjs')],
             'csharp': [dotnet, str(installation / 'bin/.local/roslyn/bin/FreeFlight.Roslyn/debug/FreeFlight.Roslyn.dll')]
         }}))
+        self.meta = META if not standard_mcp else {**META, "io.modelcontextprotocol/protocolVersion": "2025-11-25"}
         self.sample_memory = sample_memory
         self.root = root
         self.sequence = 0
@@ -46,13 +47,16 @@ class Session:
         self.stop = threading.Event()
         self.stderr = (directory / 'server.stderr.log').open('w')
         self.started = time.perf_counter()
-        self.process = subprocess.Popen([str(binary), '--config', str(config)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.stderr, text=True, start_new_session=os.name != 'nt')
+        self.process = subprocess.Popen(command or [str(binary), '--config', str(config)], env=environment, cwd=working_directory, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.stderr, text=True, start_new_session=os.name != 'nt')
         self.reader = threading.Thread(target=self.read_responses, daemon=True)
         self.reader.start()
         self.monitor = threading.Thread(target=self.sample_rss, daemon=True)
         self.monitor.start()
         try:
-            self.request('server/discover', {})
+            if standard_mcp:
+                self.server_info = self.request('initialize', {'protocolVersion': '2025-11-25', 'capabilities': {}, 'clientInfo': {'name': 'freeflight-comparison', 'version': '1'}})
+                self.process.stdin.write(json.dumps({'jsonrpc': '2.0', 'method': 'notifications/initialized'})+'\n'); self.process.stdin.flush()
+            else: self.server_info = self.request('server/discover', {})
         except Exception:
             self.close()
             raise
@@ -85,11 +89,15 @@ class Session:
 
     def request(self, method, params):
         self.sequence += 1
-        self.process.stdin.write(json.dumps({'jsonrpc': '2.0', 'id': self.sequence, 'method': method, 'params': {**params, '_meta': META}}) + '\n')
+        self.process.stdin.write(json.dumps({'jsonrpc': '2.0', 'id': self.sequence, 'method': method, 'params': {**params, '_meta': self.meta}}) + '\n')
         self.process.stdin.flush()
-        response = self.responses.get(timeout=120)
-        assert response is not None, 'MCP server closed before response'
-        response = json.loads(response)
+        deadline=time.monotonic()+120
+        while True:
+            response = self.responses.get(timeout=max(0.01,deadline-time.monotonic()))
+            assert response is not None, 'MCP server closed before response'
+            response = json.loads(response)
+            if 'id' in response: break
+            assert response.get('method'), response
         assert response.get('id') == self.sequence and 'error' not in response, response
         assert not response['result'].get('isError'), response
         return response['result']

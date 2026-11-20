@@ -1,0 +1,13 @@
+name: benchmark.definition.cost
+description: Correlate generated direct-worker and MCP definition boundary costs.
+vault: none
+docker_preflight: false
+steps:
+  - id: profile
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.definition.cost/assets/measure.py
+  - id: summarize
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.definition.cost/assets/summary.py

@@ -1,0 +1,13 @@
+name: benchmark.response.copies.ordinary
+description: Compare ordinary frozen cores with actual gaps, matched sessions and same-binary controls.
+vault: none
+docker_preflight: false
+steps:
+  - id: measure
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.response.copies.prepare/assets/ordinary.py
+  - id: audit
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.response.copies.prepare/assets/ordinary_audit.py

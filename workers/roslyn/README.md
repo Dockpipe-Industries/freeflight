@@ -243,10 +243,10 @@ does not supply every older target's reference assemblies.
 
 Roslyn's public workspace diagnostic can lose the underlying MSBuild warning
 severity ([upstream issue 75182](https://github.com/dotnet/roslyn/issues/75182)).
-An isolated restored fixture with NU1603/NU1903/NU1701 Warning entries reproduces
+An isolated restored fixture with NU1510/NU1603/NU1903/NU1701 Warning entries reproduces
 this on the pinned 5.9.0 worker. Recovery requires the exact diagnostic message and
 project path to match a bounded, project-bound assets-file Warning record
-for one of those three codes. No substring-based blanket Failure suppression is
+for one of those four codes. No substring-based blanket Failure suppression is
 used. Restore Error records and unmatched workspace failures reject loading. Supported
 binary-logger replay also rejects real MSBuild errors (including promoted warnings)
 and missing evaluated assets; no log is uploaded or intentionally retained.
@@ -290,3 +290,11 @@ legacy 4.7/4.8/4.8.1 fixtures plus SDK-style net48 against the packaged executab
 The SDK-style disposable fixture explicitly restores before server startup; the
 server never restores it. Hosted Windows qualification is required before claiming
 these added cases pass.
+
+## Local incremental validation prototype
+
+Strict validation remains the default. An operator may explicitly add
+`--incremental-validation` alongside `--trusted-msbuild` for watcher-assisted
+non-target refresh with a five-second full content recovery deadline. See
+[the freshness contract and qualification](../../docs/incremental-validation.md).
+This is a distinct freshness mode, not an equivalent strict-mode optimization.

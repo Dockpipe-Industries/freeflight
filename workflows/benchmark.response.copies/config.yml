@@ -1,0 +1,9 @@
+name: benchmark.response.copies
+description: Screen frozen response cores through exact dual-content MCP queries.
+vault: none
+docker_preflight: false
+steps:
+  - id: screen
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.response.copies.prepare/assets/screen.py

@@ -1,0 +1,9 @@
+name: integration.lsp
+description: Verify optional Python, C++, and PipeLang navigation through the FreeFlight MCP endpoint.
+vault: none
+docker_preflight: false
+steps:
+  - id: semantic-navigation
+    kind: host
+    cwd: repo
+    cmd: python3 -B tests/lsp_navigation.py -v

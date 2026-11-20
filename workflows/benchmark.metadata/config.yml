@@ -1,0 +1,9 @@
+name: benchmark.metadata
+description: Prove fresh Darwin metadata admission and bounded fail-closed fallback with generated test hooks.
+vault: none
+docker_preflight: false
+steps:
+  - id: prove
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/metadata_tests.py

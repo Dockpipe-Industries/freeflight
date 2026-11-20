@@ -1,0 +1,14 @@
+diff --git a/workers/roslyn/Program.cs b/workers/roslyn/Program.cs
+index cbc786a..5555d3e 100644
+--- a/workers/roslyn/Program.cs
++++ b/workers/roslyn/Program.cs
+@@ -425,7 +425,8 @@ internal sealed class SourceEngine : IDisposable
+         var character = args.GetProperty("character").GetInt32();
+         if (line < 0 || line >= text.Lines.Count || character < 0 || character > text.Lines[line].Span.Length) throw new ArgumentException("Position is outside document");
+         var position = text.Lines[line].Start + character;
+-        var symbolAt = await SymbolFinder.FindSymbolAtPositionAsync(document, position, token);
++        token.ThrowIfCancellationRequested();
++        var symbolAt = await SymbolFinder.FindSymbolAtPositionAsync(model, position, workspace, token);
+         if (method == "typeInfo") return SemanticQueries.TypeInfo(model, syntax, position, symbolAt, token);
+         if (method == "signatureHelp") return SemanticQueries.SignatureHelp(model, syntax, position, token);
+         if (symbolAt is null) return method == "hover" ? new { contents = "" } : Array.Empty<object>();

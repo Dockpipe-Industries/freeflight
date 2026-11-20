@@ -1,0 +1,9 @@
+name: benchmark.recovery.proof
+description: Source-pinned negative qualification of speculative recovery opens and unordered byte accounting.
+vault: none
+docker_preflight: false
+steps:
+  - id: prove
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/recovery_proof.py

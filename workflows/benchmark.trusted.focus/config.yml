@@ -1,0 +1,9 @@
+name: benchmark.trusted.focus
+description: Attribute frozen worker definition and search stages without ordinary timing claims.
+vault: none
+docker_preflight: false
+steps:
+  - id: profile
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.trusted/assets/focus_profile.py

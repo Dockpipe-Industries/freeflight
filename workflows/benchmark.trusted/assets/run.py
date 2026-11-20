@@ -58,7 +58,15 @@ def prepare():
                   referenceCallers=int(os.environ.get('FREEFLIGHT_TRUSTED_BENCH_CALLERS','1')),
                   searchQuery=os.environ.get('FREEFLIGHT_TRUSTED_BENCH_QUERY','C58'),
                   firstVariant=os.environ.get('FREEFLIGHT_TRUSTED_BENCH_FIRST','baseline'),
+                  baselineArgs=['--incremental-validation'] if os.environ.get('FREEFLIGHT_TRUSTED_BENCH_BASELINE_INCREMENTAL') == '1' else [],
+                  candidateArgs=['--incremental-validation'] if os.environ.get('FREEFLIGHT_TRUSTED_BENCH_INCREMENTAL') == '1' else [],
                   configuration='Release', transport='direct trusted worker; not full MCP', variants={})
+    if os.environ.get('FREEFLIGHT_TRUSTED_BENCH_BASELINE_BACKGROUND') == '1':
+        assert config['baselineArgs'], 'Background baseline requires incremental mode'
+        config['baselineArgs'].append('--background-recovery')
+    if os.environ.get('FREEFLIGHT_TRUSTED_BENCH_BACKGROUND') == '1':
+        assert config['candidateArgs'], 'Background screening requires incremental mode'
+        config['candidateArgs'].append('--background-recovery')
     assert 0 <= config['paddingBytes'] <= 65536
     assert 1 <= config['referenceCallers'] <= 1000 and 1 <= len(config['searchQuery']) <= 256
     assert config['firstVariant'] in ('baseline','candidate')
@@ -72,7 +80,8 @@ def prepare():
         ref = config[variant]; source = OUT / variant / 'source'; source.mkdir(parents=True)
         commit = git('rev-parse', 'HEAD' if ref == 'WORKTREE' else ref)
         hashes = {}
-        for path in paths:
+        variantPaths = paths if ref == 'WORKTREE' else ['global.json'] + git('ls-tree','-r','--name-only',commit,'workers/roslyn').splitlines()
+        for path in variantPaths:
             data = (REPO/path).read_bytes() if ref == 'WORKTREE' else subprocess.check_output(['git','show',f'{commit}:{path}'], cwd=REPO)
             target = source/path; target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data)
             hashes[path] = hashlib.sha256(data).hexdigest()
@@ -111,9 +120,9 @@ def prepare():
     print('Prepared pinned source/build/fixture receipts:', OUT, flush=True)
 
 class Session:
-    def __init__(self,dll,name):
+    def __init__(self,dll,name,args=()):
         self.log=(OUT/(name+'.stderr')).open('w'); self.q=queue.Queue(); self.seq=0
-        self.p=subprocess.Popen([DOTNET,dll,'--trusted-msbuild'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=self.log,text=True,env=ENV)
+        self.p=subprocess.Popen([DOTNET,dll,'--trusted-msbuild',*args],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=self.log,text=True,env=ENV)
         def reader():
             for line in self.p.stdout:self.q.put(line)
             self.q.put(None)
@@ -138,6 +147,23 @@ def qualify(config):
         for test in ('test_worker.py','test_trusted.py'):
             command([sys.executable,'-B',str(REPO/'workers/roslyn'/test),DOTNET,v['dll']],variant+'-'+test+'.log')
         command([sys.executable,'-B',str(Path(__file__).with_name('mutations.py')),DOTNET,v['dll'],str(OUT/variant/'mutations'),config['fixtures']['433']['root']],variant+'-mutations.log')
+        if platform.system() == 'Darwin' and (OUT/variant/'source/workers/roslyn/DarwinMetadataBatch.cs').is_file():
+            command([sys.executable,'-B',str(Path(__file__).with_name('metadata_tests.py')),DOTNET,str(OUT/variant/'source'),str(OUT/variant/'metadata-proof')],variant+'-metadata-proof.log')
+        if platform.system() == 'Darwin' and (OUT/variant/'source/workers/roslyn/DarwinSourceHandle.cs').is_file():
+            command([sys.executable,'-B',str(Path(__file__).with_name('serial_handle_tests.py')),DOTNET,str(OUT/variant/'source'),str(OUT/variant/'serial-handle-proof')],variant+'-serial-handle-proof.log')
+        if platform.system() == 'Darwin' and 'ReadCompilerBytes(' in (OUT/variant/'source/workers/roslyn/Program.cs').read_text():
+            command([sys.executable,'-B',str(Path(__file__).with_name('expiry_tests.py')),DOTNET,str(OUT/variant/'source'),str(OUT/variant/'expiry-proof')],variant+'-expiry-proof.log')
+    if any(marker in (OUT/'candidate/source/workers/roslyn/SemanticQueries.cs').read_text() for marker in ('FindCompilationDeclarations(', 'FindProjectDeclarations(')):
+        command([sys.executable, '-B', str(Path(__file__).with_name('search_tests.py')), DOTNET,
+                 str(OUT/'candidate/source'), str(OUT/'candidate/search-proof')], 'candidate-search-proof.log')
+    if config.get('candidateArgs'):
+        command([sys.executable, '-B', str(Path(__file__).with_name('incremental_tests.py')), DOTNET,
+                 str(OUT/'candidate/source'), str(OUT/'candidate/incremental-proof'),
+                 config['fixtures']['433']['root']], 'candidate-incremental-proof.log')
+    if '--background-recovery' in config.get('candidateArgs', []):
+        command([sys.executable, '-B', str(Path(__file__).with_name('background_tests.py')), DOTNET,
+                 str(OUT/'candidate/source'), str(OUT/'candidate/background-proof'),
+                 config['fixtures']['433']['root']], 'candidate-background-proof.log')
     save('qualification.json',dict(status='passed',variants=list(config['variants']),suites=['test_worker.py','test_trusted.py','mutations.py'],testHashes={name:digest(REPO/'workers/roslyn'/name) for name in ('test_worker.py','test_trusted.py')}))
 
 
@@ -199,7 +225,7 @@ def measure(config):
         for diagnostic,variants in ((False,order),(True,['baseline','candidate'])):
             for index,variant in enumerate(variants):
                 name=f'{size}-'+('profile' if diagnostic else 'plain')+f'-{index}-{variant}'
-                session=Session(config['variants'][variant]['profileDll' if diagnostic else 'dll'],name)
+                session=Session(config['variants'][variant]['profileDll' if diagnostic else 'dll'],name,config.get(variant+'Args',[]))
                 receipt=dict(name=name,size=int(size),variant=variant,diagnostic=diagnostic,samples=[])
                 samples.append(receipt)
                 try:
@@ -211,7 +237,7 @@ def measure(config):
                         for method,args in queries:
                             before,_=session.call('capabilities'); result,ms=session.call(method,**args); ident=session.seq
                             check(method,result); after,_=session.call('capabilities')
-                            readCount=int(size)-(after['refreshStats']['reusedSnapshots']-before['refreshStats']['reusedSnapshots'])
+                            readCount=(after['refreshStats']['readFiles']-before['refreshStats']['readFiles']) if 'readFiles' in after['refreshStats'] else int(size)-(after['refreshStats']['reusedSnapshots']-before['refreshStats']['reusedSnapshots'])
                             receipt['samples'].append(dict(readDocuments=readCount,readBytes=after['refreshStats']['bytesRead']-before['refreshStats']['bytesRead'],id=ident,round=round,phase=phase,method=method,ms=ms,before=before['refreshStats'],after=after['refreshStats']))
                         if config.get('roundIntervalSeconds',0)>0: time.sleep(max(0,config['roundIntervalSeconds']-(time.monotonic()-cycleStart)))
                     while round<3 or time.monotonic()-warmStart<config['warmupSeconds']:

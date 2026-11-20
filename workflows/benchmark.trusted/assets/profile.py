@@ -17,7 +17,8 @@ def instrument(path):
                             BenchProfile.End(id, method, invokeMs, Stopwatch.GetElapsedTime(reply).TotalMilliseconds);
                         }''')
     replace('        await Refresh(token, requestedFile, method == "rename");', '        await Refresh(token, requestedFile, method == "rename");\n        using var semanticScope = BenchProfile.Scope("semantic");')
-    replace('        // Admission-only sharing within this trusted refresh.', '        var profileStart = Stopwatch.GetTimestamp();\n        var bytesBefore = bytesRead; var reusedBefore = reusedSnapshots;\n        // Admission-only sharing within this trusted refresh.')
+    refresh_start = '        var recoveryStarted = Environment.TickCount64;' if 'var recoveryStarted =' in s else '        // Admission-only sharing within this trusted refresh.'
+    replace(refresh_start, '        var profileStart = Stopwatch.GetTimestamp();\n        var bytesBefore = bytesRead; var reusedBefore = reusedSnapshots;\n' + refresh_start)
     sort = next(line for line in s.splitlines() if 'files.Sort(' in line)
     replace(sort,'        var bookkeepingStart = Stopwatch.GetTimestamp();\n'+sort)
     loop = '        foreach (var info in files)\n        {' if 'foreach (var info in files)' in s else '        foreach (var file in files)\n        {'
@@ -50,17 +51,37 @@ def instrument(path):
         BenchProfile.Bytes = bytesRead - bytesBefore; BenchProfile.Reused = reusedSnapshots - reusedBefore;''')
     # Time the whole normalization/check operation and the leaf attribute call separately.
     replace('        var full = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(root!, path));','        using var scope = BenchProfile.Scope("path");\n        var full = Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(root!, path));')
-    replace('leafInfo.Attributes : File.GetAttributes(current)', 'BenchProfile.Leaf(leafInfo) : BenchProfile.Attributes(current)')
-    if 'private void CheckSnapshotPath' in s:
+    native_attributes = 'DarwinPathAttributes.ReadReparseFlag(current)' in s
+    if native_attributes:
+        replace('leafInfo.Attributes : DarwinPathAttributes.ReadReparseFlag(current)', 'BenchProfile.Leaf(leafInfo) : BenchProfile.NativeAttributes(current)')
+    else:
+        replace('leafInfo.Attributes : File.GetAttributes(current)', 'BenchProfile.Leaf(leafInfo) : BenchProfile.Attributes(current)')
+    if ' CheckSnapshotPath(' in s:
         parent = '        var parent = knownParent ?? Path.GetDirectoryName(file)!;' if 'var parent = knownParent' in s else '        var parent = Path.GetDirectoryName(file)!;'
         replace(parent, '        using var scope = BenchProfile.Scope("snapshotPath");\n'+parent)
         replace('\n        if ((info.Attributes & FileAttributes.ReparsePoint)', '\n        if ((BenchProfile.Leaf(info) & FileAttributes.ReparsePoint)')
-    replace('            using var stream = OpenCompilerInput(file);', '            var openStart = Stopwatch.GetTimestamp();\n            using var stream = OpenCompilerInput(file);\n            BenchProfile.Add("open", openStart);')
-    replace('IncrementalHash.CreateHash(HashAlgorithmName.SHA256)', 'BenchProfile.CreateHash()')
-    replace('await stream.ReadAsync(buffer.AsMemory(), token)', 'await BenchProfile.Read(stream, buffer, token)')
-    replace('hash.AppendData(buffer, 0, count);', 'BenchProfile.Append(hash, buffer, count);')
+    open_call = '            using var stream = OpenCompilerInput(file, recover);' if 'OpenCompilerInput(file, recover)' in s else '            using var stream = OpenCompilerInput(file);'
+    replace(open_call, '            var openStart = Stopwatch.GetTimestamp();\n'+open_call+'\n            BenchProfile.Add("open", openStart);')
+    buffered_hash = 'SHA256.HashData(\n                memory.GetBuffer().AsSpan(0, checked((int)memory.Length)))'
+    if buffered_hash in s:
+        replace(buffered_hash, 'BenchProfile.HashBuffer(memory)')
+    else:
+        replace('IncrementalHash.CreateHash(HashAlgorithmName.SHA256)', 'BenchProfile.CreateHash()')
+    if 'await ReadCompilerBytes(' in s:
+        replace('await ReadCompilerBytes(stream, buffer, token, OperatingSystem.IsMacOS() && !externalCompilerInputs.Contains(file))', 'await BenchProfile.ReadSelected(stream, buffer, token, OperatingSystem.IsMacOS() && !externalCompilerInputs.Contains(file))')
+    else:
+        replace('await stream.ReadAsync(buffer.AsMemory(), token)', 'await BenchProfile.Read(stream, buffer, token)')
+    if 'batch.TryGet(file, parent, token, out var metadata)' in s:
+        replace('batch.TryGet(file, parent, token, out var metadata)', 'BenchProfile.Batch(batch, file, parent, token, out var metadata)')
+    if 'hash.AppendData(buffer, 0, count);' in s:
+        replace('hash.AppendData(buffer, 0, count);', 'BenchProfile.Append(hash, buffer, count);')
     replace('await memory.WriteAsync(buffer.AsMemory(0, count), token);', 'await BenchProfile.Write(memory, buffer, count, token);')
-    replace('Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant()', 'BenchProfile.FinishHash(hash)')
+    if 'hash.GetHashAndReset()' in s:
+        replace('Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant()', 'BenchProfile.FinishHash(hash)')
+    if 'trustedValidationParents.TryGetValue(path' in s:
+        replace('        foreach (var parent in parents)', '        using var lexicalScope = BenchProfile.Scope("path");\n        foreach (var parent in parents)')
+        replace('File.GetAttributes(parent) & FileAttributes.ReparsePoint', 'BenchProfile.Attributes(parent) & FileAttributes.ReparsePoint')
+        replace('File.GetAttributes(path) & FileAttributes.ReparsePoint', 'BenchProfile.Attributes(path) & FileAttributes.ReparsePoint')
     s=s.replace('info.Refresh();', 'BenchProfile.RefreshMetadata(info);')
     s+='''
 // Diagnostic build only: process-wide allocations/GC and runtime event observations.
@@ -93,7 +114,12 @@ internal sealed class BenchProfile : EventListener
     public static void Add(string stage, long start) { var stages=Stages.Value!; stages[stage] = stages.GetValueOrDefault(stage) + Stopwatch.GetElapsedTime(start).TotalMilliseconds; }
     public static IDisposable Scope(string stage) => new Timed(stage);
     private sealed class Timed(string stage) : IDisposable { private readonly long start=Stopwatch.GetTimestamp(); public void Dispose()=>Add(stage,start); }
+    public static bool Batch(DarwinMetadataBatch batch, string file, string parent, CancellationToken token, out DarwinMetadataBatch.Metadata metadata)
+    { var start=Stopwatch.GetTimestamp(); try{return batch.TryGet(file,parent,token,out metadata);} finally{Add("bulkMetadata",start);} }
+    public static byte[] HashBuffer(MemoryStream memory) { var start=Stopwatch.GetTimestamp(); try{return SHA256.HashData(memory.GetBuffer().AsSpan(0,checked((int)memory.Length)));} finally{Add("hashBuffer",start);} }
     public static IncrementalHash CreateHash() { var start=Stopwatch.GetTimestamp(); try{return IncrementalHash.CreateHash(HashAlgorithmName.SHA256);} finally{Add("hashCreate",start);} }
+    public static async ValueTask<int> ReadSelected(FileStream stream, byte[] buffer, CancellationToken token, bool inline)
+    { var start=Stopwatch.GetTimestamp(); try { if(!inline)return await stream.ReadAsync(buffer.AsMemory(),token); token.ThrowIfCancellationRequested();return stream.Read(buffer,0,buffer.Length); } finally{Add("readIo",start);} }
     public static async ValueTask<int> Read(FileStream stream, byte[] buffer, CancellationToken token) { var start=Stopwatch.GetTimestamp(); try{return await stream.ReadAsync(buffer.AsMemory(),token);} finally{Add("readIo",start);} }
     public static void Append(IncrementalHash hash, byte[] buffer, int count) { var start=Stopwatch.GetTimestamp(); try{hash.AppendData(buffer,0,count);} finally{Add("hashAppend",start);} }
     public static async ValueTask Write(MemoryStream memory, byte[] buffer, int count, CancellationToken token) { var start=Stopwatch.GetTimestamp(); try{await memory.WriteAsync(buffer.AsMemory(0,count),token);} finally{Add("bufferWrite",start);} }
@@ -115,4 +141,35 @@ internal sealed class BenchProfile : EventListener
     }
 }
 '''
+    if native_attributes:
+        old = '    public static FileAttributes Attributes(string path)'
+        added = '    public static FileAttributes NativeAttributes(string path) { var start=Stopwatch.GetTimestamp(); Interlocked.Increment(ref Attrs); try{return DarwinPathAttributes.ReadReparseFlag(path);} finally{Add("attributes",start);} }\n'
+        assert s.count(old)==1
+        s=s.replace(old,added+old)
+    if 'class DarwinMetadataBatch' not in '\n'.join(p.read_text() for p in path.parent.glob('*.cs')):
+        start=s.index('    public static bool Batch(')
+        end=s.index('    public static IncrementalHash CreateHash()',start)
+        s=s[:start]+s[end:]
     path.write_text(s)
+
+    semantic_path = path.with_name('SemanticQueries.cs')
+    semantic = semantic_path.read_text()
+    declaration = ('        var symbols = await FindProjectDeclarations(solution, query, token);'
+                   if 'FindProjectDeclarations(' in semantic else
+                   '        var symbols = await FindCompilationDeclarations(solution, query, token);'
+                   if 'FindCompilationDeclarations(' in semantic else
+                   '        var symbols = await SymbolFinder.FindSourceDeclarationsAsync(solution,')
+    returned = '        return Ordered(symbols, token).Where(symbol => !symbol.IsImplicitlyDeclared).Select(Item).ToArray();'
+    assert semantic.count(declaration) == semantic.count(returned) == 1
+    semantic = 'using System.Diagnostics;\n' + semantic
+    semantic = semantic.replace(declaration, '        var findStarted = Stopwatch.GetTimestamp();\n' + declaration)
+    semantic = semantic.replace(returned, '\n'.join([
+        '        BenchProfile.Add("findDeclarations", findStarted);',
+        '        var orderStarted = Stopwatch.GetTimestamp();',
+        '        var ordered = Ordered(symbols, token);',
+        '        BenchProfile.Add("orderSymbols", orderStarted);',
+        '        var renderStarted = Stopwatch.GetTimestamp();',
+        '        var result = ordered.Where(symbol => !symbol.IsImplicitlyDeclared).Select(Item).ToArray();',
+        '        BenchProfile.Add("renderSymbols", renderStarted);',
+        '        return result;']))
+    semantic_path.write_text(semantic)

@@ -1,0 +1,9 @@
+name: benchmark.reference.work.native.prepare
+description: Independently qualify only native core work counters after the failed managed short-interval experiment.
+vault: none
+docker_preflight: false
+steps:
+  - id: prepare
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.work.prepare/assets/native_prepare.py

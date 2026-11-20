@@ -1,0 +1,13 @@
+name: benchmark.reference.wait
+description: Relocate reference waiting within a fixed ordinary baseline cycle.
+vault: none
+docker_preflight: false
+steps:
+  - id: measure
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.context/assets/wait.py
+  - id: audit
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.context/assets/wait_audit.py

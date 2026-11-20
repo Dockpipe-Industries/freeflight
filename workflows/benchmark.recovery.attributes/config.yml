@@ -1,0 +1,9 @@
+name: benchmark.recovery.attributes
+description: Prove fresh native attribute flags, strict fallback and allocation reduction.
+vault: none
+docker_preflight: false
+steps:
+  - id: attributes
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.recovery.attributes/assets/proof.py

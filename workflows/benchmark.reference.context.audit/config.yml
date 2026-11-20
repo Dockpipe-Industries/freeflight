@@ -1,0 +1,9 @@
+name: benchmark.reference.context.audit
+description: Replay baseline reference context receipts without new requests.
+vault: none
+docker_preflight: false
+steps:
+  - id: audit
+    kind: host
+    cwd: repo
+    cmd: python3 -B workflows/benchmark.reference.context/assets/audit.py
